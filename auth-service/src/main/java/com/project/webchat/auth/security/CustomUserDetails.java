@@ -1,4 +1,4 @@
-package com.project.webchat.user.security;
+package com.project.webchat.auth.security;
 
 import com.project.webchat.user.entity.User;
 import lombok.Getter;

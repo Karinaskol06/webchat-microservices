@@ -1,4 +1,4 @@
-package com.project.webchat.user.security;
+package com.project.webchat.auth.security;
 
 import com.project.webchat.user.exceptions.UnauthorizedException;
 import com.project.webchat.user.service.UserService;

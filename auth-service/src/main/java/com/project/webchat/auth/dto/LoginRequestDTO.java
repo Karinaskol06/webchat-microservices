@@ -1,4 +1,4 @@
-package com.project.webchat.user.dto;
+package com.project.webchat.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;

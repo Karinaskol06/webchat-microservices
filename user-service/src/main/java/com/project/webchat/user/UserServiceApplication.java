@@ -1,4 +1,4 @@
-package com.project.webchat.users;
+package com.project.webchat.user;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

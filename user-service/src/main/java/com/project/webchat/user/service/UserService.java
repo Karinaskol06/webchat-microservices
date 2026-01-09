@@ -1,13 +1,12 @@
-package com.project.webchat.users.service;
+package com.project.webchat.user.service;
 
-import com.project.webchat.users.dto.ChangePasswordDTO;
-import com.project.webchat.users.dto.RegisterRequestDTO;
-import com.project.webchat.users.dto.UpdateUserDTO;
-import com.project.webchat.users.dto.UserDTO;
-import com.project.webchat.users.entity.User;
-import com.project.webchat.users.exceptions.ResourceNotFoundException;
-import com.project.webchat.users.repository.UserRepository;
-import com.project.webchat.users.security.CustomUserDetails;
+import com.project.webchat.user.dto.ChangePasswordDTO;
+import com.project.webchat.user.dto.RegisterRequestDTO;
+import com.project.webchat.user.dto.UpdateUserDTO;
+import com.project.webchat.user.dto.UserDTO;
+import com.project.webchat.user.entity.User;
+import com.project.webchat.user.exceptions.ResourceNotFoundException;
+import com.project.webchat.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,12 +14,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
-@Service
 @RequiredArgsConstructor
 @Slf4j
+@Service
 public class UserService {
 
     private final UserRepository userRepository;
@@ -51,9 +49,9 @@ public class UserService {
     }
 
     @Transactional
-    public UserDTO updateUser(Long userId, UpdateUserDTO updateUserDTO) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found " + userId));
+    public UserDTO updateUser(String username, UpdateUserDTO updateUserDTO) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found " + username));
 
         if (updateUserDTO.getUsername() != null && !updateUserDTO.getUsername().equals(user.getUsername())) {
             if (userRepository.existsByUsername(updateUserDTO.getUsername())) {
@@ -83,9 +81,9 @@ public class UserService {
 
     @Transactional
     //in controller use @PreAuthorize("#userId == authentication.principal.userId
-    public void changePassword(Long userId, ChangePasswordDTO changePasswordDTO) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found " + userId));
+    public void changePassword(String username, ChangePasswordDTO changePasswordDTO) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found " + username));
         if (!passwordEncoder.matches(changePasswordDTO.getOldPassword(), user.getPasswordHash())) {
             throw new IllegalArgumentException("Old password is incorrect");
         }
@@ -108,6 +106,12 @@ public class UserService {
         return convertToDTO(user);
     }
 
+    public UserDTO getUserDTOByUsername(String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found " + username));
+        return convertToDTO(user);
+    }
+
     public Long getUserIdByUsername(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found" + username));
@@ -116,6 +120,24 @@ public class UserService {
 
     public boolean existsByUsername(String username) {
         return userRepository.existsByUsername(username);
+    }
+
+    public boolean existsByEmail(String email) {
+        return userRepository.existsByEmail(email);
+    }
+
+    public boolean validateCredentials(String username, String password) {
+        try {
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found " + username));
+            if (!user.isActive()) {
+                return false;
+            }
+
+            return passwordEncoder.matches(password, user.getPasswordHash());
+        } catch (ResourceNotFoundException e) {
+            return false;
+        }
     }
 
     public UserDTO convertToDTO(User user) {

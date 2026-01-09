@@ -1,4 +1,4 @@
-package com.project.webchat.user.security;
+package com.project.webchat.auth.security;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

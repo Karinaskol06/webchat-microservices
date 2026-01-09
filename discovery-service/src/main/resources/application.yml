@@ -1,42 +1,21 @@
 server:
-  port: 8083
+  port: 8761
 
 spring:
   application:
-    name: chat-service
-
-  data:
-    mongodb:
-      uri: mongodb://localhost:27017/webchat_messages
-      database: webchat_messages
-
-    redis:
-      host: localhost
-      port: 6379
-      password: "11111"
-
-websocket:
-  endpoint: /ws/chat
-  allowed-origins: "*"
+    name: discovery-service
 
 eureka:
   client:
+    register-with-eureka: false
+    fetch-registry: false
     service-url:
       defaultZone: http://localhost:8761/eureka/
-    fetch-registry: true
-    register-with-eureka: true
-  instance:
-    prefer-ip-address: true
+  server:
+    enable-self-preservation: false
+    wait-time-in-ms-when-sync-empty: 0
 
 logging:
   level:
     com.project.webchat.chat: DEBUG
     org.springframework.web.socket: DEBUG
-
-service:
-  user:
-    url: http://user-service
-    name: user-service
-  auth:
-    url: http://auth-service
-    name: auth-service

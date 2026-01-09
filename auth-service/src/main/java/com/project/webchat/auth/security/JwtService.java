@@ -1,4 +1,4 @@
-package com.project.webchat.user.security;
+package com.project.webchat.auth.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -11,7 +11,10 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
-import java.util.*;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -52,6 +55,11 @@ public class JwtService {
         return extractClaim(token, Claims::getExpiration);
     }
 
+    public Long extractUserId(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("userId", Long.class);
+    }
+
     public List extractRoles(String token) {
         Claims claims = extractAllClaims(token);
         return claims.get("roles", List.class);
@@ -63,7 +71,7 @@ public class JwtService {
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
+        return Jwts.parser()
                 .setSigningKey(getSignInKey())
                 .build()
                 .parseClaimsJws(token)
@@ -78,5 +86,14 @@ public class JwtService {
     public boolean isTokenValid(String token, UserDetails user) {
         final String username = extractUsername(token);
         return username.equals(user.getUsername()) && !extractExpiration(token).before(new Date());
+    }
+
+    public boolean validateToken(String token) {
+        try {
+            final String username = extractUsername(token);
+            return username != null && !extractExpiration(token).before(new Date());
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

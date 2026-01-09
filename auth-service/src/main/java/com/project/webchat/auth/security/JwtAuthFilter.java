@@ -1,6 +1,6 @@
-package com.project.webchat.user.security;
+package com.project.webchat.auth.security;
 
-import ch.qos.logback.core.util.StringUtil;
+import com.project.webchat.auth.security.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

@@ -1,4 +1,4 @@
-package com.project.webchat.users.dto;
+package com.project.webchat.user.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;

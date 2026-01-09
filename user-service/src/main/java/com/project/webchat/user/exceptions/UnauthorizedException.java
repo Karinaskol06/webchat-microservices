@@ -1,4 +1,4 @@
-package com.project.webchat.users.exceptions;
+package com.project.webchat.user.exceptions;
 
 public class UnauthorizedException extends RuntimeException {
     public UnauthorizedException(String message) {

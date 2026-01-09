@@ -1,4 +1,4 @@
-package com.project.webchat.users.entity;
+package com.project.webchat.user.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
