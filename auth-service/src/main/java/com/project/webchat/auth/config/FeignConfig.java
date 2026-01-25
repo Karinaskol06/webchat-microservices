@@ -22,7 +22,8 @@ public class FeignConfig {
     @Bean
     public RequestInterceptor requestInterceptor() {
         return requestTemplate -> {
-
+            requestTemplate.header("X-Correlation-ID",
+                    java.util.UUID.randomUUID().toString());
         };
     }
 }

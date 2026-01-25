@@ -1,4 +1,4 @@
-package com.project.webchat.auth.dto;
+package com.project.webchat.shared.security;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,10 +9,9 @@ import lombok.NoArgsConstructor;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class LoginResponseDTO {
-    private String token;
-    private String type= "Bearer";
+public class JwtUser {
     private Long id;
     private String username;
     private String email;
+    private boolean active;
 }

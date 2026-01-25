@@ -1,4 +1,4 @@
-package com.project.webchat.auth.dto;
+package com.project.webchat.shared.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

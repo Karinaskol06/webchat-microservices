@@ -1,12 +1,18 @@
 package com.project.webchat.auth.feign;
 
-import com.project.webchat.auth.dto.RegisterRequestDTO;
-import com.project.webchat.user.dto.UserDTO;
+import com.project.webchat.shared.dto.CredentialsDTO;
+import com.project.webchat.shared.dto.RegisterRequestDTO;
+import com.project.webchat.shared.dto.UserCredentialsResponse;
+import com.project.webchat.shared.dto.UserDTO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@FeignClient(name = "user-service", url = "${feign.client.user-service.url:}")
+@FeignClient(
+        name = "user-service",
+        url = "${feign.client.user-service.url:}",
+        fallback = UserServiceClientFallback.class
+)
 public interface UserServiceClient {
 
     @PostMapping("/api/users/register")
@@ -25,8 +31,11 @@ public interface UserServiceClient {
     ResponseEntity<Boolean> existsByEmail(@PathVariable("email") String email);
 
     @PostMapping("/api/users/validate-credentials")
-    ResponseEntity<Boolean> validateCredentials(
-            @RequestParam String username,
-            @RequestParam String password
+    ResponseEntity<Boolean> validateCredentials(@RequestBody CredentialsDTO credentialsDTO);
+
+    @PostMapping("/api/users/validate-and-get-info")
+    ResponseEntity<UserCredentialsResponse> validateAndGetInfo(
+            @RequestBody CredentialsDTO credentialsDTO
     );
+
 }

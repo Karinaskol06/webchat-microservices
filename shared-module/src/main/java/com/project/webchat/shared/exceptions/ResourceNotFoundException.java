@@ -1,4 +1,4 @@
-package com.project.webchat.user.exceptions;
+package com.project.webchat.shared.exceptions;
 
 public class ResourceNotFoundException extends RuntimeException {
     public ResourceNotFoundException(String message) {

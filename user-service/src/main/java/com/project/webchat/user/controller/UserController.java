@@ -2,11 +2,9 @@ package com.project.webchat.user.controller;
 
 import com.project.webchat.user.dto.ChangePasswordDTO;
 import com.project.webchat.user.dto.UpdateUserDTO;
-import com.project.webchat.user.dto.UserDTO;
+import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.user.service.UserService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;

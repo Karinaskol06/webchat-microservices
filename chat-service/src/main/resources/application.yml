@@ -7,17 +7,25 @@ spring:
 
   data:
     mongodb:
-      uri: mongodb://localhost:27017/webchat_messages
-      database: webchat_messages
+      uri: mongodb://localhost:27017/messages_db
+      database: messages_db
+      auto-index-creation: true
 
     redis:
       host: localhost
       port: 6379
       password: "11111"
+      timeout: 5000ms
+      connect-timeout: 3000ms
 
 websocket:
   endpoint: /ws/chat
   allowed-origins: "*"
+  message-size-limit: 32768
+  buffer-size: 51200
+
+jwt:
+  secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
 
 eureka:
   client:
@@ -29,7 +37,17 @@ eureka:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${server.port}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
 logging:
   level:
     com.project.webchat.chat: DEBUG
-    org.springframework.web.socket: DEBUG
+    org.springframework.web.socket: INFO
+    org.springframework.data.mongodb: INFO

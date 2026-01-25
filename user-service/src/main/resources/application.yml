@@ -5,16 +5,13 @@ spring:
   application:
     name: user-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/webchat_users
+    url: jdbc:postgresql://localhost:5432/user_db
     username: karina
-    password: "11111"
+    password: 11111
     driver-class-name: org.postgresql.Driver
     hikari:
-      connection-timeout: 30000
       maximum-pool-size: 10
-      minimum-idle: 5
-      idle-timeout: 600000
-      max-lifetime: 1800000
+      connection-timeout: 30000
   jpa:
     hibernate:
       ddl-auto: update
@@ -33,13 +30,6 @@ spring:
 jwt:
   secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
   expiration: 86400000
-
-logging:
-  level:
-    com.project.webchat: DEBUG
-    org.springframework.security: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
 eureka:
   client:
@@ -61,3 +51,19 @@ management:
   endpoint:
     health:
       show-details: always
+
+logging:
+  level:
+    com.project.webchat: DEBUG
+    org.springframework.security: WARN
+    org.springframework: WARN
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: OFF
+    org.hibernate.stat: OFF
+
+    com.netflix.eureka: WARN
+    com.netflix.discovery: WARN
+
+    com.zaxxer.hikari: INFO
+    org.springframework.boot.actuate: INFO
+    root: INFO

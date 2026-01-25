@@ -1,11 +1,12 @@
 package com.project.webchat.user.service;
 
 import com.project.webchat.user.dto.ChangePasswordDTO;
-import com.project.webchat.user.dto.RegisterRequestDTO;
+import com.project.webchat.shared.dto.RegisterRequestDTO;
 import com.project.webchat.user.dto.UpdateUserDTO;
-import com.project.webchat.user.dto.UserDTO;
+import com.project.webchat.shared.dto.UserDTO;
+import com.project.webchat.shared.dto.UserCredentialsResponse;
 import com.project.webchat.user.entity.User;
-import com.project.webchat.user.exceptions.ResourceNotFoundException;
+import com.project.webchat.shared.exceptions.ResourceNotFoundException;
 import com.project.webchat.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -80,7 +81,6 @@ public class UserService {
     }
 
     @Transactional
-    //in controller use @PreAuthorize("#userId == authentication.principal.userId
     public void changePassword(String username, ChangePasswordDTO changePasswordDTO) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found " + username));
@@ -138,6 +138,25 @@ public class UserService {
         } catch (ResourceNotFoundException e) {
             return false;
         }
+    }
+
+    public UserCredentialsResponse validateAndGetUserInfo(String username, String password) {
+        boolean isValid = validateCredentials(username, password);
+        if (!isValid) {
+            return UserCredentialsResponse.builder()
+                    .isValid(false)
+                    .build();
+        }
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found " + username));
+
+        return UserCredentialsResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .isValid(true)
+                .isActive(user.isActive())
+                .build();
     }
 
     public UserDTO convertToDTO(User user) {

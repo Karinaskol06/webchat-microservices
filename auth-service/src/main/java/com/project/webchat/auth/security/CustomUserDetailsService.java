@@ -1,7 +1,7 @@
 package com.project.webchat.auth.security;
 
-import com.project.webchat.user.entity.User;
-import com.project.webchat.user.repository.UserRepository;
+import com.project.webchat.auth.entity.AuthUser;
+import com.project.webchat.auth.repository.AuthUserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -13,15 +13,15 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
 
-    private final UserRepository userRepository;
+   private final AuthUserRepository authUserRepository;
 
-    @Override
-    @Transactional
-    public UserDetails loadUserByUsername(String usernameOrEmail) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(usernameOrEmail)
-                .or(() -> userRepository.findByEmail(usernameOrEmail))
-                .orElseThrow(() -> new UsernameNotFoundException(
-                        "User not found with username or email " + usernameOrEmail));
-        return new CustomUserDetails(user);
-    }
+   @Override
+    @Transactional(readOnly = true)
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+       AuthUser authUser = authUserRepository.findByUsername(username)
+               .orElseThrow(() -> new UsernameNotFoundException(
+                       "User not found with username or email: " + username));
+
+       return new CustomUserDetails(authUser);
+   }
 }

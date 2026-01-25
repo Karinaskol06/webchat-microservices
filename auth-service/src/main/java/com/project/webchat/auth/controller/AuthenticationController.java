@@ -1,21 +1,19 @@
 package com.project.webchat.auth.controller;
 
-import com.project.webchat.auth.dto.LoginRequestDTO;
-import com.project.webchat.auth.dto.LoginResponseDTO;
-import com.project.webchat.auth.dto.RegisterRequestDTO;
 import com.project.webchat.auth.feign.UserServiceClient;
+import com.project.webchat.shared.dto.LoginRequestDTO;
+import com.project.webchat.shared.dto.LoginResponseDTO;
+import com.project.webchat.shared.dto.RegisterRequestDTO;
+import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.auth.service.AuthService;
-import com.project.webchat.user.dto.UserDTO;
-import com.project.webchat.auth.security.CustomUserDetails;
 import com.project.webchat.auth.security.JwtService;
+import feign.FeignException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,6 +28,8 @@ public class AuthenticationController {
 
     private final JwtService jwtService;
     private final AuthService authService;
+    @Qualifier("com.project.webchat.auth.feign.UserServiceClient")
+    private final UserServiceClient userServiceClient;
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponseDTO> login(@Valid @RequestBody LoginRequestDTO loginRequestDTO) {
@@ -44,14 +44,25 @@ public class AuthenticationController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequestDTO registerRequestDTO) {
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequestDTO registerRequest) {
         try {
-            UserDTO registered = authService.register(registerRequestDTO);
+            ResponseEntity<Boolean> usernameExists = userServiceClient.existsByUsername(registerRequest.getUsername());
+            ResponseEntity<Boolean> emailExists = userServiceClient.existsByEmail(registerRequest.getEmail());
+
+            if (Boolean.TRUE.equals(usernameExists.getBody())) {
+                return ResponseEntity.badRequest().body("Username already exists");
+            }
+            if (Boolean.TRUE.equals(emailExists.getBody())) {
+                return ResponseEntity.badRequest().body("Email already exists");
+            }
+
+            UserDTO registered = authService.register(registerRequest);
             return ResponseEntity.status(HttpStatus.CREATED).body(registered);
-        } catch (IllegalArgumentException e) {
+
+        } catch (FeignException e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("USer service unavailable");
+        } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
         }
     }
 

@@ -1,7 +1,9 @@
 package com.project.webchat.user.controller;
 
-import com.project.webchat.user.dto.RegisterRequestDTO;
-import com.project.webchat.user.dto.UserDTO;
+import com.project.webchat.shared.dto.RegisterRequestDTO;
+import com.project.webchat.shared.dto.UserDTO;
+import com.project.webchat.shared.dto.CredentialsDTO;
+import com.project.webchat.shared.dto.UserCredentialsResponse;
 import com.project.webchat.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -48,9 +50,32 @@ public class UserServiceController {
 
     @PostMapping("/validate-credentials")
     public ResponseEntity<Boolean> validateCredentials(
-            @RequestBody String username,
-            @RequestBody String password) {
-        boolean isValid = userService.validateCredentials(username, password);
+            @RequestBody CredentialsDTO credentials) {
+        boolean isValid = userService.validateCredentials(
+                credentials.getUsername(),
+                credentials.getPassword());
         return ResponseEntity.ok(isValid);
+    }
+
+    @PostMapping("/validate-and-get-info")
+    public ResponseEntity<UserCredentialsResponse> validateAndGetUserInfo(
+            @RequestBody CredentialsDTO credentials){
+        boolean isValid = userService.validateCredentials(
+                credentials.getUsername(),
+                credentials.getPassword());
+        if (!isValid) {
+            return ResponseEntity.status(401).build();
+        }
+
+        UserDTO user = userService.getUserDTOByUsername(credentials.getUsername());
+        UserCredentialsResponse response = UserCredentialsResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .isValid(true)
+                .isActive(true)
+                .build();
+
+        return ResponseEntity.ok(response);
     }
 }

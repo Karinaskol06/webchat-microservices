@@ -1,36 +1,43 @@
 package com.project.webchat.auth.security;
 
-import com.project.webchat.user.entity.User;
+import com.project.webchat.auth.entity.AuthUser;
+import com.project.webchat.shared.security.JwtUser;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.List;
 
-@RequiredArgsConstructor
 @Getter
-public class CustomUserDetails implements UserDetails {
+public class CustomUserDetails extends JwtUser implements UserDetails {
 
-    private final User user;
+    private final AuthUser authUser;
 
-    public Long getUserId() {
-        return user.getId();
+    public CustomUserDetails(AuthUser authUser) {
+        this.authUser = authUser;
+    }
+
+    public Long getId() {
+        return authUser.getId();
+    }
+
+    public Long getUserServiceId() {
+        return authUser.getUserServiceId();
     }
 
     @Override
     public String getPassword() {
-        return user.getPasswordHash();
+        return authUser.getPasswordHash();
     }
 
     @Override
     public String getUsername() {
-        return user.getUsername();
+        return authUser.getUsername();
     }
 
     public String getEmail() {
-        return user.getEmail();
+        return authUser.getEmail();
     }
 
     @Override
@@ -40,7 +47,7 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public boolean isAccountNonExpired() {
-        return user.isActive();
+        return authUser.isActive();
     }
 
     @Override
@@ -55,6 +62,6 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return authUser.isActive();
     }
 }
