@@ -1,7 +1,6 @@
 package com.project.webchat.auth.security;
 
-import com.project.webchat.auth.entity.AuthUser;
-import com.project.webchat.shared.security.JwtUser;
+import com.project.webchat.shared.dto.UserDTO;
 import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -10,34 +9,23 @@ import java.util.Collection;
 import java.util.List;
 
 @Getter
-public class CustomUserDetails extends JwtUser implements UserDetails {
+public class CustomUserDetails implements UserDetails {
+    private final Long id;
+    private final String username;
+    private final String email;
+    private final String passwordHash;
+    private final String firstName;
+    private final String lastName;
+    private final boolean active;
 
-    private final AuthUser authUser;
-
-    public CustomUserDetails(AuthUser authUser) {
-        this.authUser = authUser;
-    }
-
-    public Long getId() {
-        return authUser.getId();
-    }
-
-    public Long getUserServiceId() {
-        return authUser.getUserServiceId();
-    }
-
-    @Override
-    public String getPassword() {
-        return authUser.getPasswordHash();
-    }
-
-    @Override
-    public String getUsername() {
-        return authUser.getUsername();
-    }
-
-    public String getEmail() {
-        return authUser.getEmail();
+    public CustomUserDetails(UserDTO userDTO, String passwordHash) {
+        this.id = userDTO.getId();
+        this.username = userDTO.getUsername();
+        this.email = userDTO.getEmail();
+        this.passwordHash = passwordHash;
+        this.firstName = userDTO.getFirstName();
+        this.lastName = userDTO.getLastName();
+        this.active = true;
     }
 
     @Override
@@ -46,22 +34,32 @@ public class CustomUserDetails extends JwtUser implements UserDetails {
     }
 
     @Override
+    public String getPassword() {
+        return passwordHash;
+    }
+
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+    @Override
     public boolean isAccountNonExpired() {
-        return authUser.isActive();
+        return active;
     }
 
     @Override
     public boolean isAccountNonLocked() {
-        return true;
+        return active;
     }
 
     @Override
     public boolean isCredentialsNonExpired() {
-        return true;
+        return active;
     }
 
     @Override
     public boolean isEnabled() {
-        return authUser.isActive();
+        return active;
     }
 }

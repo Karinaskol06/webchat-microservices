@@ -1,11 +1,6 @@
 package com.project.webchat.auth.service;
 
-import com.project.webchat.auth.entity.AuthUser;
-import com.project.webchat.auth.repository.AuthUserRepository;
-import com.project.webchat.shared.dto.LoginRequestDTO;
-import com.project.webchat.shared.dto.LoginResponseDTO;
-import com.project.webchat.shared.dto.RegisterRequestDTO;
-import com.project.webchat.shared.dto.UserDTO;
+import com.project.webchat.shared.dto.*;
 import com.project.webchat.auth.feign.UserServiceClient;
 import com.project.webchat.auth.security.CustomUserDetails;
 import com.project.webchat.auth.security.JwtService;
@@ -14,11 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -26,61 +16,56 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class AuthService {
 
-    private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     @Qualifier("com.project.webchat.auth.feign.UserServiceClient")
     private final UserServiceClient userServiceClient;
-    private final AuthUserRepository authUserRepository;
-    private final PasswordEncoder passwordEncoder;
 
     public LoginResponseDTO login(LoginRequestDTO loginRequestDTO) {
 
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        loginRequestDTO.getUsername(),
-                        loginRequestDTO.getPassword()
-                )
-        );
+        CredentialsDTO credentials = CredentialsDTO.builder()
+                .username(loginRequestDTO.getUsername())
+                .password(loginRequestDTO.getPassword())
+                .build();
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-        //generate token based on user details
-        String token = jwtService.generateToken(userDetails);
+        UserCredentialsResponse userInfo = userServiceClient.validateAndGetInfo(credentials).getBody();
+
+        if (userInfo == null || !userInfo.isValid()) {
+            throw new RuntimeException("Invalid credentials");
+        }
+
+        UserDTO userDTO = userServiceClient.getUserByUsername(loginRequestDTO.getUsername()).getBody();
+        if (userDTO == null) {
+            throw new RuntimeException("User not found");
+        }
+
+        CustomUserDetails customUserDetails = new CustomUserDetails(userDTO, userInfo.getPassword());
+        String token = jwtService.generateToken(customUserDetails);
 
         return LoginResponseDTO.builder()
                 .token(token)
                 .type("Bearer")
-                .id(userDetails.getUserServiceId())
-                .username(userDetails.getUsername())
-                .email(userDetails.getEmail())
+                .id(userDTO.getId())
+                .username(userDTO.getUsername())
+                .email(userDTO.getEmail())
                 .build();
     }
 
     public UserDTO register(RegisterRequestDTO registerRequestDTO) {
         try {
-            if (authUserRepository.existsByUsername(registerRequestDTO.getUsername())) {
+            Boolean usernameExists = userServiceClient.existsByUsername(registerRequestDTO.getUsername()).getBody();
+            Boolean emailExists = userServiceClient.existsByEmail(registerRequestDTO.getEmail()).getBody();
+
+            if (Boolean.TRUE.equals(usernameExists)) {
                 throw new IllegalArgumentException("Username already exists");
             }
-            if (authUserRepository.existsByEmail(registerRequestDTO.getEmail())) {
+            if (Boolean.TRUE.equals(emailExists)) {
                 throw new IllegalArgumentException("Email already exists");
             }
 
-            ResponseEntity<UserDTO> userResponse = userServiceClient.registerUser(registerRequestDTO);
-            UserDTO createdUser = userResponse.getBody();
+            UserDTO createdUser = userServiceClient.registerUser(registerRequestDTO).getBody();
             if (createdUser == null) {
                 throw new RuntimeException("Failed to create user in user-service");
             }
-
-            AuthUser authUser = AuthUser.builder()
-                    .username(createdUser.getUsername())
-                    .email(createdUser.getEmail())
-                    .passwordHash(passwordEncoder.encode(registerRequestDTO.getPassword()))
-                    .firstName(createdUser.getFirstName())
-                    .lastName(createdUser.getLastName())
-                    .userServiceId(createdUser.getId())
-                    .active(true)
-                    .build();
-            authUserRepository.save(authUser);
 
             return createdUser;
 

@@ -23,13 +23,17 @@ spring:
         jdbc:
           batch_size: 20
         order_inserts: true
-        connection:
-          provider_disables_autocommit: true
     open-in-view: false
+  security:
+    user:
+      name: dummy
+      password: dummy
 
 jwt:
   secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
   expiration: 86400000
+
+
 
 eureka:
   client:
@@ -47,10 +51,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: "*"
+    endpoint:
+      health:
+        show-details: always
   endpoint:
     health:
+      enabled: true
       show-details: always
+    info:
+      enabled: true
 
 logging:
   level:

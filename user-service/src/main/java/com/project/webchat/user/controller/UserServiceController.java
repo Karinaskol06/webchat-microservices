@@ -7,6 +7,7 @@ import com.project.webchat.shared.dto.UserCredentialsResponse;
 import com.project.webchat.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,9 +20,16 @@ public class UserServiceController {
     private final UserService userService;
 
     @PostMapping("/register")
-    public ResponseEntity<UserDTO> register(@Valid @RequestBody RegisterRequestDTO registerRequestDTO) {
-        UserDTO registered = userService.registerUser(registerRequestDTO);
-        return ResponseEntity.ok(registered);
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequestDTO registerRequestDTO) {
+        try {
+            UserDTO registered = userService.registerUser(registerRequestDTO);
+            return ResponseEntity.ok(registered);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Registration failed: " + e.getMessage());
+        }
     }
 
     @GetMapping("/{id}")

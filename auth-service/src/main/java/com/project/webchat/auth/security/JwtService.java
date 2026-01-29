@@ -31,19 +31,14 @@ public class JwtService {
 
     public String generateToken(UserDetails user) {
         Map<String, Object> extraClaims = new HashMap<>();
+
         if (user instanceof CustomUserDetails) {
             CustomUserDetails customUserDetails = (CustomUserDetails) user;
             extraClaims.put("userId", customUserDetails.getId());
-            extraClaims.put("userServiceId", customUserDetails.getUserServiceId());
             extraClaims.put("email", customUserDetails.getEmail());
-
+            extraClaims.put("firstName", customUserDetails.getFirstName());
+            extraClaims.put("lastName", customUserDetails.getLastName());
         }
-
-        List<String> roles = user.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.toList());
-        extraClaims.put("roles", roles);
-        extraClaims.put("username", user.getUsername());
 
         return generateToken(extraClaims, user);
     }

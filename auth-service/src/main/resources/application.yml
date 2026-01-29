@@ -9,12 +9,10 @@ spring:
       enabled: true
       httpclient:
         enabled: true
-
-  datasource:
-    url: jdbc:postgresql://localhost:5432/auth_db
-    username: karina
-    password: 11111
-    driver-class-name: org.postgresql.Driver
+  security:
+    user:
+      name: admin
+      password: 11111
 
   jpa:
     hibernate:
@@ -78,15 +76,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: always
-      show-components: always
-  health:
-    redis:
-      enabled: true
+        include: "*"
+        exclude: env,beans
+    endpoint:
+      health:
+        show-details: always
+        access: permitAll
+      info:
+        access: permitAll
+      shutdown:
+        enabled: true
+      beans:
+        enabled: true
+      env:
+        enabled: true
 
 logging:
   level:

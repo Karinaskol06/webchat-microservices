@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 @Service
+@Transactional
 public class UserService {
 
     private final UserRepository userRepository;
@@ -43,8 +44,10 @@ public class UserService {
                 .lastName(registerDTO.getLastName())
                 .email(registerDTO.getEmail())
                 .passwordHash(encodedPassword)
+                .isActive(true)
                 .build();
         User savedUser = userRepository.save(user);
+        userRepository.flush();
 
         return convertToDTO(savedUser);
     }
