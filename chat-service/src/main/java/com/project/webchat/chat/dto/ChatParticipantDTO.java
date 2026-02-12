@@ -1,17 +1,16 @@
-package com.project.webchat.shared.security;
+package com.project.webchat.chat.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Data
 @Builder
+@Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class JwtUser {
+public class ChatParticipantDTO {
     private Long id;
     private String username;
-    private String email;
-    private boolean active;
+    private boolean online;
 }

@@ -7,6 +7,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,49 +21,56 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 @Component
+@RequiredArgsConstructor
+@Slf4j
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final UserDetailsService userDetailsService;
-    private final UserServiceClient userServiceClient;
-
-    public JwtAuthFilter(JwtService jwtService, UserDetailsService userDetailsService,
-                         @Qualifier("com.project.webchat.auth.feign.UserServiceClient")
-                         UserServiceClient userServiceClient) {
-        this.jwtService = jwtService;
-        this.userDetailsService = userDetailsService;
-        this.userServiceClient = userServiceClient;
-    }
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain)
                                     throws ServletException, IOException {
+
         String path = request.getServletPath();
+
+        //skip auth for public endpoints
         if (path.startsWith("/api/auth/") ||
                 path.startsWith("/auth/") ||
                 path.startsWith("/actuator/") ||
                 path.startsWith("/error")) {
             filterChain.doFilter(request, response);
+            return;
         }
 
-        final String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+        //get token from header
+        String authHeader = request.getHeader("Authorization");
+
+        //if no token - continue (and get 401)
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
+            //extract token
             String jwt = authHeader.substring(7);
             String username = jwtService.extractUsername(jwt);
 
+            //validate and set authentication
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDTO userDTO = userServiceClient.getUserByUsername(username).getBody();
 
-                if (userDTO != null && jwtService.isTokenValid(jwt,
-                        userDetailsService.loadUserByUsername(userDTO.getUsername()))) {
-                    CustomUserDetails userDetails = new CustomUserDetails(userDTO, "");
+                if (jwtService.validateToken(jwt)) {
+                    Long userId = jwtService.extractUserId(jwt);
+                    String email = jwtService.extractClaim(jwt, claims -> claims.get("email", String.class));
+
+                    //create user details from token claims
+                    CustomUserDetails userDetails = CustomUserDetails.builder()
+                            .id(userId)
+                            .username(username)
+                            .email(email)
+                            .build();
 
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
@@ -69,15 +78,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     null,
                                     userDetails.getAuthorities()
                             );
+
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+
+                    log.debug("Authenticated user: {}", username);
                 }
             }
-            filterChain.doFilter(request, response);
         } catch (Exception e) {
             logger.error("Cannot set user authentication: {}");
-            filterChain.doFilter(request, response);
         }
+
+        filterChain.doFilter(request, response);
     }
 
     private String parseJwt(HttpServletRequest request) {

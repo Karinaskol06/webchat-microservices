@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,13 +29,16 @@ public class AuthenticationController {
 
     private final JwtService jwtService;
     private final AuthService authService;
-    @Qualifier("com.project.webchat.auth.feign.UserServiceClient")
     private final UserServiceClient userServiceClient;
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponseDTO> login(@Valid @RequestBody LoginRequestDTO loginRequestDTO) {
-        LoginResponseDTO response = authService.login(loginRequestDTO);
-        return ResponseEntity.ok(response);
+        try {
+            LoginResponseDTO response = authService.login(loginRequestDTO);
+            return ResponseEntity.ok(response);
+        } catch (BadCredentialsException e) {
+            throw e;
+        }
     }
 
     @PostMapping("/logout")

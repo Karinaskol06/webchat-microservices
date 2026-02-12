@@ -1,44 +1,38 @@
 package com.project.webchat.auth.feign;
 
-import feign.FeignException;
 import feign.Response;
 import feign.codec.ErrorDecoder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.nio.charset.StandardCharsets;
-
-@Component
+@Slf4j
 public class FeignErrorDecoder implements ErrorDecoder {
-
-    private final ErrorDecoder defaultErrorDecoder = new Default();
 
     @Override
     public Exception decode(String methodKey, Response response) {
-        String responseBody = "";
-        if (response.body() != null) {
-            try {
-                responseBody = new String(response.body().asInputStream().readAllBytes(), StandardCharsets.UTF_8);
-            } catch (Exception e) {
-                responseBody = "Unable to read response body";
-            }
-        }
-
-        FeignException exception = FeignException.errorStatus(methodKey, response);
+        log.error("Error occurred while calling API. Method: {}, Status: {}",
+                methodKey, response.status());
 
         switch (response.status()) {
             case 400:
-                return new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bad Request from user-service"
-                + responseBody, exception);
-                case 404:
-                    return new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource Not Found" +
-                            responseBody, exception);
-                    case 500:
-                        return new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                                "Internal Server Error", exception);
-                        default:
-                            return defaultErrorDecoder.decode(methodKey, response);
+                return new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Bad request to user service");
+            case 401:
+                return new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                        "Unauthorized access to user service");
+            case 403:
+                return new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Forbidden access to user service");
+            case 404:
+                return new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Resource not found in user service");
+            case 500:
+                return new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Internal server error in user service");
+            default:
+                return new ResponseStatusException(HttpStatus.valueOf(response.status()),
+                        "Error calling user service");
         }
     }
 }
