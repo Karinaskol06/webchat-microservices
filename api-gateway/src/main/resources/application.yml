@@ -21,8 +21,12 @@ spring:
           predicates:
             - Path=/api/chat/**
           filters:
-            - StripPrefix=1
             - name: JwtValidationFilter
+
+        - id: chat-service-presence
+          uri: lb://chat-service
+          predicates:
+            - Path=/api/presence/**
 
         - id: websocket-service
           uri: lb://chat-service
@@ -39,7 +43,7 @@ jwt:
   expiration: 86400000
 
 server:
-  port: 8080
+  port: 8089
 
 eureka:
   client:

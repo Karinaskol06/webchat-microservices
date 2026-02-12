@@ -59,8 +59,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtService, userDetailsService(), userServiceClient);
-
+        JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtService);
         return http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session

@@ -1,18 +1,21 @@
 package com.project.webchat.auth.feign;
 
+import com.project.webchat.auth.config.FeignConfig;
 import com.project.webchat.shared.dto.CredentialsDTO;
 import com.project.webchat.shared.dto.RegisterRequestDTO;
 import com.project.webchat.shared.dto.UserCredentialsResponse;
 import com.project.webchat.shared.dto.UserDTO;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @FeignClient(
         name = "user-service",
         url = "${feign.client.user-service.url:}",
-        fallback = UserServiceClientFallback.class
+        configuration = FeignConfig.class
 )
+@Primary
 public interface UserServiceClient {
 
     @PostMapping("/api/users/register")

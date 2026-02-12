@@ -12,12 +12,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
+@RequiredArgsConstructor
 public class AuthService {
 
     private final JwtService jwtService;
-    @Qualifier("com.project.webchat.auth.feign.UserServiceClient")
     private final UserServiceClient userServiceClient;
 
     public LoginResponseDTO login(LoginRequestDTO loginRequestDTO) {
