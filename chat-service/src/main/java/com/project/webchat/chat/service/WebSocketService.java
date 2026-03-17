@@ -1,16 +1,11 @@
 package com.project.webchat.chat.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.webchat.chat.dto.ChatMessageDTO;
 import com.project.webchat.chat.dto.websocketDTOs.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.util.Map;
 
 @Service
 @Slf4j
@@ -58,8 +53,8 @@ public class WebSocketService {
     }
 
     //sending a message about reading
-    public void sendReadReceipt(String chatId, Long senderId, String messageId) {
-        ReadReceiptEvent event = new ReadReceiptEvent(senderId, messageId);
+    public void sendReadReceipt(String chatId, Long senderId, String messageId, java.util.List<String> messageIds) {
+        ReadReceiptEvent event = new ReadReceiptEvent(senderId, messageId, messageIds);
         messagingTemplate.convertAndSend(formatDest(CHAT_READ_DEST, chatId), event);
         log.debug("User {} read message {} in chat {}", senderId, messageId, chatId);
     }

@@ -13,6 +13,7 @@ spring:
 
     redis:
       host: localhost
+      #password: 11111
       port: 6379
       timeout: 5000ms
       connect-timeout: 3000ms

@@ -9,6 +9,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -18,62 +23,68 @@ public class AuthService {
 
     private final JwtService jwtService;
     private final UserServiceClient userServiceClient;
+    private final AuthenticationManager authenticationManager;
 
     public LoginResponseDTO login(LoginRequestDTO loginRequestDTO) {
 
-        CredentialsDTO credentials = CredentialsDTO.builder()
-                .username(loginRequestDTO.getUsername())
-                .password(loginRequestDTO.getPassword())
-                .build();
+        try {
+            // authenticate using Spring Security
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            loginRequestDTO.getUsername(),
+                            loginRequestDTO.getPassword()
+                    )
+            );
 
-        UserCredentialsResponse userInfo = userServiceClient.validateAndGetInfo(credentials).getBody();
+            // get UserDetails for authentication
+            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-        if (userInfo == null || !userInfo.isValid()) {
-            throw new RuntimeException("Invalid credentials");
+            // generate JWT token
+            String token = jwtService.generateToken(userDetails);
+
+            // cast to CustomUserDetails to get additional fields
+            CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
+
+            return LoginResponseDTO.builder()
+                    .token(token)
+                    .type("Bearer")
+                    .id(customUserDetails.getId())
+                    .username(customUserDetails.getUsername())
+                    .email(customUserDetails.getEmail())
+                    .build();
+
+        } catch (BadCredentialsException e) {
+            log.warn("Failed login attempt for user: {}", loginRequestDTO.getUsername());
+            throw new BadCredentialsException("Invalid username or password");
         }
-
-        UserDTO userDTO = userServiceClient.getUserByUsername(loginRequestDTO.getUsername()).getBody();
-        if (userDTO == null) {
-            throw new RuntimeException("User not found");
-        }
-
-        CustomUserDetails customUserDetails = new CustomUserDetails(userDTO, userInfo.getPassword());
-        String token = jwtService.generateToken(customUserDetails);
-
-        return LoginResponseDTO.builder()
-                .token(token)
-                .type("Bearer")
-                .id(userDTO.getId())
-                .username(userDTO.getUsername())
-                .email(userDTO.getEmail())
-                .build();
     }
 
     public UserDTO register(RegisterRequestDTO registerRequestDTO) {
         try {
+            //check if username exists
             Boolean usernameExists = userServiceClient.existsByUsername(registerRequestDTO.getUsername()).getBody();
-            Boolean emailExists = userServiceClient.existsByEmail(registerRequestDTO.getEmail()).getBody();
-
             if (Boolean.TRUE.equals(usernameExists)) {
                 throw new IllegalArgumentException("Username already exists");
             }
+
+            //check if email exists
+            Boolean emailExists = userServiceClient.existsByEmail(registerRequestDTO.getEmail()).getBody();
             if (Boolean.TRUE.equals(emailExists)) {
                 throw new IllegalArgumentException("Email already exists");
             }
 
-            UserDTO createdUser = userServiceClient.registerUser(registerRequestDTO).getBody();
-            if (createdUser == null) {
-                throw new RuntimeException("Failed to create user in user-service");
+            //register user
+            ResponseEntity<UserDTO> response = userServiceClient.registerUser(registerRequestDTO);
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                throw new RuntimeException("Failed to create user");
             }
 
-            return createdUser;
+            log.info("User registered successfully: {}", registerRequestDTO.getUsername());
+            return response.getBody();
 
-        } catch (Exception e) {
-            log.error("Registration failed: {}", e.getMessage());
-            if (e instanceof IllegalArgumentException) {
-                throw e;
-            }
-            throw new RuntimeException("Registration failed: " + e.getMessage(), e);
+        } catch (FeignException e) {
+            log.error("Feign error during registration: {}", e.getMessage());
+            throw new RuntimeException("Registration service unavailable", e);
         }
     }
 

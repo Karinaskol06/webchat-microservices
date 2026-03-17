@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,7 +33,8 @@ public class AuthenticationController {
     private final UserServiceClient userServiceClient;
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponseDTO> login(@Valid @RequestBody LoginRequestDTO loginRequestDTO) {
+    public ResponseEntity<LoginResponseDTO> login(
+            @Valid @RequestBody LoginRequestDTO loginRequestDTO) {
         try {
             LoginResponseDTO response = authService.login(loginRequestDTO);
             return ResponseEntity.ok(response);
@@ -50,8 +52,10 @@ public class AuthenticationController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequestDTO registerRequest) {
         try {
-            ResponseEntity<Boolean> usernameExists = userServiceClient.existsByUsername(registerRequest.getUsername());
-            ResponseEntity<Boolean> emailExists = userServiceClient.existsByEmail(registerRequest.getEmail());
+            ResponseEntity<Boolean> usernameExists = userServiceClient
+                    .existsByUsername(registerRequest.getUsername());
+            ResponseEntity<Boolean> emailExists = userServiceClient
+                    .existsByEmail(registerRequest.getEmail());
 
             if (Boolean.TRUE.equals(usernameExists.getBody())) {
                 return ResponseEntity.badRequest().body("Username already exists");
@@ -67,6 +71,40 @@ public class AuthenticationController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("USer service unavailable");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<UserDTO> getCurrentUser() {
+        // get authentication from SecurityContext (already validated by JwtAuthFilter)
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated() ||
+                "anonymousUser".equals(authentication.getPrincipal())) {
+            log.warn("User not authenticated");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        try {
+            // get username from authentication
+            String username = authentication.getName();
+
+            // get user data from user-service
+            ResponseEntity<UserDTO> response = userServiceClient.getUserByUsername(username);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return ResponseEntity.ok(response.getBody());
+            } else {
+                log.warn("User not found in user-service: {}", username);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
+
+        } catch (FeignException e) {
+            log.error("Error calling user-service for user: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        } catch (Exception e) {
+            log.error("Error getting current user: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 

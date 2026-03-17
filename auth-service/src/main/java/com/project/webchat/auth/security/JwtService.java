@@ -33,8 +33,6 @@ public class JwtService {
             CustomUserDetails customUserDetails = (CustomUserDetails) user;
             extraClaims.put("userId", customUserDetails.getId());
             extraClaims.put("email", customUserDetails.getEmail());
-            extraClaims.put("firstName", customUserDetails.getFirstName());
-            extraClaims.put("lastName", customUserDetails.getLastName());
         }
 
         return generateToken(extraClaims, user);

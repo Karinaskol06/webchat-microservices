@@ -16,8 +16,6 @@ public class CustomUserDetails implements UserDetails {
     private final String username;
     private final String email;
     private final String passwordHash;
-    private final String firstName;
-    private final String lastName;
     private final boolean active;
 
     public CustomUserDetails(UserDTO userDTO, String passwordHash) {
@@ -25,21 +23,16 @@ public class CustomUserDetails implements UserDetails {
         this.username = userDTO.getUsername();
         this.email = userDTO.getEmail();
         this.passwordHash = passwordHash;
-        this.firstName = userDTO.getFirstName();
-        this.lastName = userDTO.getLastName();
         this.active = true;
     }
 
     @Builder
     public CustomUserDetails(Long id, String username, String email,
-                             String passwordHash, String firstName,
-                             String lastName, boolean active) {
+                             String passwordHash, boolean active) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.passwordHash = passwordHash;
-        this.firstName = firstName;
-        this.lastName = lastName;
         this.active = active;
     }
 

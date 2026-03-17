@@ -7,20 +7,26 @@ import com.project.webchat.chat.entity.ChatMessage;
 import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.entity.MessageType;
+import com.project.webchat.chat.feign.UserServiceClient;
 import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
+import com.project.webchat.shared.dto.UserDTO;
+import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
@@ -31,19 +37,19 @@ public class ChatService {
     private final ChatRoomRepository chatRoomRepository;
     private final RedisService redisService;
     private final WebSocketService webSocketService;
+    private final UserServiceClient userServiceClient;
 
     @Transactional
     public ChatRoomDTO createChat(Long userId1, Long userId2) {
 
-        List<Long> memberIds = List.of(userId1, userId2);
-
+        //check if it exists already
         Optional<ChatRoom> existsAlready = chatRoomRepository
                 .findPrivateChatBetweenUsers(ChatType.PRIVATE, List.of(userId1, userId2));
 
         if (existsAlready.isPresent()) {
             ChatRoom chatRoom = existsAlready.get();
             int unreadCount = getUnreadCount(chatRoom.getId(), userId1);
-            return ChatRoomDTO.toDTO(chatRoom, unreadCount);
+            return enrichChatWithUserData(chatRoom, userId1, unreadCount);
         }
 
         ChatRoom entity = ChatRoom.builder()
@@ -59,20 +65,7 @@ public class ChatService {
 
         createWelcomeMessage(saved.getId(), userId1);
 
-        return ChatRoomDTO.toDTO(saved, 0);
-    }
-
-    //user chats sorted by the last activity
-    public Page<ChatRoomDTO> getAllUserChatsSorted(Long userId, Pageable pageable) {
-
-        Page<ChatRoom> chatPage = chatRoomRepository
-                .findByMemberIdsContainsOrderByLastActivityDesc(userId, pageable);
-
-        List<ChatRoomDTO> chatRooms = chatPage.getContent().stream()
-                .map(chat -> toDTO(chat, userId))
-                .toList();
-
-        return new PageImpl<>(chatRooms, pageable, chatPage.getTotalElements());
+        return enrichChatWithUserData(saved, userId1, 0);
     }
 
     @Transactional
@@ -84,13 +77,15 @@ public class ChatService {
             throw new IllegalArgumentException("User is not a member of this chat.");
         }
 
+        UserInfoDTO senderInfo = getUserInfo(senderId);
+
         //create and save a message
         ChatMessage chatMessage = ChatMessage.builder()
                 .chatId(sendMessageRequest.getChatId())
-                .messageType(MessageType.valueOf(sendMessageRequest.getMessageType()))
+                .messageType(sendMessageRequest.getType())
                 .content(sendMessageRequest.getContent())
                 .senderId(senderId)
-                .senderName("User " + senderId) //then from UserService
+                .senderName(senderInfo.getDisplayName())
                 .timestamp(LocalDateTime.now())
                 .isRead(false)
                 .build();
@@ -102,63 +97,89 @@ public class ChatService {
         //mark user online or refresh online status
         redisService.updatePresence(senderId, sendMessageRequest.getChatId());
 
+        //dto with full sender info (enriched)
+        ChatMessageDTO messageDTO = ChatMessageDTO.toDTO(saved, senderInfo);
+
         //send through websocket
-        webSocketService.sendMessageToChat(sendMessageRequest.getChatId(), ChatMessageDTO.toDTO(saved));
+        webSocketService.sendMessageToChat(sendMessageRequest.getChatId(), messageDTO);
         webSocketService.notifyUserJoinedChat(chatMessage.getChatId(), senderId);
 
-        return ChatMessageDTO.toDTO(saved);
+        return messageDTO;
     }
 
-    public Page<ChatMessageDTO> getMessageHistory(String chatId, Pageable pageable) {
+    //user chats sorted by the last activity
+    public Page<ChatRoomDTO> getAllUserChatsSorted(Long userId, Pageable pageable) {
+
+        Page<ChatRoom> chatPage = chatRoomRepository
+                .findByMemberIdsContainsOrderByLastActivityDesc(userId, pageable);
+
+        List<ChatRoomDTO> chatRooms = chatPage.getContent()
+                .stream()
+                .map(chat -> enrichChatWithUserData(chat, userId, getUnreadCount(chat.getId(), userId)))
+                .toList();
+
+        return new PageImpl<>(chatRooms, pageable, chatPage.getTotalElements());
+    }
+
+    public Page<ChatMessageDTO> getMessageHistory(String chatId, Long currentUserId, Pageable pageable) {
+        if (!isUserChatMember(chatId, currentUserId)) {
+            throw new SecurityException("Access denied");
+        }
+
         Page<ChatMessage> messagePage = chatMessageRepository
-                .findByChatIdOrderByTimestampDesc(chatId, pageable);
+                .findByChatIdOrderByTimestampAsc(chatId, pageable);
 
-        return messagePage.map(ChatMessageDTO::toDTO);
+        //get all unique sender IDs from this page
+        //used primarily for group chats
+        Set<Long> senderIds = messagePage.getContent().stream()
+                .map(ChatMessage::getSenderId)
+                .collect(Collectors.toSet());
+
+        //fetch all user info in one batch
+        //optimization to avoid one request per sender
+        Map<Long, UserInfoDTO> userInfoMap = getUserInfoBatch(senderIds);
+
+        //enrich messages with user info
+        List<ChatMessageDTO> enrichedMessages = messagePage.getContent()
+                .stream()
+                //mapping combines raw entity fields with user info
+                .map(msg -> ChatMessageDTO.toDTO
+                        (msg, userInfoMap.get(msg.getSenderId())))
+                .toList();
+
+        return new PageImpl<>(enrichedMessages, pageable, messagePage.getTotalElements());
     }
 
-    //pass sender id to mark as read only when the other person reads a message (not me)
     @Transactional
-    public void markMessagesAsRead(String chatId, Long readerId) {
-        log.info("=== MARKING MESSAGES AS READ ===");
-        log.info("Chat ID: {}, Reader ID: {}", chatId, readerId);
+    public void markMessagesAsRead(String chatId, Long senderId) {
+        // ensure the caller is a chat member (prevents marking random chats)
+        if (!isUserChatMember(chatId, senderId)) {
+            throw new SecurityException("Access denied");
+        }
 
-        // Find unread messages where sender id not equal user id
+        // treat this call as proof the user is viewing the chat:
+        // keep presence consistent even if /presence/enter-chat wasn't called (or failed).
+        redisService.updatePresence(senderId, chatId);
+        webSocketService.notifyUserJoinedChat(chatId, senderId);
+
+        //find unread messages where sender id not equal user id
         List<ChatMessage> unreadMessages = chatMessageRepository
-                .findUnreadMessagesNotFromUser(chatId, readerId);
-
-        log.info("Found {} unread messages from others", unreadMessages.size());
+                .findUnreadMessagesNotFromUser(chatId, senderId);
 
         if (unreadMessages.isEmpty()) {
-            log.warn("NO UNREAD MESSAGES FOUND for chat {} and reader {}", chatId, readerId);
-
-            // DEBUG: Let's see what messages DO exist
-            Page<ChatMessage> allMessages = chatMessageRepository
-                    .findByChatIdOrderByTimestampDesc(chatId, Pageable.unpaged());
-            log.info("Total messages in chat: {}", allMessages.getTotalElements());
-
-            for (ChatMessage msg : allMessages.getContent()) {
-                log.info("Message ID: {}, Sender: {}, Read: {}, Is From Reader? {}",
-                        msg.getId(),
-                        msg.getSenderId(),
-                        msg.isRead(),
-                        msg.getSenderId().equals(readerId) ? "YES (will be filtered out)" : "NO");
-            }
             return;
         }
 
         String lastId = unreadMessages.getLast().getId();
-        log.info("Marking {} messages as read. Last message ID: {}", unreadMessages.size(), lastId);
 
         for (ChatMessage message : unreadMessages) {
             message.setRead(true);
             message.setReadAt(LocalDateTime.now());
-            log.debug("Marking message {} as read", message.getId());
         }
 
         chatMessageRepository.saveAll(unreadMessages);
-        log.info("Successfully saved {} messages as read", unreadMessages.size());
-
-        webSocketService.sendReadReceipt(chatId, readerId, lastId);
+        List<String> readMessageIds = unreadMessages.stream().map(ChatMessage::getId).toList();
+        webSocketService.sendReadReceipt(chatId, senderId, lastId, readMessageIds);
     }
 
     @Transactional
@@ -175,7 +196,6 @@ public class ChatService {
 
         chatMessageRepository.delete(toDelete);
         webSocketService.notifyMessageDeleted(messageId, chatId);
-
     }
 
     @Transactional
@@ -219,8 +239,92 @@ public class ChatService {
     }
 
 
-    /* helper methods */
+    /* helper methods for user data */
+    private UserInfoDTO getUserInfo(Long userId) {
+        //check reds cache
+        UserInfoDTO cached = redisService.getCachedUserInfo(userId);
+        if (cached != null) {
+            cached.setOnline(redisService.isUserOnline(userId));
+            return cached;
+        }
 
+        //if not in cache, fetch from user-service
+        try {
+            ResponseEntity<UserDTO> response = userServiceClient.getUserById(userId);
+            UserDTO userData = response.getBody();
+
+            if (userData != null) {
+                UserInfoDTO userInfo = UserInfoDTO.builder()
+                        .id(userData.getId())
+                        .username(userData.getUsername())
+                        .firstName(userData.getFirstName())
+                        .lastName(userData.getLastName())
+                        .profilePicture(userData.getProfilePicture())
+                        .online(redisService.isUserOnline(userId))
+                        .build();
+
+                //cache for next time
+                redisService.cacheUserInfo(userInfo);
+                return userInfo;
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch user {}: {}", userId, e.getMessage());
+        }
+
+        //fallback if user-service is down
+        return UserInfoDTO.builder()
+                .id(userId)
+                .username("User " + userId)
+                .online(redisService.isUserOnline(userId))
+                .build();
+    }
+
+    //user info for many users (group chat)
+    private Map<Long, UserInfoDTO> getUserInfoBatch(Set<Long> userIds) {
+        return userIds.stream()
+                .collect(Collectors.toMap(
+                        id -> id,
+                        this::getUserInfo,
+                        (existing, replacement) -> existing
+                ));
+    }
+
+    //add user(s) data to chat
+    private ChatRoomDTO enrichChatWithUserData(ChatRoom chat, Long currentUserId, int unreadCount) {
+        ChatRoomDTO.ChatRoomDTOBuilder builder = ChatRoomDTO.builder()
+                .id(chat.getId())
+                .type(chat.getType().toString())
+                .createdAt(chat.getCreatedAt())
+                .lastActivity(chat.getLastActivity())
+                .lastMessage(chat.getLastMessage())
+                .unreadCount(unreadCount);
+
+        //for private chats - find the other user
+        if (chat.getType() == ChatType.PRIVATE) {
+            Long otherUserId = chat.getMemberIds().stream()
+                    .filter(id -> !id.equals(currentUserId))
+                    .findFirst()
+                    .orElse(null);
+            if (otherUserId != null) {
+                UserInfoDTO otherUser = getUserInfo(otherUserId);
+                builder.otherUser(otherUser);
+            }
+        }
+
+        //for group chats - get all members
+        if (chat.getType() == ChatType.GROUP) {
+            List<UserInfoDTO> members = chat.getMemberIds().stream()
+                    .map(this::getUserInfo)
+                    .toList();
+            builder.members(members);
+            builder.groupName(chat.getGroupName());
+            builder.groupPhoto(chat.getGroupPhoto());
+        }
+
+        return builder.build();
+    }
+
+    /* helper methods */
     private void updateChatLastActivity(String chatId, String content) {
         chatRoomRepository.findById(chatId).ifPresent(chatRoom -> {
             chatRoom.setLastActivity(LocalDateTime.now());
@@ -242,11 +346,4 @@ public class ChatService {
 
         chatMessageRepository.save(welcome);
     }
-
-    private ChatRoomDTO toDTO(ChatRoom chatRoom, Long userId) {
-        int unreadCount = getUnreadCount(chatRoom.getId(), userId);
-        return ChatRoomDTO.toDTO(chatRoom, unreadCount);
-    }
-
-
 }

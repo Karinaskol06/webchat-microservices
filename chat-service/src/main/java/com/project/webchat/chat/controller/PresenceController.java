@@ -80,19 +80,7 @@ public class PresenceController {
     @GetMapping("/chat/{chatId}/online-users")
     public ResponseEntity<Set<Long>> getOnlineUsers(
             @PathVariable String chatId) {
-
-        Set<String> allOnlineUsers = redisService.getOnlineUsers();
-        Set<Long> chatOnlineUsers = new HashSet<>();
-
-        for (String userIdStr : allOnlineUsers) {
-            Long userId = Long.parseLong(userIdStr);
-            String currentUserChat = redisService.getCurrentChat(userId);
-
-            if (chatId.equals(currentUserChat)) {
-                chatOnlineUsers.add(userId);
-            }
-        }
-        return ResponseEntity.ok(chatOnlineUsers);
+        return ResponseEntity.ok(redisService.getOnlineUsersInChat(chatId));
     }
 
     //when user leaves a chat
@@ -113,10 +101,11 @@ public class PresenceController {
     @PostMapping("/disconnect")
     public ResponseEntity<Void> disconnect(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String chatId = redisService.getCurrentChat(userDetails.getId());
         redisService.markUserOffline(userDetails.getId());
-        webSocketService.notifyUserLeftChat(
-                redisService.getCurrentChat(userDetails.getId()),
-                userDetails.getId());
+        if (chatId != null) {
+            webSocketService.notifyUserLeftChat(chatId, userDetails.getId());
+        }
         return ResponseEntity.ok().build();
     }
 

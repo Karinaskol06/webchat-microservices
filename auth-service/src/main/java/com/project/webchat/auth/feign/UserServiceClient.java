@@ -13,8 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @FeignClient(
         name = "user-service",
         url = "${feign.client.user-service.url:}",
-        configuration = FeignConfig.class
-)
+        configuration = FeignConfig.class)
 @Primary
 public interface UserServiceClient {
 
@@ -40,5 +39,9 @@ public interface UserServiceClient {
     ResponseEntity<UserCredentialsResponse> validateAndGetInfo(
             @RequestBody CredentialsDTO credentialsDTO
     );
+
+    @GetMapping("/api/users/by-username/{username}/with-password")
+    ResponseEntity<UserCredentialsResponse> getUserWithPasswordByUsername(
+            @PathVariable("username") String username);
 
 }

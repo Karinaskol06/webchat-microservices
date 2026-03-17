@@ -6,6 +6,7 @@ import com.project.webchat.chat.dto.CreateChatRequest;
 import com.project.webchat.chat.dto.SendMessageRequest;
 import com.project.webchat.chat.security.CustomUserDetails;
 import com.project.webchat.chat.service.ChatService;
+import com.project.webchat.chat.service.WebSocketService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ import java.util.Map;
 public class ChatController {
 
     private final ChatService chatService;
+    private final WebSocketService webSocketService;
 
     //create a private chat between users
     @PostMapping("/create")
@@ -77,6 +79,7 @@ public class ChatController {
     public ResponseEntity<Page<ChatMessageDTO>> getAllMessages(
             @PathVariable String chatId,
             @AuthenticationPrincipal CustomUserDetails currentUser,
+            // return newest messages by default (page 0 = latest)
             @PageableDefault(size = 50, sort = "timestamp", direction = Sort.Direction.DESC)
             Pageable pageable) {
 
@@ -86,8 +89,29 @@ public class ChatController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
-        Page<ChatMessageDTO> messages = chatService.getMessageHistory(chatId, pageable);
+        Page<ChatMessageDTO> messages = chatService.getMessageHistory(chatId, currentUser.getId(), pageable);
         return ResponseEntity.ok(messages);
+    }
+
+    @PostMapping("/{chatId}/typing")
+    public ResponseEntity<Void> typing(
+            @PathVariable String chatId,
+            @RequestBody(required = false) Map<String, Object> body,
+            @AuthenticationPrincipal CustomUserDetails userTyping) {
+        log.debug("User {} is typing in chat {}", userTyping.getId(), chatId);
+
+        boolean isTyping = true;
+        if (body != null && body.containsKey("typing")) {
+            Object raw = body.get("typing");
+            if (raw instanceof Boolean b) {
+                isTyping = b;
+            } else if (raw instanceof String s) {
+                isTyping = Boolean.parseBoolean(s);
+            }
+        }
+        webSocketService.sendTypingMessage(chatId, userTyping.getId(), isTyping);
+
+        return ResponseEntity.ok().build();
     }
 
     //mark messages as read in a chat

@@ -21,6 +21,7 @@ public class WebSocketEventListener {
     @EventListener
     public void handleWebSocketListener(SessionConnectedEvent event) {
         StompHeaderAccessor headers = StompHeaderAccessor.wrap(event.getMessage());
+        //gets authenticated user from websocket session
         Principal principal = headers.getUser();
 
         if (principal != null) {

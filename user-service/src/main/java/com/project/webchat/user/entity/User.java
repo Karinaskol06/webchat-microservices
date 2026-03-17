@@ -32,13 +32,15 @@ public class User {
     @Column(name = "last_name", length = 50)
     private String lastName;
 
+    @Column(name = "profile_picture")
+    private String profilePicture;
+
     @Column(name = "is_active")
     private boolean isActive = true;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    // Add @PrePersist for createdAt
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

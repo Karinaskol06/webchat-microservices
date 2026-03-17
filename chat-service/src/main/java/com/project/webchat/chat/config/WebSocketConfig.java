@@ -14,25 +14,28 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final WebSocketProperties webSocketProperties;
 
+
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        //prefix for client requests
+        // client sends messages to destinations starting with /app
         config.setApplicationDestinationPrefixes("/app");
 
-        //prefix for the topic
+        // server broadcasts messages to topics starting with /topic
         config.enableSimpleBroker("/topic");
 
-        //prefix for private messages
+        // prefix for private messages
         config.setUserDestinationPrefix("/user");
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // URL clients connect to initially - with SockJS fallback
         registry.addEndpoint("/ws/chat")
-                .setAllowedOriginPatterns("*")
+                .setAllowedOrigins("http://localhost:5173") // Your frontend URL
                 .withSockJS();
 
+        // If you need raw WebSocket support without SockJS
         registry.addEndpoint("/ws/chat")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOrigins("http://localhost:5173");
     }
 }

@@ -10,6 +10,7 @@ import com.project.webchat.shared.exceptions.ResourceNotFoundException;
 import com.project.webchat.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -111,7 +112,7 @@ public class UserService {
 
     public UserDTO getUserDTOByUsername(String username) {
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found " + username));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with username" + username));
         return convertToDTO(user);
     }
 
@@ -159,6 +160,22 @@ public class UserService {
                 .email(user.getEmail())
                 .isValid(true)
                 .isActive(user.isActive())
+                .build();
+    }
+
+    public UserCredentialsResponse getUserCredentialsByUsername(String username) {
+        log.info("Getting user credentials by username: {}", username);
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+
+        return UserCredentialsResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .password(user.getPasswordHash())
+                .email(user.getEmail())
+                .isActive(user.isActive())
+                .isValid(true)
                 .build();
     }
 

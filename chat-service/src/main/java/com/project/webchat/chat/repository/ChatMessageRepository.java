@@ -12,8 +12,8 @@ import java.util.List;
 @Repository
 public interface ChatMessageRepository extends MongoRepository<ChatMessage, String> {
 
-    //find all messages with pagination
-    Page<ChatMessage> findByChatIdOrderByTimestampDesc(String chatId, Pageable pageable);
+    //find all messages with pagination, oldest first
+    Page<ChatMessage> findByChatIdOrderByTimestampAsc(String chatId, Pageable pageable);
 
     //find unread messages (user is not a sender)
     @Query("{ 'chatId' : ?0, 'senderId' : { $ne: ?1 }, 'isRead' : false }")

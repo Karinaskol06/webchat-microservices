@@ -20,8 +20,8 @@ public interface ChatRoomRepository extends MongoRepository<ChatRoom, String> {
     //with pagination
     Page<ChatRoom> findByMemberIdsContainsOrderByLastActivityDesc(Long userId, Pageable pageable);
 
-    //find a private chat
-    @Query("{ 'type': 'PRIVATE', 'memberIds': { $all: ?1 }, 'memberIdsSize': 2 }")
+    //find a private chat between users
+    @Query("{ 'type': ?0, 'memberIds': { $all: ?1, $size: 2 } }")
     Optional<ChatRoom> findPrivateChatBetweenUsers(ChatType type, List<Long> userIds);
 
     //check if chat exists for specified user

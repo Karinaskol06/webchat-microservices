@@ -1,6 +1,8 @@
 package com.project.webchat.chat.dto;
 
+import com.project.webchat.chat.entity.MessageType;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.Data;
 
@@ -8,12 +10,12 @@ import lombok.Data;
 @Builder
 public class SendMessageRequest {
 
-    @NotBlank
+    @NotNull(message = "Chat ID cannot be null")
     private String chatId;
 
     @NotBlank
     private String content;
 
     //TEXT, IMAGE, FILE
-    private String messageType;
+    private MessageType type = MessageType.TEXT;
 }

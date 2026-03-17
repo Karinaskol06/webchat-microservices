@@ -3,6 +3,7 @@ package com.project.webchat.chat.dto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.project.webchat.chat.entity.ChatMessage;
 import com.project.webchat.chat.entity.MessageType;
+import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,8 +19,6 @@ import java.time.LocalDateTime;
 public class ChatMessageDTO {
     private String id;
     private String chatId;
-    private Long senderId;
-    private String senderName;
     private String content;
     private MessageType messageType;
     private LocalDateTime timestamp;
@@ -29,12 +28,13 @@ public class ChatMessageDTO {
     //for websocket (MESSAGE, WRITING, READ_RECEIPT)
     private String type;
 
-    public static ChatMessageDTO toDTO(ChatMessage chatMessage) {
+    private UserInfoDTO sender;
+
+    public static ChatMessageDTO toDTO(ChatMessage chatMessage, UserInfoDTO sender) {
         return ChatMessageDTO.builder()
                 .id(chatMessage.getId())
                 .chatId(chatMessage.getChatId())
-                .senderId(chatMessage.getSenderId())
-                .senderName(chatMessage.getSenderName())
+                .sender(sender)
                 .content(chatMessage.getContent())
                 .messageType(chatMessage.getMessageType())
                 .timestamp(chatMessage.getTimestamp())

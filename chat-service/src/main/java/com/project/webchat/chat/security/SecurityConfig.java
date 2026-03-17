@@ -11,9 +11,13 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.util.Arrays;
 import java.util.Collections;
 
 @Configuration
@@ -31,27 +35,14 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/api/presence/**").authenticated()
                         .requestMatchers("/api/chat/**").authenticated()
-                        .anyRequest().permitAll()
+                        .anyRequest().authenticated()
                 )
                 .addFilterBefore(chatJwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-//    @Bean
-//    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-//        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-//        converter.setJwtGrantedAuthoritiesConverter(jwt -> Collections.emptyList());
-//        converter.setPrincipalClaimName("userId");
-//        return converter;
-//    }
-//
-//    @Bean
-//    public JwtDecoder jwtDecoder() {
-//        String secret = "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970";
-//        SecretKey key = new SecretKeySpec(secret.getBytes(), "HmacSHA256");
-//        return NimbusJwtDecoder.withSecretKey(key).build();
-//    }
 }

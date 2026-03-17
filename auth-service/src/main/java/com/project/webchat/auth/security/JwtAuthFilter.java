@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
@@ -26,52 +27,30 @@ import java.io.IOException;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final CustomUserDetailsService userDetailsService;
 
     @Override
-    protected void doFilterInternal(@NonNull HttpServletRequest request,
-                                    @NonNull HttpServletResponse response,
-                                    @NonNull FilterChain filterChain)
-                                    throws ServletException, IOException {
+    protected void doFilterInternal(
+            @NonNull HttpServletRequest request,
+            @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain
+    ) throws ServletException, IOException {
 
-        String path = request.getServletPath();
+        final String authHeader = request.getHeader("Authorization");
 
-        //skip auth for public endpoints
-        if (path.startsWith("/api/auth/") ||
-                path.startsWith("/auth/") ||
-                path.startsWith("/actuator/") ||
-                path.startsWith("/error")) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        //get token from header
-        String authHeader = request.getHeader("Authorization");
-
-        //if no token - continue (and get 401)
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
-            //extract token
             String jwt = authHeader.substring(7);
             String username = jwtService.extractUsername(jwt);
 
-            //validate and set authentication
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-                if (jwtService.validateToken(jwt)) {
-                    Long userId = jwtService.extractUserId(jwt);
-                    String email = jwtService.extractClaim(jwt, claims -> claims.get("email", String.class));
-
-                    //create user details from token claims
-                    CustomUserDetails userDetails = CustomUserDetails.builder()
-                            .id(userId)
-                            .username(username)
-                            .email(email)
-                            .build();
-
+                if (jwtService.isTokenValid(jwt, userDetails)) {
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
                                     userDetails,
@@ -80,14 +59,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                             );
 
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-
                     SecurityContextHolder.getContext().setAuthentication(authToken);
 
                     log.debug("Authenticated user: {}", username);
                 }
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}");
+            log.error("JWT authentication failed: {}", e.getMessage());
         }
 
         filterChain.doFilter(request, response);

@@ -7,13 +7,16 @@ import com.project.webchat.shared.dto.UserCredentialsResponse;
 import com.project.webchat.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
+@Slf4j
 public class UserServiceController {
     //endpoints for feign calls
 
@@ -40,7 +43,23 @@ public class UserServiceController {
 
     @GetMapping("/by-username/{username}")
     public ResponseEntity<UserDTO> getUserByUsername(@PathVariable String username) {
-        UserDTO user = userService.getUserDTOByUsername(username);
+        log.info("Getting user by username: {}", username);
+        try {
+            UserDTO user = userService.getUserDTOByUsername(username);
+            return ResponseEntity.ok(user);
+        } catch (UsernameNotFoundException e) {
+            log.error("User not found: {}", username, e);
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("Error getting user by username: {}", username, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/by-username/{username}/with-password")
+    public ResponseEntity<UserCredentialsResponse> getUserWithPasswordByUsername(
+            @PathVariable String username) {
+        UserCredentialsResponse user = userService.getUserCredentialsByUsername(username);
         return ResponseEntity.ok(user);
     }
 
