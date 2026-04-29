@@ -1,20 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import useChatStore from '../store/useChatStore';
+import useAuthStore from '../store/useAuthStore';
 import chatService from '../services/chatService';
 import { useShallow } from 'zustand/react/shallow';
+import { sendChatMessage, sendTypingEvent } from '../utils/websocket';
 
 const useMessages = (currentChat) => {
-  const { messages, setMessages, addMessage } = useChatStore(
+  const { messages, setMessages } = useChatStore(
     useShallow((state) => ({
       messages: state.messages,
       setMessages: state.setMessages,
-      addMessage: state.addMessage,
     }))
   );
+  const user = useAuthStore((state) => state.user);
 
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false); // eslint-disable-line no-unused-vars
-  const [typingTimeout, setTypingTimeout] = useState(null);
+  const [selectedAttachments, setSelectedAttachments] = useState([]);
+  const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   // Scroll to bottom when messages change
@@ -58,21 +61,38 @@ const useMessages = (currentChat) => {
   }, [currentChat, setMessages]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !currentChat) return;
+    if (!currentChat) return;
+
+    const trimmedMessage = newMessage.trim();
+    const hasText = trimmedMessage.length > 0;
+    const hasAttachments = selectedAttachments.length > 0;
+    if (!trimmedMessage && selectedAttachments.length === 0) return;
 
     try {
-      const messageData = { content: newMessage };
+      let attachmentIds = [];
 
-      // Send message and get the response
-      const sentMessage = await chatService.sendMessage(currentChat.id, messageData);
-
-      if (sentMessage) {
-        addMessage(sentMessage);
+      if (hasAttachments) {
+        console.log('Uploading attachments:', selectedAttachments.length);
+        const uploaded = await chatService.uploadAttachments(currentChat.id, selectedAttachments);
+        attachmentIds = uploaded.map((attachment) => attachment.id).filter(Boolean);
+        console.log('Attachments uploaded, IDs:', attachmentIds);
       }
-      setNewMessage('');
 
-      // Send typing indicator false after sending message
-      chatService.sendTyping(currentChat.id, false);
+      const sent = sendChatMessage({
+        chatId: currentChat.id,
+        content: hasText ? trimmedMessage : null,
+        attachmentIds,
+        senderId: user?.id,
+        type: hasAttachments ? 'MIXED' : 'TEXT'
+      });
+      if (!sent) {
+        throw new Error('WebSocket is not connected');
+      }
+
+      setNewMessage('');
+      setSelectedAttachments([]);
+
+      sendTypingEvent({ chatId: currentChat.id, typing: false, userId: user?.id });
     } catch (error) {
       console.error('Failed to send message:', error);
       alert('Failed to send message. Please try again.');
@@ -82,19 +102,33 @@ const useMessages = (currentChat) => {
   const handleTyping = () => {
     if (!currentChat) return;
 
-    if (typingTimeout) {
-      clearTimeout(typingTimeout);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
     }
 
-    chatService.sendTyping(currentChat.id, true);
+    sendTypingEvent({ chatId: currentChat.id, typing: true, userId: user?.id });
 
     // Stops after 3 sec of inactivity
-    const timeout = setTimeout(() => {
-      chatService.sendTyping(currentChat.id, false);
+    typingTimeoutRef.current = setTimeout(() => {
+      sendTypingEvent({ chatId: currentChat.id, typing: false, userId: user?.id });
     }, 3000);
-
-    setTypingTimeout(timeout);
   };
+
+  const handleSelectAttachments = (files) => {
+    if (!files || files.length === 0) return;
+    const nextFiles = Array.from(files);
+    setSelectedAttachments((prev) => [...prev, ...nextFiles]);
+  };
+
+  const handleRemoveAttachment = (index) => {
+    setSelectedAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  useEffect(() => () => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+  }, []);
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -110,6 +144,9 @@ const useMessages = (currentChat) => {
     handleSendMessage,
     handleTyping,
     handleKeyPress,
+    selectedAttachments,
+    handleSelectAttachments,
+    handleRemoveAttachment,
     messagesEndRef,
   };
 };

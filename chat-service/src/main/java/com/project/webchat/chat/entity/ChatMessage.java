@@ -10,6 +10,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Document(collection = "messages")
 @Data
@@ -33,6 +35,9 @@ public class ChatMessage {
 
     private MessageType messageType;
 
+    @Builder.Default
+    private List<String> attachmentIds = new ArrayList<>();
+
     @Indexed
     @Builder.Default
     private LocalDateTime timestamp = LocalDateTime.now();
@@ -42,4 +47,8 @@ public class ChatMessage {
     @Indexed
     @Builder.Default
     private LocalDateTime readAt = null;
+
+    public boolean hasAttachments() {
+        return !attachmentIds.isEmpty();
+    }
 }

@@ -16,6 +16,6 @@ public class SendMessageRequest {
     @NotBlank
     private String content;
 
-    //TEXT, IMAGE, FILE
+    //TEXT, ATTACHMENT, MIXED
     private MessageType type = MessageType.TEXT;
 }

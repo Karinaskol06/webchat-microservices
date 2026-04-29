@@ -46,6 +46,9 @@ const ChatPage = () => {
     handleSendMessage,
     handleTyping,
     handleKeyPress,
+    selectedAttachments,
+    handleSelectAttachments,
+    handleRemoveAttachment,
     messagesEndRef,
   } = useMessages(currentChat);
 
@@ -136,6 +139,9 @@ const ChatPage = () => {
           onSend={handleSendMessage}
           onTyping={handleTyping}
           onKeyPress={handleKeyPress}
+          attachments={selectedAttachments}
+          onSelectAttachments={handleSelectAttachments}
+          onRemoveAttachment={handleRemoveAttachment}
           emojiSidebarOpen={emojiSidebarOpen}
           onToggleEmojiSidebar={() => setEmojiSidebarOpen((prev) => !prev)}
         />

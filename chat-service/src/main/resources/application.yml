@@ -5,6 +5,12 @@ spring:
   application:
     name: chat-service
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+      enabled: true
+
   data:
     mongodb:
       uri: mongodb://localhost:27017/messages_db
@@ -46,6 +52,12 @@ management:
   endpoint:
     health:
       show-details: always
+
+app:
+  upload:
+    dir: ./uploads
+    max-size: 10485760  # 10 MB
+    allowed-extensions: jpg,jpeg,png,gif,pdf,txt,doc,docx,xls,xlsx,mp4
 
 logging:
   level:

@@ -7,11 +7,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -39,3 +34,17 @@ mvnw.cmd
 **/.idea/
 **/.vscode/
 **/*.iml
+
+# Dependencies (frontend)
+webchat_frontend/node_modules
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.vite/
+webchat_frontend/dist
+dist/
+dist-ssr/
+*.local
+
+# Uploads (avatars, chat)
+uploads/

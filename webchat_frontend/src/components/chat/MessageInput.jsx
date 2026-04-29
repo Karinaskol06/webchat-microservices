@@ -1,5 +1,5 @@
-import React from 'react';
-import { Box, IconButton, Paper, TextField, Tooltip } from '@mui/material';
+import React, { useRef } from 'react';
+import { Box, Chip, IconButton, Paper, TextField, Tooltip } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined';
@@ -12,18 +12,56 @@ const MessageInput = ({
   onTyping,
   onKeyPress,
   inputRef,
+  attachments = [],
+  onSelectAttachments,
+  onRemoveAttachment,
   emojiSidebarOpen,
   onToggleEmojiSidebar,
 }) => {
+  const fileInputRef = useRef(null);
+
   const handleChange = (e) => {
     onChange?.(e.target.value);
     onTyping?.();
   };
 
+  const handleOpenFilePicker = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelection = (e) => {
+    const files = e.target.files;
+    onSelectAttachments?.(files);
+    e.target.value = '';
+  };
+
+  const hasText = Boolean(value?.trim());
+  const canSend = hasText || attachments.length > 0;
+
   return (
     <Paper sx={{ p: 2, borderRadius: 0 }}>
+      {attachments.length > 0 && (
+        <Box display="flex" gap={1} flexWrap="wrap" mb={1}>
+          {attachments.map((file, index) => (
+            <Chip
+              key={`${file.name}-${index}`}
+              label={file.name}
+              onDelete={() => onRemoveAttachment?.(index)}
+              size="small"
+            />
+          ))}
+        </Box>
+      )}
       <Box display="flex" alignItems="center">
-        <IconButton>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          onChange={handleFileSelection}
+          accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,image/*,video/*"
+        />
+        <IconButton onClick={handleOpenFilePicker}>
           <AttachFileIcon />
         </IconButton>
 
@@ -48,7 +86,7 @@ const MessageInput = ({
         <IconButton
           color="primary"
           onClick={onSend}
-          disabled={!value.trim()}
+          disabled={!canSend}
         >
           <SendIcon />
         </IconButton>

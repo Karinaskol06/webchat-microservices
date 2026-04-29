@@ -1,13 +1,9 @@
 package com.project.webchat.chat.service;
 
-import com.project.webchat.chat.dto.ChatMessageDTO;
-import com.project.webchat.chat.dto.ChatRoomDTO;
-import com.project.webchat.chat.dto.SendMessageRequest;
-import com.project.webchat.chat.entity.ChatMessage;
-import com.project.webchat.chat.entity.ChatRoom;
-import com.project.webchat.chat.entity.ChatType;
-import com.project.webchat.chat.entity.MessageType;
+import com.project.webchat.chat.dto.*;
+import com.project.webchat.chat.entity.*;
 import com.project.webchat.chat.feign.UserServiceClient;
+import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.shared.dto.UserDTO;
@@ -22,10 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,8 +28,10 @@ public class ChatService {
 
     private final ChatMessageRepository chatMessageRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final AttachmentRepository attachmentRepository;
     private final RedisService redisService;
     private final WebSocketService webSocketService;
+    private final FileStorageService fileStorageService;
     private final UserServiceClient userServiceClient;
 
     @Transactional
@@ -49,7 +44,10 @@ public class ChatService {
         if (existsAlready.isPresent()) {
             ChatRoom chatRoom = existsAlready.get();
             int unreadCount = getUnreadCount(chatRoom.getId(), userId1);
-            return enrichChatWithUserData(chatRoom, userId1, unreadCount);
+            ChatRoomDTO dto = enrichChatWithUserData(chatRoom, userId1, unreadCount);
+            webSocketService.notifyChatCreated(userId2, dto);
+
+            return dto;
         }
 
         ChatRoom entity = ChatRoom.builder()
@@ -62,16 +60,18 @@ public class ChatService {
 
         //id is generated
         ChatRoom saved = chatRoomRepository.save(entity);
+        ChatRoomDTO dto = enrichChatWithUserData(saved, userId1, 0);
 
-        createWelcomeMessage(saved.getId(), userId1);
+        webSocketService.notifyChatCreated(userId1, dto);
+        webSocketService.notifyChatCreated(userId2, dto);
 
-        return enrichChatWithUserData(saved, userId1, 0);
+        return dto;
     }
 
     @Transactional
     public ChatMessageDTO sendMessage(Long senderId, SendMessageRequest sendMessageRequest) {
         //check is the user a participant in this chat
-        Boolean isParticipant = chatRoomRepository
+        boolean isParticipant = chatRoomRepository
                 .existsByIdAndMemberIdsContains(sendMessageRequest.getChatId(), senderId);
         if (!isParticipant) {
             throw new IllegalArgumentException("User is not a member of this chat.");
@@ -82,7 +82,7 @@ public class ChatService {
         //create and save a message
         ChatMessage chatMessage = ChatMessage.builder()
                 .chatId(sendMessageRequest.getChatId())
-                .messageType(sendMessageRequest.getType())
+                .messageType(sendMessageRequest.getType() != null ? sendMessageRequest.getType() : MessageType.TEXT)
                 .content(sendMessageRequest.getContent())
                 .senderId(senderId)
                 .senderName(senderInfo.getDisplayName())
@@ -98,13 +98,91 @@ public class ChatService {
         redisService.updatePresence(senderId, sendMessageRequest.getChatId());
 
         //dto with full sender info (enriched)
-        ChatMessageDTO messageDTO = ChatMessageDTO.toDTO(saved, senderInfo);
+        ChatMessageDTO messageDTO = toMessageDTO(saved, senderInfo);
 
         //send through websocket
         webSocketService.sendMessageToChat(sendMessageRequest.getChatId(), messageDTO);
         webSocketService.notifyUserJoinedChat(chatMessage.getChatId(), senderId);
 
         return messageDTO;
+    }
+
+    // Sending message with both text and attachments (mixed)
+    @Transactional
+    public MessageWithAttachmentsDTO sendMixedMessage(Long senderId, String chatId,
+                                                      String content, List<String> attachmentIds,
+                                                      MessageType type) {
+        if (!isUserChatMember(chatId, senderId)) {
+            throw new IllegalArgumentException("User is not a member of this chat");
+        }
+
+        ChatMessage message = ChatMessage.builder()
+                .chatId(chatId)
+                .senderId(senderId)
+                .content(content)
+                .messageType(type != null ? type : MessageType.MIXED)
+                .timestamp(LocalDateTime.now())
+                .isRead(false)
+                .build();
+        ChatMessage savedMessage = chatMessageRepository.save(message);
+
+        // Connecting attachments to the message
+        List<Attachment> attachments = new ArrayList<>();
+        if (attachmentIds != null && !attachmentIds.isEmpty()) {
+            for (String attachmentId : attachmentIds) {
+                Attachment attachment = attachmentRepository.findById(attachmentId)
+                        .orElseThrow(() -> new RuntimeException("Attachment not found: " + attachmentId));
+                attachment.setMessageId(savedMessage.getId());
+                attachment = attachmentRepository.save(attachment);
+                attachments.add(attachment);
+            }
+        }
+
+        updateChatLastActivity(chatId, getPreviewText(content, attachments));
+
+        // Sending via websocket with attachments
+        webSocketService.sendMixedMessageToChat(chatId, savedMessage, attachments);
+
+        return MessageWithAttachmentsDTO.fromEntity(savedMessage, attachments);
+    }
+
+    // Sending only attachments
+    @Transactional
+    public MessageWithAttachmentsDTO sendAttachmentsOnlyMessage(Long senderId, String chatId,
+                                                                List<String> attachmentIds,
+                                                                MessageType type) {
+
+        if (!isUserChatMember(chatId, senderId)) {
+            throw new IllegalArgumentException("User is not a member of this chat");
+        }
+
+        // Creating a message without text
+        ChatMessage message = ChatMessage.builder()
+                .chatId(chatId)
+                .senderId(senderId)
+                .content(null)
+                .messageType(type)
+                .timestamp(LocalDateTime.now())
+                .isRead(false)
+                .build();
+
+        ChatMessage savedMessage = chatMessageRepository.save(message);
+        List<Attachment> attachments = new ArrayList<>();
+
+        for (String attachmentId : attachmentIds) {
+            Attachment attachment = attachmentRepository.findById(attachmentId)
+                    .orElseThrow(() -> new RuntimeException("Attachment not found: " + attachmentId));
+
+            attachment.setMessageId(savedMessage.getId());
+            attachment = attachmentRepository.save(attachment);
+            attachments.add(attachment);
+        }
+
+        updateChatLastActivity(chatId, getPreviewText(null, attachments));
+
+        webSocketService.sendMixedMessageToChat(chatId, savedMessage, attachments);
+
+        return MessageWithAttachmentsDTO.fromEntity(savedMessage, attachments);
     }
 
     //user chats sorted by the last activity
@@ -142,9 +220,7 @@ public class ChatService {
         //enrich messages with user info
         List<ChatMessageDTO> enrichedMessages = messagePage.getContent()
                 .stream()
-                //mapping combines raw entity fields with user info
-                .map(msg -> ChatMessageDTO.toDTO
-                        (msg, userInfoMap.get(msg.getSenderId())))
+                .map(msg -> toMessageDTO(msg, userInfoMap.get(msg.getSenderId())))
                 .toList();
 
         return new PageImpl<>(enrichedMessages, pageable, messagePage.getTotalElements());
@@ -179,7 +255,7 @@ public class ChatService {
 
         chatMessageRepository.saveAll(unreadMessages);
         List<String> readMessageIds = unreadMessages.stream().map(ChatMessage::getId).toList();
-        webSocketService.sendReadReceipt(chatId, senderId, lastId, readMessageIds);
+        webSocketService.sendReadReceipt(chatId, senderId, readMessageIds);
     }
 
     @Transactional
@@ -195,7 +271,7 @@ public class ChatService {
         String chatId = toDelete.getChatId();
 
         chatMessageRepository.delete(toDelete);
-        webSocketService.notifyMessageDeleted(messageId, chatId);
+        webSocketService.notifyMessageDeleted(messageId, chatId, senderId);
     }
 
     @Transactional
@@ -207,13 +283,16 @@ public class ChatService {
             throw new IllegalArgumentException("User is not a member of this chat");
         }
 
+        Set<Long> otherMembers = new HashSet<>(chat.getMemberIds());
+        otherMembers.remove(userId);
         chat.getMemberIds().remove(userId);
 
-        //if there are no members - delete chat
         if (chat.getMemberIds().isEmpty()) {
             chatRoomRepository.delete(chat);
+            webSocketService.notifyChatDeleted(chatId, otherMembers);
         } else {
             chatRoomRepository.save(chat);
+            webSocketService.notifyUserLeftChatForAll(chatId, userId, otherMembers);
         }
 
         redisService.markUserOffline(userId);
@@ -345,5 +424,55 @@ public class ChatService {
                 .build();
 
         chatMessageRepository.save(welcome);
+    }
+
+    private ChatMessageDTO toMessageDTO(ChatMessage message, UserInfoDTO senderInfo) {
+        ChatMessageDTO dto = ChatMessageDTO.toDTO(message, senderInfo);
+
+        Map<String, AttachmentDTO> attachmentMap = new LinkedHashMap<>();
+
+        // Legacy/source-1: attachment IDs stored on message itself
+        if (message.getAttachmentIds() != null && !message.getAttachmentIds().isEmpty()) {
+            attachmentRepository.findAllById(message.getAttachmentIds())
+                    .stream()
+                    .map(AttachmentDTO::fromEntity)
+                    .forEach(att -> attachmentMap.put(att.getId(), att));
+        }
+
+        // Current/source-2: attachments linked by messageId in attachment records
+        attachmentRepository.findByMessageId(message.getId())
+                .stream()
+                .map(AttachmentDTO::fromEntity)
+                .forEach(att -> attachmentMap.put(att.getId(), att));
+
+        dto.setAttachments(new ArrayList<>(attachmentMap.values()));
+        return dto;
+    }
+
+    private MessageType resolveMessageType(String messageType, List<String> attachmentIds) {
+        if (messageType != null && !messageType.isBlank()) {
+            return MessageType.valueOf(messageType);
+        }
+        if (attachmentIds != null && !attachmentIds.isEmpty()) {
+            return MessageType.ATTACHMENT;
+        }
+        return MessageType.TEXT;
+    }
+
+    private String getPreviewText(String content, List<Attachment> attachments) {
+        if (content != null && !content.isBlank()) {
+            return content.length() > 50 ? content.substring(0, 47) + "..." : content;
+        }
+        if (attachments != null && !attachments.isEmpty()) {
+            if (attachments.size() == 1) {
+                Attachment att = attachments.get(0);
+                if (att.isImage()) {
+                    return "Image";
+                }
+                return att.getFilename();
+            }
+            return attachments.size() + " files";
+        }
+        return "New message";
     }
 }

@@ -55,6 +55,47 @@ const chatService = {
     }
   },
 
+  uploadAttachments: async (chatId, files) => {
+    const formData = new FormData();
+
+    // Важливо: додаємо кожен файл окремо
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+
+    try {
+      // Перевіряємо чи є токен
+      const token = localStorage.getItem('token');
+      console.log('📤 Uploading to:', `/api/chat/${chatId}/attachments`);
+      console.log('🔑 Token exists:', !!token);
+
+      const response = await api.post(`/api/chat/${chatId}/attachments`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          // Переконайтесь, що Authorization додається
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error('❌ Upload error details:', {
+        status: error.response?.status,
+        message: error.response?.data,
+        headers: error.response?.headers
+      });
+      throw error;
+    }
+  },
+
+  getAttachmentBlob: async (attachmentId, { download = false } = {}) => {
+    const response = await api.get(`/api/chat/attachments/${attachmentId}`, {
+      responseType: 'blob',
+      params: download ? { download: true } : undefined
+    });
+    return response.data;
+  },
+
   // get message history for a specific chat
   getMessages: async (chatId, page = 0, size = 50) => {
     try {

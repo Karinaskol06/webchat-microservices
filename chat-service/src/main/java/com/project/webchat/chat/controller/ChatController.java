@@ -3,11 +3,9 @@ package com.project.webchat.chat.controller;
 import com.project.webchat.chat.dto.ChatMessageDTO;
 import com.project.webchat.chat.dto.ChatRoomDTO;
 import com.project.webchat.chat.dto.CreateChatRequest;
-import com.project.webchat.chat.dto.SendMessageRequest;
 import com.project.webchat.chat.security.CustomUserDetails;
 import com.project.webchat.chat.service.ChatService;
 import com.project.webchat.chat.service.WebSocketService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -42,6 +40,8 @@ public class ChatController {
         ChatRoomDTO chat = chatService.createChat(
                 currentUser.getId(), createChatRequest.getOtherUserId());
 
+        webSocketService.notifyChatCreated(currentUser.getId(), chat);
+
         return ResponseEntity.status(HttpStatus.CREATED).body(chat);
     }
 
@@ -57,21 +57,6 @@ public class ChatController {
                 userDetails.getId(), pageable);
 
         return ResponseEntity.ok(chats);
-    }
-
-    //send a message to a chat
-    @PostMapping("/{chatId}/messages")
-    public ResponseEntity<ChatMessageDTO> sendMessage(
-            @PathVariable String chatId,
-            @RequestBody @Valid SendMessageRequest request,
-            @AuthenticationPrincipal CustomUserDetails currentUser) {
-
-        log.info("User {} is sending a message to chat {}", currentUser.getId(), chatId);
-
-        request.setChatId(chatId);
-        ChatMessageDTO massage = chatService.sendMessage(currentUser.getId(), request);
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(massage);
     }
 
     //get message history for a chat

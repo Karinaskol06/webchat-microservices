@@ -10,6 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -29,6 +30,7 @@ public class ChatMessageDTO {
     private String type;
 
     private UserInfoDTO sender;
+    private List<AttachmentDTO> attachments;
 
     public static ChatMessageDTO toDTO(ChatMessage chatMessage, UserInfoDTO sender) {
         return ChatMessageDTO.builder()

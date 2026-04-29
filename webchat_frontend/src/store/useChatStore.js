@@ -93,7 +93,7 @@ const useChatStore = create((set, get) => ({
     }));
   },
   
-  // Always cretae a new set for reactiviy when updating online users
+  // Always create a new set for reactivity when updating online users
   setOnlineUsers: (users) => {
     const usersArray = Array.isArray(users) ? users : [];
     set({ onlineUsers: new Set(usersArray) });
@@ -138,6 +138,105 @@ const useChatStore = create((set, get) => ({
     const state = get();
     const chat = state.chats.find(c => c.id === chatId);
     return chat?.unreadCount || 0;
+  },
+
+  updateChatLastMessage: (chatId, { content, timestamp, senderId }) => {
+    set((state) => ({
+      chats: state.chats.map(chat =>
+          chat.id === chatId
+              ? {
+                ...chat,
+                lastMessage: content,
+                lastMessageTime: timestamp,
+                lastMessageSenderId: senderId
+              }
+              : chat
+      )
+    }));
+  },
+
+  // add to unread counter
+  incrementUnreadCount: (chatId) => {
+    set((state) => ({
+      chats: state.chats.map(chat =>
+          chat.id === chatId
+              ? { ...chat, unreadCount: (chat.unreadCount || 0) + 1 }
+              : chat
+      )
+    }));
+  },
+
+  // reset the counter of unread messages
+  resetUnreadCount: (chatId) => {
+    set((state) => ({
+      chats: state.chats.map(chat =>
+          chat.id === chatId
+              ? { ...chat, unreadCount: 0 }
+              : chat
+      )
+    }));
+  },
+
+  // deleting a message from the list
+  removeMessage: (messageId) => {
+    set((state) => ({
+      messages: state.messages.filter(msg => msg.id !== messageId)
+    }));
+  },
+
+  // updating message text
+  updateMessageContent: (messageId, newContent) => {
+    set((state) => ({
+      messages: state.messages.map(msg =>
+          msg.id === messageId
+              ? { ...msg, content: newContent, isEdited: true }
+              : msg
+      )
+    }));
+  },
+
+  // adding online user
+  addOnlineUser: (userId) => {
+    set((state) => ({
+      onlineUsers: new Set([...state.onlineUsers, userId])
+    }));
+  },
+
+  // deleting online user
+  removeOnlineUser: (userId) => {
+    set((state) => {
+      const newSet = new Set(state.onlineUsers);
+      newSet.delete(userId);
+      return { onlineUsers: newSet };
+    });
+  },
+
+  // deleting an attachment
+  removeAttachment: (messageId, attachmentId) => {
+    set((state) => ({
+      messages: state.messages.map(msg =>
+          msg.id === messageId
+              ? {
+                ...msg,
+                attachments: msg.attachments?.filter(a => a.id !== attachmentId) || []
+              }
+              : msg
+      )
+    }));
+  },
+
+  // adding an attachment
+  addAttachment: (messageId, attachment) => {
+    set((state) => ({
+      messages: state.messages.map(msg =>
+          msg.id === messageId
+              ? {
+                ...msg,
+                attachments: [...(msg.attachments || []), attachment]
+              }
+              : msg
+      )
+    }));
   }
 }));
 
