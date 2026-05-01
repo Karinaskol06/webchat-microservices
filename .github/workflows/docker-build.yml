@@ -44,6 +44,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           push: false
+          load: true
           tags: webchat-${{ matrix.name }}:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
