@@ -29,7 +29,7 @@ jobs:
             file: api-gateway/Dockerfile
           - name: frontend
             context: webchat_frontend
-            file: webchat_frontend/Dockerfile
+            file: Dockerfile
 
     steps:
       - name: Checkout

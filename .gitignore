@@ -37,7 +37,6 @@ mvnw.cmd
 
 # Dependencies (frontend)
 webchat_frontend/node_modules/
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
 .vite/
