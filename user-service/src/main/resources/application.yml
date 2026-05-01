@@ -5,9 +5,9 @@ spring:
   application:
     name: user-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/user_db
-    username: postgres
-    password: 11111
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/${DB_NAME:user_db}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:11111}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -15,7 +15,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
@@ -30,19 +30,19 @@ spring:
       password: dummy
 
 jwt:
-  secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+  secret: ${JWT_SECRET:defaultSecretKeyForLocalDev}
   expiration: 86400000
 
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
     fetch-registry: true
     register-with-eureka: true
     healthcheck:
       enabled: true
   instance:
-    hostname: localhost
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:${spring.application.name}}
     prefer-ip-address: false
 
 management:
@@ -62,16 +62,16 @@ management:
 
 logging:
   level:
-    com.project.webchat: DEBUG
+    com.project.webchat: INFO
     org.springframework.security: WARN
     org.springframework: WARN
-    org.hibernate.SQL: DEBUG
+    org.hibernate.SQL: WARN
     org.hibernate.type.descriptor.sql.BasicBinder: OFF
     org.hibernate.stat: OFF
 
     com.netflix.eureka: WARN
     com.netflix.discovery: WARN
 
-    com.zaxxer.hikari: INFO
-    org.springframework.boot.actuate: INFO
+    com.zaxxer.hikari: WARN
+    org.springframework.boot.actuate: WARN
     root: INFO

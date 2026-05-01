@@ -14,10 +14,6 @@
     <name>user-service</name>
     <packaging>jar</packaging>
 
-    <properties>
-        <lombok.version>1.18.30</lombok.version>
-    </properties>
-
     <dependencies>
         <!-- Main dependencies -->
         <dependency>

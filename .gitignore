@@ -20,7 +20,7 @@ lerna-debug.log*
 
 .env
 .mvn/
-mvnv
+mvnw
 mvnv.cmd
 .cursor
 mvnw.cmd
@@ -36,12 +36,12 @@ mvnw.cmd
 **/*.iml
 
 # Dependencies (frontend)
-webchat_frontend/node_modules
+webchat_frontend/node_modules/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
 .vite/
-webchat_frontend/dist
+webchat_frontend/dist/
 dist/
 dist-ssr/
 *.local

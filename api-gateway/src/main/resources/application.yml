@@ -57,7 +57,7 @@ spring:
       password: dummy
 
 jwt:
-  secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+  secret: ${JWT_SECRET:defaultSecretKeyForLocalDev}
   expiration: 86400000
 
 server:
@@ -68,10 +68,10 @@ eureka:
     register-with-eureka: true
     fetch-registry: true
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
   instance:
-    hostname: localhost
-    prefer-ip-address: true
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:${spring.application.name}}
+    prefer-ip-address: false
 
 management:
   endpoints:
@@ -89,7 +89,8 @@ management:
 
 logging:
   level:
-    org.springframework.cloud.gateway: DEBUG
-    org.springframework.security: DEBUG
-    com.netflix.eureka: INFO
-    com.netflix.discovery: INFO
+    org.springframework.cloud.gateway: INFO
+    org.springframework.security: WARN
+    com.netflix.eureka: WARN
+    com.netflix.discovery: WARN
+    root: INFO

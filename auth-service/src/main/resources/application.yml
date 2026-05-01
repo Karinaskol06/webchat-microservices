@@ -17,7 +17,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
@@ -31,9 +31,9 @@ spring:
 
   data:
     redis:
-      host: localhost
+      host: ${REDIS_HOST:redis}
       port: 6379
-      #password: "11111"
+      password: ${REDIS_PASSWORD:}
       timeout: 5000ms
       connect-timeout: 3000ms
       client-type: lettuce
@@ -46,19 +46,19 @@ spring:
         shutdown-timeout: 200ms
 
 jwt:
-  secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+  secret: ${JWT_SECRET:defaultSecretKeyForLocalDev}
   expiration: 86400000
 
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
     fetch-registry: true
     register-with-eureka: true
     healthcheck:
       enabled: true
   instance:
-    hostname: localhost
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:${spring.application.name}}
     prefer-ip-address: false
 
 feign:
@@ -93,10 +93,10 @@ management:
 
 logging:
   level:
-    com.project.webchat.auth: DEBUG
+    com.project.webchat.auth: INFO
     org.springframework.security: WARN
     org.springframework.data.redis: WARN
-    org.hibernate.SQL: DEBUG
+    org.hibernate.SQL: WARN
     org.hibernate.type.descriptor.sql.BasicBinder: OFF
     com.netflix.eureka: WARN
     org.hibernate.engine.jdbc.connections: OFF

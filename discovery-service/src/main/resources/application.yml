@@ -10,12 +10,13 @@ eureka:
     register-with-eureka: false
     fetch-registry: false
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
   server:
     enable-self-preservation: false
     wait-time-in-ms-when-sync-empty: 0
 
 logging:
   level:
-    com.project.webchat.chat: DEBUG
-    org.springframework.web.socket: DEBUG
+    com.netflix.eureka: WARN
+    com.netflix.discovery: WARN
+    root: INFO
