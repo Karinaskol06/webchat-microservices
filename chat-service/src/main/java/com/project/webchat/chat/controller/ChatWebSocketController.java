@@ -22,7 +22,7 @@ public class ChatWebSocketController {
 
     @MessageMapping("/chat.send")
     public void sendMessage(SendMessageWsRequest request, Principal principal) {
-        Long senderId = resolveSenderId(principal, request.getSenderId());
+        Long senderId = resolveAuthenticatedUserId(principal);
         if (!request.isValid()) {
             throw new IllegalArgumentException("Message must have either content or attachments.");
         }
@@ -63,7 +63,7 @@ public class ChatWebSocketController {
 
     @MessageMapping("/chat.typing")
     public void typing(TypingWsRequest request, Principal principal) {
-        Long userId = resolveSenderId(principal, request.getUserId());
+        Long userId = resolveAuthenticatedUserId(principal);
         if (userId == null || request.getChatId() == null || request.getChatId().isBlank()) {
             return;
         }
@@ -71,14 +71,15 @@ public class ChatWebSocketController {
     }
 
     /* helper methods */
-    private Long resolveSenderId(Principal principal, Long fallbackSenderId) {
-        if (principal != null && principal.getName() != null) {
-            try {
-                return Long.parseLong(principal.getName());
-            } catch (NumberFormatException e) {
-                log.debug("WebSocket principal is not numeric: {}", principal.getName());
-            }
+    private Long resolveAuthenticatedUserId(Principal principal) {
+        if (principal == null || principal.getName() == null) {
+            throw new SecurityException("Unauthenticated websocket client");
         }
-        return fallbackSenderId;
+        try {
+            return Long.parseLong(principal.getName());
+        } catch (NumberFormatException e) {
+            log.warn("Invalid websocket principal format: {}", principal.getName());
+            throw new SecurityException("Invalid websocket principal");
+        }
     }
 }

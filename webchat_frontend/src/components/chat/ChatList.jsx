@@ -17,13 +17,13 @@ import useChatStore from '../../store/useChatStore';
 import chatService from '../../services/chatService';
 import useAuthStore from '../../store/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
+import { derivePresenceState } from '../../utils/presence';
 
-const ChatList = () => {
+const ChatList = ({ onFindUsers, onSelectChat }) => {
   const { user } = useAuthStore();
   
   // Using selectors with shallow comparison
   const chats = useChatStore(useShallow(state => state.chats));
-  const onlineUsers = useChatStore(useShallow(state => state.onlineUsers));
   const isLoading = useChatStore(state => state.isLoadingChats);
   
   // Getting actions
@@ -34,6 +34,7 @@ const ChatList = () => {
   const storeError = useChatStore(state => state.error);
 
   const [retryCount, setRetryCount] = useState(0);
+  const [presenceByChatId, setPresenceByChatId] = useState({});
 
   // Load user's chats when component mounts
   useEffect(() => {
@@ -71,6 +72,46 @@ const ChatList = () => {
 
     loadChats();
   }, [user, setChats, setError, setLoadingChats, retryCount]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    const loadPresence = async () => {
+      const snapshot = Array.isArray(chats) ? chats : [];
+      const privateChats = snapshot.filter(
+        (chat) => String(chat?.type || '').toUpperCase() !== 'GROUP' && chat?.id && chat?.otherUser?.id
+      );
+      if (privateChats.length === 0) {
+        if (!cancelled) setPresenceByChatId({});
+        return;
+      }
+
+      const entries = await Promise.all(
+        privateChats.map(async (chat) => {
+          try {
+            const status = await chatService.getPresenceStatus(chat.otherUser.id, chat.id);
+            return [chat.id, status || null];
+          } catch (error) {
+            console.debug('Presence load failed for chat', chat.id, error);
+            return [chat.id, null];
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setPresenceByChatId(Object.fromEntries(entries));
+      }
+    };
+
+    loadPresence();
+    const timerId = setInterval(loadPresence, 7000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timerId);
+    };
+  }, [user, chats]);
 
   const handleRetry = () => {
     setRetryCount(prev => prev + 1);
@@ -127,6 +168,11 @@ const ChatList = () => {
   // Ensure chats is an array
   const chatList = Array.isArray(chats) ? chats : [];
 
+  const handleSelectChat = (chat) => {
+    setCurrentChat(chat);
+    onSelectChat?.(chat);
+  };
+
   // Show empty state
   if (chatList.length === 0) {
     return (
@@ -137,10 +183,10 @@ const ChatList = () => {
         <Typography variant="body2" color="text.secondary" gutterBottom>
           Start a new conversation by finding a user to chat with
         </Typography>
-        <Button 
+        <Button
           variant="contained" 
           color="primary"
-          onClick={() => {/* Navigate to user search */}}
+          onClick={onFindUsers}
           sx={{ mt: 2 }}
         >
           Find Users
@@ -150,7 +196,13 @@ const ChatList = () => {
   }
 
   return (
-    <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
+    <Box sx={{ width: "100%", bgcolor: "background.paper" }}>
+      <Box p={1} borderBottom={1} borderColor="divider">
+        <Button variant="outlined" fullWidth onClick={onFindUsers}>
+          Find Users
+        </Button>
+      </Box>
+      <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
       {chatList.map((chat) => {
         const isGroup = String(chat.type || '').toUpperCase() === 'GROUP';
         const otherUser = !isGroup ? chat.otherUser : null;
@@ -162,8 +214,8 @@ const ChatList = () => {
                 : (otherUser?.username || 'Unknown User')
             );
         const otherUserId = !isGroup ? otherUser?.id : null;
-        
-        const isOnline = otherUserId ? onlineUsers?.has?.(otherUserId) : false;
+        const presence = presenceByChatId[chat.id];
+        const presenceState = derivePresenceState(presence);
         
         // Get last message safely
         const lastMessage = chat.lastMessage || chat.lastMessageContent;
@@ -180,7 +232,7 @@ const ChatList = () => {
         return (
           <ListItem
             key={chat.id}
-            onClick={() => setCurrentChat(chat)}
+            onClick={() => handleSelectChat(chat)}
             sx={{
               '&:hover': {
                 bgcolor: 'action.hover',
@@ -192,14 +244,23 @@ const ChatList = () => {
           >
             <ListItemAvatar>
               <Badge
-                color="success"
                 variant="dot"
-                invisible={!isOnline}
+                invisible={!otherUserId}
                 anchorOrigin={{
                   vertical: 'bottom',
                   horizontal: 'right',
                 }}
                 overlap="circular"
+                sx={{
+                  '& .MuiBadge-badge': {
+                    bgcolor:
+                      presenceState === 'online'
+                        ? 'success.main'
+                        : presenceState === 'afk'
+                          ? 'warning.main'
+                          : 'grey.500',
+                  },
+                }}
               >
                 <Avatar>
                   {avatarLetter}
@@ -241,7 +302,8 @@ const ChatList = () => {
           </ListItem>
         );
       })}
-    </List>
+      </List>
+    </Box>
   );
 };
 

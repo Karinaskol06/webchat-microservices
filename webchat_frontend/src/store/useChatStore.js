@@ -33,6 +33,17 @@ const useChatStore = create((set, get) => ({
     const chatsArray = Array.isArray(chats) ? chats : [];
     set({ chats: chatsArray, error: null });
   },
+
+  upsertChat: (chat) => {
+    if (!chat?.id) return;
+    set((state) => {
+      const exists = state.chats.some((item) => item.id === chat.id);
+      const nextChats = exists
+        ? state.chats.map((item) => (item.id === chat.id ? { ...item, ...chat } : item))
+        : [chat, ...state.chats];
+      return { chats: nextChats };
+    });
+  },
   
   setCurrentChat: (chat) => {
     // just update current chat and clear messages;
@@ -58,11 +69,14 @@ const useChatStore = create((set, get) => ({
   },
   
   addMessage: (message) => {
-    if (!message?.id) return; 
-    
+    const resolvedId = message?.id ?? message?._id;
+    if (!resolvedId) return;
+    const withId =
+      resolvedId === message.id ? message : { ...message, id: resolvedId };
+
     set((state) => {
       const normalize = get().normalizeMessage;
-      const normalizedMessage = normalize(message);
+      const normalizedMessage = normalize(withId);
       // Check if message already exists (prevents duplicates)
       const messageExists = state.messages.some((m) => m.id === message.id);
       if (messageExists) return state;

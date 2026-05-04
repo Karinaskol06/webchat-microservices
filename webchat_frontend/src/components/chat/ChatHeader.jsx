@@ -1,6 +1,7 @@
 import React from 'react';
 import { Avatar, Box, IconButton, Tooltip, Typography } from '@mui/material';
 import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined';
+import { getPresenceLabel } from '../../utils/presence';
 
 const ChatHeader = ({
   otherUser,
@@ -30,11 +31,7 @@ const ChatHeader = ({
             : 'Chat'}
         </Typography>
         <Typography variant="caption" color="text.secondary">
-          {isTyping
-            ? 'Typing...'
-            : (presenceStatus?.isOnlineInChat
-                ? 'Online'
-                : presenceStatus?.lastSeenFormatted || 'Last seen recently')}
+          {getPresenceLabel(presenceStatus, isTyping)}
         </Typography>
       </Box>
 

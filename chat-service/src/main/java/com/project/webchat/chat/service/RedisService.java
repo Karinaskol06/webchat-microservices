@@ -27,6 +27,7 @@ public class RedisService {
 
     //which specific chat user is viewing (naming convention)
     private static final String USER_CHAT_KEY_PREFIX = "user_chat:";
+    private static final String AFK_CHAT_PREFIX = "AFK:";
     private static final String LAST_SEEN_PREFIX = "last_seen:";
     private static final String USER_INFO_PREFIX = "user_info:";
     private static final Duration USER_CACHE_TIMEOUT = Duration.ofMinutes(30);
@@ -38,7 +39,8 @@ public class RedisService {
         String lastSeenKey = LAST_SEEN_PREFIX + userId;
 
         // if user switches chats, remove from previous chat set
-        String previousChat = redisTemplate.opsForValue().get(userKey);
+        String previousState = redisTemplate.opsForValue().get(userKey);
+        String previousChat = extractChatId(previousState);
         if (previousChat != null && !previousChat.equals(chatId)) {
             redisTemplate.opsForSet().remove(CHAT_ONLINE_USERS_PREFIX + previousChat, userId.toString());
         }
@@ -54,10 +56,28 @@ public class RedisService {
         log.debug("User {} marked online in chat {}", userId, chatId);
     }
 
+    public void markUserAfk(Long userId, String chatId) {
+        String userKey = USER_CHAT_KEY_PREFIX + userId;
+        String stateValue = AFK_CHAT_PREFIX + chatId;
+        String currentState = redisTemplate.opsForValue().get(userKey);
+        String currentChat = extractChatId(currentState);
+
+        redisTemplate.opsForValue().set(userKey, stateValue, ONLINE_TIMEOUT);
+        redisTemplate.opsForSet().add(ONLINE_USERS_KEY, userId.toString());
+        redisTemplate.opsForSet().remove(CHAT_ONLINE_USERS_PREFIX + chatId, userId.toString());
+        if (currentChat != null && !currentChat.equals(chatId)) {
+            redisTemplate.opsForSet().remove(CHAT_ONLINE_USERS_PREFIX + currentChat, userId.toString());
+        }
+
+        String lastSeenKey = LAST_SEEN_PREFIX + userId;
+        redisTemplate.opsForValue().set(lastSeenKey, String.valueOf(System.currentTimeMillis()));
+        log.debug("User {} marked AFK for chat {}", userId, chatId);
+    }
+
     //mark user offline
     public void markUserOffline(Long userId) {
         String userKey = USER_CHAT_KEY_PREFIX + userId;
-        String currentChat = redisTemplate.opsForValue().get(userKey);
+        String currentChat = extractChatId(redisTemplate.opsForValue().get(userKey));
 
         //deletes user's chat tracking key
         redisTemplate.delete(userKey);
@@ -105,7 +125,7 @@ public class RedisService {
                 continue;
             }
 
-            String currentChat = getCurrentChat(userId);
+        String currentChat = getCurrentChat(userId);
             if (chatId.equals(currentChat) && isUserOnline(userId)) {
                 result.add(userId);
             } else {
@@ -156,13 +176,19 @@ public class RedisService {
     public String getCurrentChat(Long userId) {
         String userKey = USER_CHAT_KEY_PREFIX + userId;
         //retrieves value for given key
-        return redisTemplate.opsForValue().get(userKey);
+        return extractChatId(redisTemplate.opsForValue().get(userKey));
+    }
+
+    public boolean isUserAfk(Long userId) {
+        String userKey = USER_CHAT_KEY_PREFIX + userId;
+        String state = redisTemplate.opsForValue().get(userKey);
+        return state != null && state.startsWith(AFK_CHAT_PREFIX);
     }
 
     //to keep user online while active
     public void heartbeat(Long userId) {
         String userKey = USER_CHAT_KEY_PREFIX + userId;
-        String chatId = redisTemplate.opsForValue().get(userKey);
+        String chatId = extractChatId(redisTemplate.opsForValue().get(userKey));
 
         if (chatId != null) {
             //refresh the TTL
@@ -178,6 +204,16 @@ public class RedisService {
         String userKey = USER_CHAT_KEY_PREFIX + userId;
         //checks if user key exists in redis
         return Boolean.TRUE.equals(redisTemplate.hasKey(userKey));
+    }
+
+    private String extractChatId(String stateValue) {
+        if (stateValue == null || stateValue.isBlank()) {
+            return null;
+        }
+        if (stateValue.startsWith(AFK_CHAT_PREFIX)) {
+            return stateValue.substring(AFK_CHAT_PREFIX.length());
+        }
+        return stateValue;
     }
 
 }

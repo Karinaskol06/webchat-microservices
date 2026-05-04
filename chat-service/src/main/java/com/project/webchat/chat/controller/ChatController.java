@@ -1,6 +1,8 @@
 package com.project.webchat.chat.controller;
 
 import com.project.webchat.chat.dto.ChatMessageDTO;
+import com.project.webchat.chat.dto.BootstrapMessageRequest;
+import com.project.webchat.chat.dto.BootstrapMessageResponse;
 import com.project.webchat.chat.dto.ChatRoomDTO;
 import com.project.webchat.chat.dto.CreateChatRequest;
 import com.project.webchat.chat.security.CustomUserDetails;
@@ -15,6 +17,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -23,6 +26,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 @RequestMapping("/api/chat")
+@Validated
 public class ChatController {
 
     private final ChatService chatService;
@@ -43,6 +47,14 @@ public class ChatController {
         webSocketService.notifyChatCreated(currentUser.getId(), chat);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(chat);
+    }
+
+    @PostMapping("/bootstrap-message")
+    public ResponseEntity<BootstrapMessageResponse> bootstrapMessage(
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestBody @jakarta.validation.Valid BootstrapMessageRequest request) {
+        BootstrapMessageResponse response = chatService.bootstrapFirstMessage(currentUser.getId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     //get all chats for the authenticated user

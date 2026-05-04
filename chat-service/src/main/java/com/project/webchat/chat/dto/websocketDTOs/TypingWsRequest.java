@@ -6,5 +6,4 @@ import lombok.Data;
 public class TypingWsRequest {
     private String chatId;
     private boolean typing = true;
-    private Long userId;
 }

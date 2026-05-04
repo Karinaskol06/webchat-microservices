@@ -13,7 +13,7 @@ spring:
 
   data:
     mongodb:
-      uri: mongodb://${MONGO_USER:}:${MONGO_PASSWORD:}@${MONGO_HOST:localhost}:27017/${MONGO_DB:messages_db}
+      uri: mongodb://${MONGO_USER:}:${MONGO_PASSWORD:}@${MONGO_HOST:localhost}:27017/${MONGO_DB:messages_db}?authSource=${MONGO_AUTH_DB:admin}
       database: messages_db
       auto-index-creation: true
 

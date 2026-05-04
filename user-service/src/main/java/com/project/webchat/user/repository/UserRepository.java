@@ -1,6 +1,8 @@
 package com.project.webchat.user.repository;
 
 import com.project.webchat.user.entity.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -16,4 +18,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUsername(String username);
 
     boolean existsByEmail(String email);
+
+    Page<User> findByUsernameStartingWithIgnoreCase(String usernamePrefix, Pageable pageable);
+
+    Page<User> findByIdNotAndUsernameStartingWithIgnoreCase(Long excludedUserId, String usernamePrefix, Pageable pageable);
 }

@@ -1,6 +1,7 @@
 package com.project.webchat.user;
 
 import com.project.webchat.shared.dto.RegisterRequestDTO;
+import com.project.webchat.shared.dto.UserSearchResultDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.user.entity.User;
 import com.project.webchat.user.repository.UserRepository;
@@ -12,6 +13,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -121,5 +124,40 @@ public class UserServiceTest {
         assertThat(found.getId()).isEqualTo(created.getId());
 
 
+    }
+
+    @Test
+    void testSearchUsersFiltersByPrefixAndExcludesCurrentUser() {
+        userService.registerUser(RegisterRequestDTO.builder()
+                .username("alice")
+                .email("alice@gmail.com")
+                .password("11111")
+                .build());
+        UserDTO alex = userService.registerUser(RegisterRequestDTO.builder()
+                .username("alex")
+                .email("alex@gmail.com")
+                .password("11111")
+                .build());
+        userService.registerUser(RegisterRequestDTO.builder()
+                .username("bob")
+                .email("bob@gmail.com")
+                .password("11111")
+                .build());
+
+        List<UserSearchResultDTO> searchResults = userService
+                .searchUsers("al", alex.getId(), org.springframework.data.domain.PageRequest.of(0, 20))
+                .getContent();
+
+        assertThat(searchResults).extracting(UserSearchResultDTO::getUsername)
+                .contains("alice")
+                .doesNotContain("alex", "bob");
+    }
+
+    @Test
+    void testSearchUsersRejectsShortQuery() {
+        assertThatThrownBy(() -> userService.searchUsers("a", null,
+                org.springframework.data.domain.PageRequest.of(0, 20)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("at least 2 characters");
     }
 }

@@ -1,13 +1,21 @@
 package com.project.webchat.user.controller;
 
 import com.project.webchat.shared.dto.RegisterRequestDTO;
+import com.project.webchat.shared.dto.ContactRequestCreateDTO;
+import com.project.webchat.shared.dto.ContactStatusDTO;
+import com.project.webchat.shared.dto.UserSearchResultDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.CredentialsDTO;
 import com.project.webchat.shared.dto.UserCredentialsResponse;
+import com.project.webchat.user.entity.FriendRequest;
+import com.project.webchat.user.service.ContactService;
 import com.project.webchat.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -21,6 +29,7 @@ public class UserServiceController {
     //endpoints for feign calls
 
     private final UserService userService;
+    private final ContactService contactService;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequestDTO registerRequestDTO) {
@@ -75,6 +84,15 @@ public class UserServiceController {
         return ResponseEntity.ok(exists);
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<Page<UserSearchResultDTO>> searchUsers(
+            @RequestParam("query") String query,
+            @RequestHeader(value = "X-User-Id", required = false) Long currentUserId,
+            @PageableDefault(size = 20) Pageable pageable) {
+        Page<UserSearchResultDTO> results = userService.searchUsers(query, currentUserId, pageable);
+        return ResponseEntity.ok(results);
+    }
+
     @PostMapping("/validate-credentials")
     public ResponseEntity<Boolean> validateCredentials(
             @RequestBody CredentialsDTO credentials) {
@@ -104,5 +122,54 @@ public class UserServiceController {
                 .build();
 
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/contacts/requests")
+    public ResponseEntity<FriendRequest> createContactRequest(
+            @RequestHeader("X-User-Id") Long currentUserId,
+            @RequestBody ContactRequestCreateDTO requestDTO) {
+        FriendRequest request = contactService.createPendingRequestIfEligible(currentUserId, requestDTO.getToUserId());
+        if (request == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(request);
+    }
+
+    @PostMapping("/internal/contacts/requests")
+    public ResponseEntity<FriendRequest> createContactRequestInternal(
+            @RequestBody ContactRequestCreateDTO requestDTO) {
+        FriendRequest request = contactService.createPendingRequestIfEligible(
+                requestDTO.getFromUserId(), requestDTO.getToUserId());
+        if (request == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(request);
+    }
+
+    @GetMapping("/contacts/requests/incoming")
+    public ResponseEntity<java.util.List<FriendRequest>> getIncomingRequests(
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        return ResponseEntity.ok(contactService.getIncomingPendingRequests(currentUserId));
+    }
+
+    @PostMapping("/contacts/requests/{id}/accept")
+    public ResponseEntity<ContactStatusDTO> acceptRequest(
+            @PathVariable("id") Long requestId,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        return ResponseEntity.ok(contactService.acceptRequest(requestId, currentUserId));
+    }
+
+    @PostMapping("/contacts/requests/{id}/decline")
+    public ResponseEntity<ContactStatusDTO> declineRequest(
+            @PathVariable("id") Long requestId,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        return ResponseEntity.ok(contactService.declineWithSnooze(requestId, currentUserId));
+    }
+
+    @GetMapping("/contacts/status/{otherUserId}")
+    public ResponseEntity<ContactStatusDTO> getContactStatus(
+            @PathVariable Long otherUserId,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        return ResponseEntity.ok(contactService.getContactStatus(currentUserId, otherUserId));
     }
 }

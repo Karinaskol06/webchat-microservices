@@ -5,17 +5,15 @@ import {
   connectWebSocket,
   disconnectWebSocket,
   subscribeToChat,
+  subscribeToUserChatEvents,
 } from '../utils/websocket';
 
 const useWebSocket = (user, currentChatId, currentUserId) => {
-  const addMessage = useChatStore((state) => state.addMessage);
-  const markMessagesRead = useChatStore((state) => state.markMessagesRead);
-  const updateChatLastMessage = useChatStore((state) => state.updateChatLastMessage);
-  const incrementUnreadCount = useChatStore((state) => state.incrementUnreadCount);
-  const removeMessage = useChatStore((state) => state.removeMessage);
-  const updateMessageContent = useChatStore((state) => state.updateMessageContent);
-
   const markReadTimeoutRef = useRef(null);
+
+  /** Keep latest ids without re-running the subscribe effect when unrelated store slices change */
+  const chatRoutingRef = useRef({ chatId: null, userId: null });
+  chatRoutingRef.current = { chatId: currentChatId, userId: currentUserId };
 
   // Connect to WebSocket on mount when user is available
   useEffect(() => {
@@ -35,41 +33,44 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
       onMessage: (event) => {
         console.log('WebSocket onMessage:', event);
 
-        const isNewMessage = event.type === 'MESSAGE_SENT' ||
-            event.attachments !== undefined ||
-            event.content !== undefined ||
-            event.id;
+        const routing = chatRoutingRef.current;
 
-        if (!isNewMessage) return;
+        /** Already unwrapped by websocket.js except legacy wrappers */
+        const message =
+          event?.type === 'MESSAGE_SENT' && event.message != null ? event.message : event;
 
-        let message = event;
-        if (event.type === 'MESSAGE_SENT' && event.message) {
-          message = event.message;
-        }
+        if (!message || typeof message !== 'object') return;
 
-        addMessage(message);
+        const store = useChatStore.getState();
+        store.addMessage(message);
 
         const senderId = message.senderId || message.sender?.id;
-        const isIncoming = senderId && Number(senderId) !== Number(currentUserId);
+        const isIncoming =
+          senderId && Number(senderId) !== Number(routing.userId);
 
-        const lastMessageText = message.content ||
-            (message.attachments?.length > 0 ? getAttachmentsPreview(message.attachments) : 'Attachment');
+        const lastMessageText =
+          message.content ||
+          (message.attachments?.length > 0
+            ? getAttachmentsPreview(message.attachments)
+            : 'Attachment');
 
-        updateChatLastMessage(currentChatId, {
-          content: lastMessageText,
-          timestamp: message.timestamp,
-          senderId: senderId
-        });
+        if (routing.chatId) {
+          store.updateChatLastMessage(routing.chatId, {
+            content: lastMessageText,
+            timestamp: message.timestamp,
+            senderId,
+          });
+        }
 
-        if (isIncoming) {
-          incrementUnreadCount(currentChatId);
+        if (isIncoming && routing.chatId) {
+          store.incrementUnreadCount(routing.chatId);
 
           if (markReadTimeoutRef.current) {
             clearTimeout(markReadTimeoutRef.current);
           }
           markReadTimeoutRef.current = setTimeout(() => {
-            chatService.markAsRead(currentChatId).catch(() => {});
-            useChatStore.getState().resetUnreadCount(currentChatId);
+            chatService.markAsRead(routing.chatId).catch(() => {});
+            useChatStore.getState().resetUnreadCount(routing.chatId);
           }, 500);
         }
       },
@@ -84,10 +85,11 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
       // processing notifications on read
       onRead: (event) => {
         console.log('WebSocket onRead:', event);
+        const mk = useChatStore.getState().markMessagesRead;
         if (event.messageIds && event.messageIds.length > 0) {
-          markMessagesRead(event.messageIds);
+          mk(event.messageIds);
         } else if (event.messageId) {
-          markMessagesRead([event.messageId]);
+          mk([event.messageId]);
         }
       },
 
@@ -95,7 +97,7 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
       onMessageDeleted: (event) => {
         console.log('WebSocket onMessageDeleted:', event);
         if (event.messageId) {
-          removeMessage(event.messageId);
+          useChatStore.getState().removeMessage(event.messageId);
         }
       },
 
@@ -103,7 +105,7 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
       onMessageEdited: (event) => {
         console.log('WebSocket onMessageEdited:', event);
         if (event.messageId && event.newContent) {
-          updateMessageContent(event.messageId, event.newContent);
+          useChatStore.getState().updateMessageContent(event.messageId, event.newContent);
         }
       },
 
@@ -135,8 +137,17 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
         markReadTimeoutRef.current = null;
       }
     };
-  }, [user, currentChatId, currentUserId, addMessage, markMessagesRead,
-    updateChatLastMessage, incrementUnreadCount, removeMessage, updateMessageContent]);
+  }, [user, currentChatId, currentUserId]);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = subscribeToUserChatEvents({
+      onChatCreated: (chat) => {
+        useChatStore.getState().upsertChat(chat);
+      },
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   return null;
 };

@@ -46,10 +46,13 @@ spring:
           predicates:
             - Path=/api/presence/**
 
+        # SockJS (/info XHR etc.) inherits CORS from chat-service + gateway globalcors → duplicate ACAO headers; dedupe for browsers
         - id: websocket-service
           uri: lb://chat-service
           predicates:
             - Path=/ws/**
+          filters:
+            - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin, RETAIN_UNIQUE
 
   security:
     user:

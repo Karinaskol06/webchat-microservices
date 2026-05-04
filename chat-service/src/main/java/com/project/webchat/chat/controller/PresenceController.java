@@ -47,10 +47,23 @@ public class PresenceController {
         //update presence if user is still in the chat
         String currentChat = redisService.getCurrentChat(userDetails.getId());
 
-        if (currentChat.equals(chatId)) {
+        if (chatId.equals(currentChat)) {
             redisService.heartbeat(userDetails.getId());
         }
 
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/afk/{chatId}")
+    public ResponseEntity<Void> markAfk(
+            @PathVariable String chatId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        boolean isMember = chatService.isUserChatMember(chatId, userDetails.getId());
+        if (!isMember) {
+            return ResponseEntity.status(403).build();
+        }
+        redisService.markUserAfk(userDetails.getId(), chatId);
+        webSocketService.notifyUserLeftChat(chatId, userDetails.getId());
         return ResponseEntity.ok().build();
     }
 
@@ -60,12 +73,16 @@ public class PresenceController {
             @PathVariable Long userId,
             @PathVariable String chatId) {
         String currentUserChat = redisService.getCurrentChat(userId);
-        boolean isOnlineInChat = chatId.equals(currentUserChat) && redisService.isUserOnline(userId);
+        boolean isOnline = redisService.isUserOnline(userId);
+        boolean isAfk = isOnline && redisService.isUserAfk(userId);
+        boolean isOnlineInChat = chatId.equals(currentUserChat) && isOnline && !isAfk;
 
         Map<String, Object> response = new HashMap<>();
         response.put("userId", userId);
         response.put("chatId", chatId);
+        response.put("isOnline", isOnline);
         response.put("isOnlineInChat", isOnlineInChat);
+        response.put("isAfk", isAfk);
 
         if (!isOnlineInChat) {
             Long lastSeen = redisService.getLastSeen(userId);

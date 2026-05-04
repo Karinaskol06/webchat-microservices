@@ -1,6 +1,7 @@
 package com.project.webchat.user.service;
 
 import com.project.webchat.user.dto.ChangePasswordDTO;
+import com.project.webchat.shared.dto.UserSearchResultDTO;
 import com.project.webchat.shared.dto.RegisterRequestDTO;
 import com.project.webchat.user.dto.UpdateUserDTO;
 import com.project.webchat.shared.dto.UserDTO;
@@ -10,12 +11,15 @@ import com.project.webchat.shared.exceptions.ResourceNotFoundException;
 import com.project.webchat.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
@@ -179,6 +183,19 @@ public class UserService {
                 .build();
     }
 
+    public Page<UserSearchResultDTO> searchUsers(String rawQuery, Long currentUserId, Pageable pageable) {
+        String query = rawQuery == null ? "" : rawQuery.trim();
+        if (query.length() < 2) {
+            throw new IllegalArgumentException("Search query must be at least 2 characters long");
+        }
+
+        Page<User> searchPage = currentUserId == null
+                ? userRepository.findByUsernameStartingWithIgnoreCase(query, pageable)
+                : userRepository.findByIdNotAndUsernameStartingWithIgnoreCase(currentUserId, query, pageable);
+
+        return searchPage.map(this::toSearchResultDTO);
+    }
+
     public UserDTO convertToDTO(User user) {
         return UserDTO.builder()
                 .id(user.getId())
@@ -186,6 +203,28 @@ public class UserService {
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .profilePicture(user.getProfilePicture())
                 .build();
+    }
+
+    private UserSearchResultDTO toSearchResultDTO(User user) {
+        return UserSearchResultDTO.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .displayName(resolveDisplayName(user))
+                .avatar(user.getProfilePicture())
+                .build();
+    }
+
+    private String resolveDisplayName(User user) {
+        String firstName = user.getFirstName() == null ? "" : user.getFirstName().trim();
+        String lastName = user.getLastName() == null ? "" : user.getLastName().trim();
+        String fullName = (firstName + " " + lastName).trim();
+        if (!fullName.isEmpty()) {
+            return fullName;
+        }
+        return user.getUsername() == null ? "" : user.getUsername().toLowerCase(Locale.ROOT);
     }
 }

@@ -1,6 +1,7 @@
 package com.project.webchat.chat.feign;
 
 import com.project.webchat.shared.dto.CredentialsDTO;
+import com.project.webchat.shared.dto.ContactRequestCreateDTO;
 import com.project.webchat.shared.dto.RegisterRequestDTO;
 import com.project.webchat.shared.dto.UserCredentialsResponse;
 import com.project.webchat.shared.dto.UserDTO;
@@ -36,4 +37,7 @@ public interface UserServiceClient {
     ResponseEntity<UserCredentialsResponse> validateAndGetInfo(
             @RequestBody CredentialsDTO credentialsDTO
     );
+
+    @PostMapping("/api/users/internal/contacts/requests")
+    ResponseEntity<Void> createContactRequestIfEligible(@RequestBody ContactRequestCreateDTO requestDTO);
 }

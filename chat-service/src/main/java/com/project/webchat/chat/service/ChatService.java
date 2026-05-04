@@ -4,8 +4,10 @@ import com.project.webchat.chat.dto.*;
 import com.project.webchat.chat.entity.*;
 import com.project.webchat.chat.feign.UserServiceClient;
 import com.project.webchat.chat.repository.AttachmentRepository;
+import com.project.webchat.chat.repository.BootstrapMessageRecordRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
+import com.project.webchat.shared.dto.ContactRequestCreateDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.AllArgsConstructor;
@@ -13,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,25 +32,110 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final AttachmentRepository attachmentRepository;
+    private final BootstrapMessageRecordRepository bootstrapMessageRecordRepository;
     private final RedisService redisService;
     private final WebSocketService webSocketService;
-    private final FileStorageService fileStorageService;
     private final UserServiceClient userServiceClient;
 
     @Transactional
     public ChatRoomDTO createChat(Long userId1, Long userId2) {
-
-        //check if it exists already
-        Optional<ChatRoom> existsAlready = chatRoomRepository
-                .findPrivateChatBetweenUsers(ChatType.PRIVATE, List.of(userId1, userId2));
-
-        if (existsAlready.isPresent()) {
-            ChatRoom chatRoom = existsAlready.get();
+        PrivateChatLookup lookup = findOrCreatePrivateChat(userId1, userId2);
+        ChatRoom chatRoom = lookup.chatRoom();
+        //if already existed - return it (idempotency)
+        if (!lookup.createdNew()) {
             int unreadCount = getUnreadCount(chatRoom.getId(), userId1);
             ChatRoomDTO dto = enrichChatWithUserData(chatRoom, userId1, unreadCount);
             webSocketService.notifyChatCreated(userId2, dto);
-
+            webSocketService.notifyChatCreated(userId1, dto);
             return dto;
+        }
+        //newly created chat
+        ChatRoomDTO dto = enrichChatWithUserData(chatRoom, userId1, 0);
+
+        //notify both users
+        webSocketService.notifyChatCreated(userId1, dto);
+        webSocketService.notifyChatCreated(userId2, dto);
+
+        return dto;
+    }
+
+    // Handles the first message sent to a user with whom you don't yet have a chat
+    //handles chat, first message and a friend request creation
+    @Transactional
+    public BootstrapMessageResponse bootstrapFirstMessage(Long senderId, BootstrapMessageRequest request) {
+        if (request.getRecipientUserId() == null || senderId.equals(request.getRecipientUserId())) {
+            throw new IllegalArgumentException("Recipient must be a different user");
+        }
+        if (request.getClientRequestKey() == null || request.getClientRequestKey().isBlank()) {
+            throw new IllegalArgumentException("Client request key is required");
+        }
+
+        String normalizedContent = request.getContent() == null ? "" : request.getContent().trim();
+        if (normalizedContent.isBlank()) {
+            throw new IllegalArgumentException("Message content cannot be blank");
+        }
+
+        String normalizedRequestKey = request.getClientRequestKey().trim();
+
+        //query for a record with the same senderId and clientRequestKey
+        Optional<BootstrapMessageRecord> existingRecord = bootstrapMessageRecordRepository
+                .findBySenderIdAndClientRequestKey(senderId, normalizedRequestKey);
+        //if found - replay the already processed result
+        if (existingRecord.isPresent()) {
+            return replayBootstrap(existingRecord.get(), senderId);
+        }
+
+        //if not - create a new one and save
+        BootstrapMessageRecord bootstrapRecord = BootstrapMessageRecord.builder()
+                .senderId(senderId)
+                .clientRequestKey(normalizedRequestKey)
+                .createdAt(LocalDateTime.now())
+                .build();
+        try {
+            bootstrapRecord = bootstrapMessageRecordRepository.save(bootstrapRecord);
+        } catch (DuplicateKeyException e) {
+            BootstrapMessageRecord persisted = bootstrapMessageRecordRepository
+                    .findBySenderIdAndClientRequestKey(senderId, normalizedRequestKey)
+                    .orElseThrow(() -> new IllegalStateException("Duplicate idempotency key but no record found", e));
+            return replayBootstrap(persisted, senderId);
+        }
+
+        //find or create a private chat
+        PrivateChatLookup lookup = findOrCreatePrivateChat(senderId, request.getRecipientUserId());
+        ChatRoom chatRoom = lookup.chatRoom();
+
+        //send an actual message
+        SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
+                .chatId(chatRoom.getId())
+                .content(normalizedContent)
+                .type(MessageType.TEXT)
+                .build();
+        ChatMessageDTO messageDTO = sendMessage(senderId, sendMessageRequest);
+
+        //update the bootstrap record (for future replays to know
+        // which chat and message belongs to this idempotency key)
+        bootstrapRecord.setChatId(chatRoom.getId());
+        bootstrapRecord.setMessageId(messageDTO.getId());
+        bootstrapMessageRecordRepository.save(bootstrapRecord);
+
+        //create a pending friend request from sender to recipient
+        userServiceClient.createContactRequestIfEligible(ContactRequestCreateDTO.builder()
+                .fromUserId(senderId)
+                .toUserId(request.getRecipientUserId())
+                .build());
+
+        return BootstrapMessageResponse.builder()
+                .chatId(chatRoom.getId())
+                .message(messageDTO)
+                .idempotentReplay(false)
+                .build();
+    }
+
+    private PrivateChatLookup findOrCreatePrivateChat(Long userId1, Long userId2) {
+        Optional<ChatRoom> existsAlready = chatRoomRepository
+                .findPrivateChatBetweenUsers(ChatType.PRIVATE, List.of(userId1, userId2));
+        if (existsAlready.isPresent()) {
+            return new PrivateChatLookup(existsAlready.get(), false);
         }
 
         ChatRoom entity = ChatRoom.builder()
@@ -57,16 +145,24 @@ public class ChatService {
                 .createdAt(LocalDateTime.now())
                 .lastMessage("Chat was created!")
                 .build();
-
-        //id is generated
-        ChatRoom saved = chatRoomRepository.save(entity);
-        ChatRoomDTO dto = enrichChatWithUserData(saved, userId1, 0);
-
-        webSocketService.notifyChatCreated(userId1, dto);
-        webSocketService.notifyChatCreated(userId2, dto);
-
-        return dto;
+        return new PrivateChatLookup(chatRoomRepository.save(entity), true);
     }
+
+    private BootstrapMessageResponse replayBootstrap(BootstrapMessageRecord record, Long senderId) {
+        if (record.getMessageId() == null || record.getChatId() == null) {
+            throw new IllegalStateException("Bootstrap request is already in progress. Retry in a moment.");
+        }
+        ChatMessage existingMessage = chatMessageRepository.findById(record.getMessageId())
+                .orElseThrow(() -> new IllegalStateException("Bootstrap record exists but message is missing"));
+        UserInfoDTO senderInfo = getUserInfo(senderId);
+        return BootstrapMessageResponse.builder()
+                .chatId(record.getChatId())
+                .message(toMessageDTO(existingMessage, senderInfo))
+                .idempotentReplay(true)
+                .build();
+    }
+
+    private record PrivateChatLookup(ChatRoom chatRoom, boolean createdNew) {}
 
     @Transactional
     public ChatMessageDTO sendMessage(Long senderId, SendMessageRequest sendMessageRequest) {

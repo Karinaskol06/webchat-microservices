@@ -11,6 +11,35 @@ const chatService = {
     }
   },
 
+  searchUsers: async (query, { page = 0, size = 20, currentUserId } = {}) => {
+    try {
+      const response = await api.get('/api/users/search', {
+        params: {
+          query: query?.trim(),
+          page,
+          size
+        },
+        headers: currentUserId ? { 'X-User-Id': currentUserId } : undefined
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  bootstrapMessage: async ({ recipientUserId, content, clientRequestKey }) => {
+    try {
+      const response = await api.post('/api/chat/bootstrap-message', {
+        recipientUserId,
+        content,
+        clientRequestKey
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   //fetch all chats for the current user
   getUserChats: async (page = 0, size = 20) => {
     try {
@@ -30,28 +59,6 @@ const chatService = {
     } catch (error) {
       console.error('Error fetching chats:', error);
       return []; // Return empty array on error
-    }
-  },
-
-  // send a message in a specific chat
-  sendMessage: async (chatId, messageData) => {
-    try {
-      const response = await api.post(
-        `/api/chat/${chatId}/messages`,
-        { 
-          chatId: chatId,          
-          content: messageData.content 
-        }
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Error sending message:', error);
-      console.error('Error details:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        headers: error.response?.headers
-      });
-      throw error.response?.data || error.message;
     }
   },
 
@@ -146,6 +153,30 @@ const chatService = {
   leaveChat: async (chatId) => {
     try {
       await api.post(`/api/chat/${chatId}/leave`);
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  enterChat: async (chatId) => {
+    try {
+      await api.post(`/api/presence/enter-chat/${chatId}`);
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  heartbeatChat: async (chatId) => {
+    try {
+      await api.post(`/api/presence/heartbeat/${chatId}`);
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  markAfk: async (chatId) => {
+    try {
+      await api.post(`/api/presence/afk/${chatId}`);
     } catch (error) {
       throw error.response?.data || error.message;
     }

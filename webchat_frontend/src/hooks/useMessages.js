@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import useChatStore from '../store/useChatStore';
-import useAuthStore from '../store/useAuthStore';
 import chatService from '../services/chatService';
 import { useShallow } from 'zustand/react/shallow';
 import { sendChatMessage, sendTypingEvent } from '../utils/websocket';
@@ -12,13 +11,17 @@ const useMessages = (currentChat) => {
       setMessages: state.setMessages,
     }))
   );
-  const user = useAuthStore((state) => state.user);
+  const setCurrentChat = useChatStore((state) => state.setCurrentChat);
+  const setChats = useChatStore((state) => state.setChats);
+  const upsertChat = useChatStore((state) => state.upsertChat);
 
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false); // eslint-disable-line no-unused-vars
   const [selectedAttachments, setSelectedAttachments] = useState([]);
+  const [isSending, setIsSending] = useState(false);
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const bootstrapRequestKeyRef = useRef(null);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -28,7 +31,7 @@ const useMessages = (currentChat) => {
   // Load messages when chat changes
   useEffect(() => {
     const loadMessages = async () => {
-      if (!currentChat) return;
+      if (!currentChat || !currentChat.id) return;
 
       try {
         setLoading(true);
@@ -44,12 +47,10 @@ const useMessages = (currentChat) => {
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
         setMessages(sorted);
-        // mark all received messages as read when opening chat
-        try {
-          await chatService.markAsRead(currentChat.id);
-        } catch (e) {
+        // Do not block UI on read receipt
+        chatService.markAsRead(currentChat.id).catch((e) => {
           console.error('Failed to mark messages as read:', e);
-        }
+        });
       } catch (error) {
         console.error('Failed to load messages:', error);
       } finally {
@@ -58,18 +59,28 @@ const useMessages = (currentChat) => {
     };
 
     loadMessages();
-  }, [currentChat, setMessages]);
+  }, [currentChat?.id, setMessages]);
 
   const handleSendMessage = async () => {
-    if (!currentChat) return;
+    if (!currentChat || isSending) return;
 
     const trimmedMessage = newMessage.trim();
     const hasText = trimmedMessage.length > 0;
     const hasAttachments = selectedAttachments.length > 0;
     if (!trimmedMessage && selectedAttachments.length === 0) return;
 
+    const previousText = newMessage;
+    const previousAttachments = [...selectedAttachments];
+    setNewMessage('');
+    setSelectedAttachments([]);
+
     try {
+      setIsSending(true);
       let attachmentIds = [];
+
+      if (!currentChat.id && hasAttachments) {
+        throw new Error('Attachments are available after chat creation only');
+      }
 
       if (hasAttachments) {
         console.log('Uploading attachments:', selectedAttachments.length);
@@ -78,39 +89,67 @@ const useMessages = (currentChat) => {
         console.log('Attachments uploaded, IDs:', attachmentIds);
       }
 
-      const sent = sendChatMessage({
-        chatId: currentChat.id,
-        content: hasText ? trimmedMessage : null,
-        attachmentIds,
-        senderId: user?.id,
-        type: hasAttachments ? 'MIXED' : 'TEXT'
-      });
-      if (!sent) {
-        throw new Error('WebSocket is not connected');
+      if (!currentChat.id) {
+        if (!bootstrapRequestKeyRef.current) {
+          bootstrapRequestKeyRef.current =
+            globalThis.crypto?.randomUUID?.() ||
+            `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+        const bootstrap = await chatService.bootstrapMessage({
+          recipientUserId: currentChat.otherUser?.id,
+          content: trimmedMessage,
+          clientRequestKey: bootstrapRequestKeyRef.current,
+        });
+
+        const latestChats = await chatService.getUserChats();
+        setChats(latestChats);
+
+        const createdChat = latestChats.find((chat) => chat.id === bootstrap.chatId);
+        if (createdChat) {
+          setCurrentChat(createdChat);
+          upsertChat(createdChat);
+        }
+        if (bootstrap?.message) {
+          setMessages([bootstrap.message]);
+        }
+        bootstrapRequestKeyRef.current = null;
+      } else {
+        const sent = sendChatMessage({
+          chatId: currentChat.id,
+          content: hasText ? trimmedMessage : null,
+          attachmentIds,
+          type: hasAttachments ? 'MIXED' : 'TEXT'
+        });
+        if (!sent) {
+          throw new Error('WebSocket is not connected');
+        }
       }
 
-      setNewMessage('');
-      setSelectedAttachments([]);
-
-      sendTypingEvent({ chatId: currentChat.id, typing: false, userId: user?.id });
+      if (currentChat.id) {
+        sendTypingEvent({ chatId: currentChat.id, typing: false });
+      }
     } catch (error) {
+      setNewMessage(previousText);
+      setSelectedAttachments(previousAttachments);
       console.error('Failed to send message:', error);
       alert('Failed to send message. Please try again.');
+    } finally {
+      setIsSending(false);
     }
   };
 
   const handleTyping = () => {
-    if (!currentChat) return;
+    if (!currentChat?.id) return;
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    sendTypingEvent({ chatId: currentChat.id, typing: true, userId: user?.id });
+    sendTypingEvent({ chatId: currentChat.id, typing: true });
 
     // Stops after 3 sec of inactivity
     typingTimeoutRef.current = setTimeout(() => {
-      sendTypingEvent({ chatId: currentChat.id, typing: false, userId: user?.id });
+      sendTypingEvent({ chatId: currentChat.id, typing: false });
     }, 3000);
   };
 

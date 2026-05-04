@@ -15,7 +15,7 @@ const MessageItem = ({ message, currentUserId }) => {
     const [imagesLoaded, setImagesLoaded] = useState({});
 
     const sender = message.sender || { id: message.senderId };
-    const isOwn = sender?.id === currentUserId;
+    const isOwn = Number(sender?.id) === Number(currentUserId);
     const attachments = Array.isArray(message.attachments) ? message.attachments : [];
     const hasAttachments = attachments.length > 0;
     const hasText = message.content && message.content.trim().length > 0;
