@@ -2,6 +2,7 @@ package com.project.webchat.user.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -39,6 +40,15 @@ public class User {
 
     @Column(name = "profile_picture")
     private String profilePicture;
+
+    @Column(name = "description", length = 500)
+    private String description;
+
+    @Column(name = "birthday")
+    private LocalDate birthday;
+
+    @Column(name = "phone_number", length = 30)
+    private String phoneNumber;
 
     @Column(name = "is_active")
     private boolean isActive = true;

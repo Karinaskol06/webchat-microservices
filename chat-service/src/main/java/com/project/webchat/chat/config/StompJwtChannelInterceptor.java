@@ -1,5 +1,6 @@
 package com.project.webchat.chat.config;
 
+import com.project.webchat.shared.security.JwtHs256Keys;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -47,11 +48,11 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor, Ordered {
 
         String token = header.substring("Bearer ".length()).trim();
         try {
-            Claims claims = Jwts.parserBuilder()
-                    .setSigningKey(secretKey)
+            Claims claims = Jwts.parser()
+                    .verifyWith(JwtHs256Keys.fromConfiguredSecret(secretKey))
                     .build()
-                    .parseClaimsJws(token)
-                    .getBody();
+                    .parseSignedClaims(token)
+                    .getPayload();
 
             Long userId = resolveUserId(claims);
             if (userId == null) {

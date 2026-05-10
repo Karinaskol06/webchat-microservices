@@ -14,6 +14,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final StompJwtChannelInterceptor stompJwtChannelInterceptor;
+    private final WebSocketProperties webSocketProperties;
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
@@ -34,13 +35,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // URL clients connect to initially - with SockJS fallback
-        registry.addEndpoint("/ws/chat")
-                .setAllowedOrigins("http://localhost:5173") // Frontend URL
+        // URL clients connect to initially - with SockJS fallback.
+        // Use origin patterns from configuration to avoid strict localhost/port mismatches.
+        registry.addEndpoint(webSocketProperties.getEndpoint())
+                .setAllowedOriginPatterns(webSocketProperties.getAllowedOrigins())
                 .withSockJS();
 
         // If need raw WebSocket support without SockJS
-        registry.addEndpoint("/ws/chat")
-                .setAllowedOrigins("http://localhost:5173");
+        registry.addEndpoint(webSocketProperties.getEndpoint())
+                .setAllowedOriginPatterns(webSocketProperties.getAllowedOrigins());
     }
 }

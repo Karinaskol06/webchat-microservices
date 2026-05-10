@@ -1,6 +1,13 @@
 spring:
+  codec:
+    max-in-memory-size: 5MB
   application:
     name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   cloud:
     gateway:
       globalcors:
@@ -8,6 +15,8 @@ spring:
         cors-configurations:
           '[/**]':
             allowed-origins:
+              - "http://localhost"
+              - "http://127.0.0.1"
               - "http://localhost:5173"
               - "http://localhost:3000"
               - "http://localhost:8089"
@@ -45,6 +54,13 @@ spring:
           uri: lb://chat-service
           predicates:
             - Path=/api/presence/**
+
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - name: JwtValidationFilter
 
         # SockJS (/info XHR etc.) inherits CORS from chat-service + gateway globalcors → duplicate ACAO headers; dedupe for browsers
         - id: websocket-service

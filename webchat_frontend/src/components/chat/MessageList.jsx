@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import React from 'react';
 import { Box } from '@mui/material';
 import MessageItem from './MessageItem';
 
@@ -26,5 +26,5 @@ const MessageList = ({ messages, currentUserId, messagesEndRef }) => {
   );
 };
 
-export default memo(MessageList);
+export default MessageList;
 

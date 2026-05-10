@@ -22,7 +22,7 @@
         <spring-cloud.version>2023.0.0</spring-cloud.version>
         <jjwt.version>0.12.5</jjwt.version>
         <logback.version>1.4.14</logback.version>
-        <lombok.version>1.18.36</lombok.version>
+        <lombok.version>1.18.38</lombok.version>
     </properties>
 
     <dependencyManagement>
@@ -35,13 +35,6 @@
                 <scope>import</scope>
             </dependency>
 
-            <dependency>
-                <groupId>org.springframework.cloud</groupId>
-                <artifactId>spring-cloud-dependencies</artifactId>
-                <version>${spring-cloud.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -52,6 +45,7 @@
         <module>chat-service</module>
         <module>discovery-service</module>
         <module>shared-module</module>
+        <module>notification-service</module>
     </modules>
 
     <build>

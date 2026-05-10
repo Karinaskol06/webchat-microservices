@@ -8,6 +8,7 @@ import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.UserCredentialsResponse;
 import com.project.webchat.user.entity.User;
 import com.project.webchat.shared.exceptions.ResourceNotFoundException;
+import com.project.webchat.user.repository.ProfileImageRepository;
 import com.project.webchat.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,8 +19,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
@@ -29,6 +32,7 @@ import java.util.stream.Collectors;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final ProfileImageRepository profileImageRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Transactional
@@ -59,28 +63,28 @@ public class UserService {
 
     @Transactional
     public UserDTO updateUser(String username, UpdateUserDTO updateUserDTO) {
+        return updateUser(username, updateUserDTO, new HashSet<>());
+    }
+
+    @Transactional
+    public UserDTO updateUser(String username, UpdateUserDTO updateUserDTO, Set<String> providedFields) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found " + username));
 
-        if (updateUserDTO.getUsername() != null && !updateUserDTO.getUsername().equals(user.getUsername())) {
-            if (userRepository.existsByUsername(updateUserDTO.getUsername())) {
-                throw new IllegalArgumentException("Username is already in use");
-            }
-            user.setUsername(updateUserDTO.getUsername());
-        }
-
-        if (updateUserDTO.getEmail() != null && !updateUserDTO.getEmail().equals(user.getEmail())) {
-            if (userRepository.existsByEmail(updateUserDTO.getEmail())) {
-                throw new IllegalArgumentException("Email is already in use");
-            }
-            user.setEmail(updateUserDTO.getEmail());
-        }
-
-        if (updateUserDTO.getFirstName() != null) {
+        if (providedFields.contains("firstName")) {
             user.setFirstName(updateUserDTO.getFirstName());
         }
-        if (updateUserDTO.getLastName() != null) {
+        if (providedFields.contains("lastName")) {
             user.setLastName(updateUserDTO.getLastName());
+        }
+        if (providedFields.contains("description")) {
+            user.setDescription(updateUserDTO.getDescription());
+        }
+        if (providedFields.contains("birthday")) {
+            user.setBirthday(updateUserDTO.getBirthday());
+        }
+        if (providedFields.contains("phoneNumber")) {
+            user.setPhoneNumber(updateUserDTO.getPhoneNumber());
         }
 
         User savedUser = userRepository.save(user);
@@ -203,8 +207,26 @@ public class UserService {
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
-                .profilePicture(user.getProfilePicture())
+                .profilePicture(resolveAvatarPictureUrl(user.getId()))
+                .backgroundPicture(resolveBackgroundPictureUrl(user.getId()))
+                .description(user.getDescription())
+                .birthday(user.getBirthday())
+                .phoneNumber(user.getPhoneNumber())
                 .build();
+    }
+
+    private String resolveAvatarPictureUrl(Long userId) {
+        if (!profileImageRepository.existsByUserIdAndKind(userId, ProfileImageService.KIND_AVATAR)) {
+            return null;
+        }
+        return "/api/users/" + userId + "/avatar";
+    }
+
+    private String resolveBackgroundPictureUrl(Long userId) {
+        if (!profileImageRepository.existsByUserIdAndKind(userId, ProfileImageService.KIND_BACKGROUND)) {
+            return null;
+        }
+        return "/api/users/" + userId + "/background";
     }
 
     private UserSearchResultDTO toSearchResultDTO(User user) {

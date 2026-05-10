@@ -2,6 +2,7 @@ package com.project.webchat.chat.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import com.project.webchat.shared.security.JwtHs256Keys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,8 +15,6 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 
 @Component
@@ -31,18 +30,21 @@ public class ChatJwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         String authHeader = request.getHeader("Authorization");
+        String path = request.getRequestURI();
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             try {
-                String token = authHeader.substring(7);
-                SecretKey key = new SecretKeySpec(secretKey.getBytes(), "HmacSHA256");
+                String token = authHeader.substring(7).trim();
 
-                Claims claims = Jwts.parserBuilder()
-                        .setSigningKey(secretKey)
+                var signingKey = JwtHs256Keys.fromConfiguredSecret(secretKey);
+
+                Claims claims = Jwts.parser()
+                        .verifyWith(signingKey)
                         .build()
-                        .parseClaimsJws(token).getBody();
+                        .parseSignedClaims(token)
+                        .getPayload();
 
-                Long userId = claims.get("userId", Long.class);
+                Long userId = resolveUserId(claims);
                 String username = claims.getSubject();
                 String email = claims.get("email", String.class);
 
@@ -73,4 +75,27 @@ public class ChatJwtAuthFilter extends OncePerRequestFilter {
 
         filterChain.doFilter(request, response);
     }
+
+    private static Long resolveUserId(Claims claims) {
+        Object raw = claims.get("userId");
+        if (raw == null) {
+            // Fallback: if older tokens stored id in subject
+            try {
+                return Long.parseLong(claims.getSubject());
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+
+        if (raw instanceof Number n) {
+            return n.longValue();
+        }
+
+        try {
+            return Long.parseLong(raw.toString());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
 }

@@ -23,6 +23,7 @@ public class ChatMessageDTO {
     private String content;
     private MessageType messageType;
     private LocalDateTime timestamp;
+    private LocalDateTime editedAt;
     private boolean isRead;
     private LocalDateTime readAt;
 
@@ -40,6 +41,7 @@ public class ChatMessageDTO {
                 .content(chatMessage.getContent())
                 .messageType(chatMessage.getMessageType())
                 .timestamp(chatMessage.getTimestamp())
+                .editedAt(chatMessage.getEditedAt())
                 .isRead(chatMessage.isRead())
                 .readAt(chatMessage.getReadAt())
                 .type("MESSAGE")

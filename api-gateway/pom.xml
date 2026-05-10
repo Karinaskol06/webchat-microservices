@@ -78,6 +78,23 @@
             <optional>true</optional>
         </dependency>
 
+        <dependency>
+            <groupId>com.project.webchat</groupId>
+            <artifactId>shared-module</artifactId>
+            <version>${project.version}</version>
+            <!-- shared-module pulls servlet Web MVC + Security; gateway is WebFlux-only -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-web</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-security</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- DevTools -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -42,6 +42,8 @@ public class ChatMessage {
     @Builder.Default
     private LocalDateTime timestamp = LocalDateTime.now();
 
+    private LocalDateTime editedAt;
+
     private boolean isRead;
 
     @Indexed

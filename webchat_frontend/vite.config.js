@@ -8,6 +8,10 @@ export default defineConfig({
     port: 5173,
     open: true,
     proxy: {
+      '/api': {
+        target: 'http://localhost:8089',
+        changeOrigin: true,
+      },
       // Same-origin /ws → gateway (avoids duplicate CORS on SockJS /info when dev server is on 5173)
       '/ws': {
         target: 'http://localhost:8089',

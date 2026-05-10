@@ -14,25 +14,10 @@ spring:
       name: admin
       password: 11111
 
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        jdbc:
-          batch_size: 20
-        order_inserts: true
-        connection:
-          provider_disables_autocommit: true
-    open-in-view: false
-
   data:
     redis:
       host: ${REDIS_HOST:redis}
-      port: 6379
+      port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       timeout: 5000ms
       connect-timeout: 3000ms
@@ -96,8 +81,5 @@ logging:
     com.project.webchat.auth: INFO
     org.springframework.security: WARN
     org.springframework.data.redis: WARN
-    org.hibernate.SQL: WARN
-    org.hibernate.type.descriptor.sql.BasicBinder: OFF
     com.netflix.eureka: WARN
-    org.hibernate.engine.jdbc.connections: OFF
     root: INFO

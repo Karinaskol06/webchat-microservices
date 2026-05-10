@@ -29,6 +29,7 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
   // Getting actions
   const setChats = useChatStore(state => state.setChats);
   const setCurrentChat = useChatStore(state => state.setCurrentChat);
+  const resetUnreadCount = useChatStore(state => state.resetUnreadCount);
   const setLoadingChats = useChatStore(state => state.setLoadingChats);
   const setError = useChatStore(state => state.setError);
   const storeError = useChatStore(state => state.error);
@@ -73,6 +74,27 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
     loadChats();
   }, [user, setChats, setError, setLoadingChats, retryCount]);
 
+  const mergePresenceIntoState = React.useCallback(
+    async (targets) => {
+      if (!targets?.length) return;
+      const entries = await Promise.all(
+        targets.map(async (chat) => {
+          try {
+            const status = await chatService.getPresenceStatus(chat.otherUser.id, chat.id);
+            return [chat.id, status || null];
+          } catch {
+            return [chat.id, null];
+          }
+        })
+      );
+      setPresenceByChatId((prev) => ({
+        ...prev,
+        ...Object.fromEntries(entries),
+      }));
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -80,7 +102,7 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
     const loadPresence = async () => {
       const snapshot = Array.isArray(chats) ? chats : [];
       const privateChats = snapshot.filter(
-        (chat) => String(chat?.type || '').toUpperCase() !== 'GROUP' && chat?.id && chat?.otherUser?.id
+        (chat) => String(chat?.type || '').toUpperCase() !== 'GROUP' && chat?.id && chat?.otherUser?.id,
       );
       if (privateChats.length === 0) {
         if (!cancelled) setPresenceByChatId({});
@@ -92,11 +114,10 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
           try {
             const status = await chatService.getPresenceStatus(chat.otherUser.id, chat.id);
             return [chat.id, status || null];
-          } catch (error) {
-            console.debug('Presence load failed for chat', chat.id, error);
+          } catch {
             return [chat.id, null];
           }
-        })
+        }),
       );
 
       if (!cancelled) {
@@ -105,13 +126,30 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
     };
 
     loadPresence();
-    const timerId = setInterval(loadPresence, 7000);
+
+    /** Rare fallback if WebSocket presence events are missed (e.g. laptop sleep). */
+    const timerId = setInterval(loadPresence, 30000);
 
     return () => {
       cancelled = true;
       clearInterval(timerId);
     };
   }, [user, chats]);
+
+  /** Presence bump from WebSocket (/topic/chat/.../presence) — aligns list badge with ChatHeader. */
+  useEffect(() => {
+    const onBump = async (evt) => {
+      const chatId = evt.detail?.chatId;
+      const snapshot = Array.isArray(useChatStore.getState().chats)
+        ? useChatStore.getState().chats
+        : [];
+      const chat = snapshot.find((c) => String(c.id) === String(chatId));
+      if (!chat?.otherUser?.id || String(chat?.type || '').toUpperCase() === 'GROUP') return;
+      await mergePresenceIntoState([chat]);
+    };
+    window.addEventListener('webchat:presence-refresh', onBump);
+    return () => window.removeEventListener('webchat:presence-refresh', onBump);
+  }, [mergePresenceIntoState]);
 
   const handleRetry = () => {
     setRetryCount(prev => prev + 1);
@@ -169,6 +207,9 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
   const chatList = Array.isArray(chats) ? chats : [];
 
   const handleSelectChat = (chat) => {
+    if (chat?.id) {
+      resetUnreadCount(chat.id);
+    }
     setCurrentChat(chat);
     onSelectChat?.(chat);
   };
@@ -262,8 +303,8 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
                   },
                 }}
               >
-                <Avatar>
-                  {avatarLetter}
+                <Avatar src={otherUser?.profilePicture || undefined}>
+                  {!otherUser?.profilePicture ? avatarLetter : null}
                 </Avatar>
               </Badge>
             </ListItemAvatar>

@@ -7,6 +7,8 @@ import Register from './pages/Register';
 import ChatPage from './pages/ChatPage';
 import useAuthStore from './store/useAuthStore';
 import authService from './services/authService';
+import chatService from './services/chatService';
+import pushNotificationService from './services/pushNotificationService';
 import { Box, CircularProgress } from '@mui/material';
 
 // ProtectedRoute component to guard routes that require authentication
@@ -30,7 +32,7 @@ const ProtectedRoute = ({ children }) => {
 };
 
 function App() {
-  const { setUser } = useAuthStore();
+  const { setUser, isAuthenticated, user } = useAuthStore();
 
   // Check for existing token and load user on app mount
   useEffect(() => {
@@ -55,6 +57,36 @@ function App() {
 
     loadUser();
   }, [setUser]);
+
+  // Keep the dependency on the stable primitive `user?.id` (and not the full
+  // `user` object) so unrelated store updates don't re-trigger subscription
+  // negotiation. The single source of truth for subscribing is "we have an
+  // authenticated user"; the older mount-only fallback used to race with
+  // this effect and corrupt the backend's record of the active endpoint.
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      return;
+    }
+    pushNotificationService.ensureSubscription().catch((error) => {
+      console.warn('Push subscription setup failed:', error);
+    });
+  }, [isAuthenticated, user?.id]);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) {
+      return;
+    }
+    const onServiceWorkerMessage = (event) => {
+      const { type, chatId } = event.data || {};
+      if (type === 'MARK_CHAT_READ' && chatId) {
+        chatService.markAsRead(chatId).catch(() => {});
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onServiceWorkerMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onServiceWorkerMessage);
+    };
+  }, []);
 
   return (
     <BrowserRouter>

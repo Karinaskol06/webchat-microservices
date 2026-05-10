@@ -2,13 +2,13 @@ package com.project.webchat.chat.service;
 
 import com.project.webchat.chat.dto.*;
 import com.project.webchat.chat.dto.websocketDTOs.*;
-import com.project.webchat.chat.entity.Attachment;
-import com.project.webchat.chat.entity.ChatMessage;
+import com.project.webchat.chat.entity.MessageType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -44,21 +44,16 @@ public class WebSocketService {
         log.info("Message {} sent to chat {}", message.getId(), chatId);
     }
 
-    public void sendMixedMessageToChat(String chatId, ChatMessage message, List<Attachment> attachments) {
-        MessageWithAttachmentsDTO dto = MessageWithAttachmentsDTO.fromEntity(message, attachments);
-        sendToChatTopic(TOPIC_CHAT_MESSAGES, chatId, dto);
-        log.info("Mixed message sent to chat {}: hasText={}, attachmentsCount={}",
-                chatId, message.getContent() != null, attachments.size());
-    }
-
     public void notifyMessageDeleted(String messageId, String chatId, Long deletedByUserId) {
         MessageDeletedEvent event = new MessageDeletedEvent(messageId, chatId, deletedByUserId);
         sendToChatTopic(TOPIC_CHAT_DELETED, chatId, event);
         log.info("Message {} deleted from chat {} by user {}", messageId, chatId, deletedByUserId);
     }
 
-    public void notifyMessageEdited(String messageId, String chatId, String newContent, Long editedByUserId) {
-        MessageEditedEvent event = new MessageEditedEvent(messageId, chatId, newContent, editedByUserId);
+    public void notifyMessageEdited(String messageId, String chatId, String newContent, Long editedByUserId,
+                                    LocalDateTime editedAt, MessageType newMessageType) {
+        MessageEditedEvent event = new MessageEditedEvent(
+                messageId, chatId, newContent, editedByUserId, editedAt, newMessageType);
         sendToChatTopic(TOPIC_CHAT_EDITED, chatId, event);
         log.info("Message {} edited in chat {} by user {}", messageId, chatId, editedByUserId);
     }
@@ -199,6 +194,8 @@ public class WebSocketService {
         private String chatId;
         private String newContent;
         private Long editedByUserId;
+        private LocalDateTime editedAt;
+        private MessageType messageType;
     }
 
     @lombok.Data

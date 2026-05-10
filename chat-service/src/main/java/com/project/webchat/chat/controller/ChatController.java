@@ -5,6 +5,7 @@ import com.project.webchat.chat.dto.BootstrapMessageRequest;
 import com.project.webchat.chat.dto.BootstrapMessageResponse;
 import com.project.webchat.chat.dto.ChatRoomDTO;
 import com.project.webchat.chat.dto.CreateChatRequest;
+import com.project.webchat.chat.dto.EditMessageRequest;
 import com.project.webchat.chat.security.CustomUserDetails;
 import com.project.webchat.chat.service.ChatService;
 import com.project.webchat.chat.service.WebSocketService;
@@ -143,6 +144,17 @@ public class ChatController {
         log.info("User {} is deleting message {}", currentUser.getId(), messageId);
         chatService.deleteMessage(messageId, currentUser.getId());
         return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/messages/{messageId}")
+    public ResponseEntity<ChatMessageDTO> editMessage(
+            @PathVariable String messageId,
+            @RequestBody @jakarta.validation.Valid EditMessageRequest request,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+
+        log.info("User {} is editing message {}", currentUser.getId(), messageId);
+        ChatMessageDTO updatedMessage = chatService.editMessage(messageId, currentUser.getId(), request.getContent());
+        return ResponseEntity.ok(updatedMessage);
     }
 
     //leave a chat

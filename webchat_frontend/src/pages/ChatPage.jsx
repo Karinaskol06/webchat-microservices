@@ -22,6 +22,7 @@ import useMessages from '../hooks/useMessages';
 import useTyping from '../hooks/useTyping'; 
 import { useShallow } from 'zustand/react/shallow';
 import contactsService from '../services/contactsService';
+import { useSearchParams } from 'react-router-dom';
 
 const ChatPage = () => {
   const { currentChat, messages } = useChatStore(
@@ -32,6 +33,9 @@ const ChatPage = () => {
   );
 
   const { user } = useAuthStore();
+  const chats = useChatStore((state) => state.chats);
+  const setCurrentChat = useChatStore((state) => state.setCurrentChat);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [profileOpen, setProfileOpen] = useState(false);
   const [userSearchOpen, setUserSearchOpen] = useState(false);
   const [presenceStatus, setPresenceStatus] = useState(null);
@@ -237,6 +241,32 @@ const ChatPage = () => {
       unreadCount: 0,
     });
   };
+
+  useEffect(() => {
+    const requestedChatId = searchParams.get('chatId');
+    if (!requestedChatId || !Array.isArray(chats) || chats.length === 0) {
+      return;
+    }
+    if (String(currentChat?.id) === requestedChatId) {
+      return;
+    }
+    const targetChat = chats.find((chat) => String(chat.id) === requestedChatId);
+    if (targetChat) {
+      setCurrentChat(targetChat);
+    }
+  }, [searchParams, chats, currentChat?.id, setCurrentChat]);
+
+  useEffect(() => {
+    const markRead = searchParams.get('markRead');
+    const chatId = searchParams.get('chatId');
+    if (markRead !== '1' || !chatId) {
+      return;
+    }
+    chatService.markAsRead(chatId).catch(() => {});
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('markRead');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleAcceptContact = async () => {
     const requestId = contactStatus?.prompt?.requestId;

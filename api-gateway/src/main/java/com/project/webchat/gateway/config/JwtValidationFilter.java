@@ -57,7 +57,11 @@ public class JwtValidationFilter extends AbstractGatewayFilterFactory<JwtValidat
     }
 
     private boolean isPublicEndpoint(String path) {
+        if (path.matches("^/api/users/\\d+/(avatar|background)$")) {
+            return true;
+        }
         return path.startsWith("/api/auth/") ||
+                path.startsWith("/api/notifications/vapid-public-key") ||
                 path.startsWith("/actuator/") ||
                 path.startsWith("/eureka/");
     }

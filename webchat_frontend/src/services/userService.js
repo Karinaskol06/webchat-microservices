@@ -1,6 +1,17 @@
 import api from "./api";
 
 const userService = {
+  getCurrentProfile: async () => {
+    const response = await api.get("/api/users/profile");
+    return response.data;
+  },
+
+  /** Full public profile (avatar/background URLs, description, birthday, …) — use when viewing any user by id */
+  getUserById: async (userId) => {
+    const response = await api.get(`/api/users/${userId}`);
+    return response.data;
+  },
+
   searchUsers: async (query, page = 0, size = 20, currentUserId) => {
     const response = await api.get("/api/users/search", {
       params: { query, page, size },
@@ -12,6 +23,35 @@ const userService = {
       return data;
     }
     return data?.content || [];
+  },
+
+  updateProfile: async (payload) => {
+    const response = await api.put("/api/users/profile", payload);
+    return response.data;
+  },
+
+  uploadAvatar: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    await api.post("/api/users/profile/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  removeAvatar: async () => {
+    await api.delete("/api/users/profile/avatar");
+  },
+
+  uploadBackground: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    await api.post("/api/users/profile/background", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  removeBackground: async () => {
+    await api.delete("/api/users/profile/background");
   },
 };
 

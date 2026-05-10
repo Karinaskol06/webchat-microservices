@@ -1,7 +1,24 @@
+# syntax=docker/dockerfile:1
 FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
-COPY . .
-RUN mvn -pl shared-module,api-gateway -am clean package -DskipTests
+
+COPY pom.xml .
+COPY shared-module/pom.xml shared-module/
+COPY discovery-service/pom.xml discovery-service/
+COPY api-gateway/pom.xml api-gateway/
+COPY auth-service/pom.xml auth-service/
+COPY chat-service/pom.xml chat-service/
+COPY notification-service/pom.xml notification-service/
+COPY user-service/pom.xml user-service/
+
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -pl api-gateway dependency:go-offline -DskipTests \
+    || mvn -B -pl api-gateway dependency:resolve -DskipTests
+
+COPY api-gateway/src api-gateway/src
+
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -pl api-gateway package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app

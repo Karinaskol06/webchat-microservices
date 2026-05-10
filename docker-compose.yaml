@@ -57,6 +57,43 @@ services:
     networks:
       - webchat-net
 
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      # KRaft single-node config (no ZooKeeper)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://0.0.0.0:9092,CONTROLLER://kafka:29093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    networks:
+      - webchat-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-kraft
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    networks:
+      - webchat-net
+
   # Microservices
   discovery-service:
     build:
@@ -102,21 +139,21 @@ services:
       dockerfile: auth-service/Dockerfile
     container_name: auth-service
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       discovery-service:
         condition: service_healthy
     environment:
-      - DB_HOST=postgres
-      - DB_USERNAME=${POSTGRES_USER}
-      - DB_PASSWORD=${POSTGRES_PASSWORD}
-      - DB_NAME=${POSTGRES_DB}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - EUREKA_URL=${EUREKA_URL}
       - JWT_SECRET=${JWT_SECRET}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     networks:
       - webchat-net
 
@@ -130,6 +167,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_started
       discovery-service:
         condition: service_healthy
     environment:
@@ -137,10 +176,51 @@ services:
       - MONGO_USER=${MONGO_INITDB_ROOT_USERNAME}
       - MONGO_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
       - MONGO_DB=${MONGO_INITDB_DATABASE}
+      - APP_UPLOAD_DIR=/var/webchat/uploads
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - EUREKA_URL=${EUREKA_URL}
       - JWT_SECRET=${JWT_SECRET}
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+    volumes:
+      - chat_uploads:/var/webchat/uploads
+    networks:
+      - webchat-net
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: notification-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      discovery-service:
+        condition: service_healthy
+    environment:
+      - DB_HOST=postgres
+      - DB_USERNAME=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+      - EUREKA_URL=${EUREKA_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_CONSUMER_GROUP=notification-service
+      - KAFKA_TOPIC_MESSAGE_CREATED=chat.message.created.v1
+      - KAFKA_TOPIC_MESSAGE_CREATED_DLQ=chat.message.created.v1.dlq
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${VAPID_SUBJECT}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8084/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+      - "8084:8084"
     networks:
       - webchat-net
 
@@ -155,8 +235,10 @@ services:
       user-service:
         condition: service_started
       auth-service:
-        condition: service_started
+        condition: service_healthy
       chat-service:
+        condition: service_started
+      notification-service:
         condition: service_started
     environment:
       - EUREKA_URL=${EUREKA_URL}
@@ -185,3 +267,4 @@ volumes:
   postgres_data:
   mongo_data:
   redis_data:
+  chat_uploads:

@@ -19,6 +19,9 @@ lerna-debug.log*
 *.sw?
 
 .env
+.env.*
+!.env.example
+!local-development.env.example
 .mvn/
 mvnw
 mvnv.cmd
@@ -44,6 +47,19 @@ webchat_frontend/dist/
 dist/
 dist-ssr/
 *.local
+webchat_frontend/test-results/
 
 # Uploads (avatars, chat)
 uploads/
+storage/
+
+# Security-sensitive files
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_rsa.pub

@@ -13,16 +13,23 @@ spring:
 
   data:
     mongodb:
-      uri: mongodb://${MONGO_USER:}:${MONGO_PASSWORD:}@${MONGO_HOST:localhost}:27017/${MONGO_DB:messages_db}?authSource=${MONGO_AUTH_DB:admin}
+      uri: mongodb://${MONGO_USER:}:${MONGO_PASSWORD:}@${MONGO_HOST:localhost}:${MONGO_PORT:27017}/${MONGO_DB:messages_db}?authSource=${MONGO_AUTH_DB:admin}
       database: messages_db
       auto-index-creation: true
 
     redis:
       host: ${REDIS_HOST:redis}
       password: ${REDIS_PASSWORD:}
-      port: 6379
+      port: ${REDIS_PORT:6379}
       timeout: 5000ms
       connect-timeout: 3000ms
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 2147483647
+      properties:
+        enable.idempotence: true
 
 websocket:
   endpoint: /ws/chat
@@ -55,9 +62,12 @@ management:
 
 app:
   upload:
-    dir: ./uploads
+    dir: ${APP_UPLOAD_DIR:./storage/chat-uploads}
     max-size: 10485760  # 10 MB
     allowed-extensions: jpg,jpeg,png,gif,pdf,txt,doc,docx,xls,xlsx,mp4
+  kafka:
+    topics:
+      message-created: ${KAFKA_TOPIC_MESSAGE_CREATED:chat.message.created.v1}
 
 logging:
   level:

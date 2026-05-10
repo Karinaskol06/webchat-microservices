@@ -59,6 +59,38 @@ webchat-microservices/
 - Zustand - State management
 - STOMP.js + SockJS - WebSocket client
 
+## Kafka (Docker Compose)
+
+`docker-compose.yaml` includes a single-node Kafka broker (KRaft mode) plus optional `kafka-ui` for local debugging.
+
+- Kafka broker host port: `localhost:9092`
+- Kafka broker container address (inside Docker network): `kafka:29092`
+- Kafka UI: [http://localhost:8090](http://localhost:8090)
+
+Use bootstrap servers based on where the service runs:
+
+- Services running on your host machine (IDE/local JVM): `SPRING_KAFKA_BOOTSTRAP_SERVERS=localhost:9092`
+- Services running inside Docker Compose: `SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092`
+
+Recommended Kafka env vars for upcoming producers/consumers:
+
+- `SPRING_KAFKA_BOOTSTRAP_SERVERS`
+- `SPRING_KAFKA_CONSUMER_GROUP_ID` (example: `notification-service`)
+- `KAFKA_TOPIC_MESSAGE_CREATED` (example: `chat.message.created.v1`)
+- `KAFKA_TOPIC_MESSAGE_CREATED_DLQ` (example: `chat.message.created.v1.dlq`)
+
+### Topic creation (dev)
+
+Two supported options:
+
+1. **Auto-create (default in compose)**: keep `KAFKA_AUTO_CREATE_TOPICS_ENABLE=true` and let topics be created when first used.
+2. **Explicit creation**: create topics manually from the Kafka container:
+
+```bash
+docker compose exec kafka kafka-topics --create --topic chat.message.created.v1 --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1
+docker compose exec kafka kafka-topics --create --topic chat.message.created.v1.dlq --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1
+```
+
 ## :game_die: Current Features
 
 ### User Authentication

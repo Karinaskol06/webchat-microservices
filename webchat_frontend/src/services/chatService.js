@@ -149,6 +149,15 @@ const chatService = {
     }
   },
 
+  editMessage: async (messageId, content) => {
+    try {
+      const response = await api.put(`/api/chat/messages/${messageId}`, { content });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // leave a chat
   leaveChat: async (chatId) => {
     try {

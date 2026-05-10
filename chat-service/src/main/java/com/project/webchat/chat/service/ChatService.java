@@ -10,6 +10,7 @@ import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.shared.dto.ContactRequestCreateDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.UserInfoDTO;
+import com.project.webchat.shared.events.v1.MessageCreatedEventV1;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -20,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -36,6 +38,7 @@ public class ChatService {
     private final RedisService redisService;
     private final WebSocketService webSocketService;
     private final UserServiceClient userServiceClient;
+    private final MessageEventPublisher messageEventPublisher;
 
     @Transactional
     public ChatRoomDTO createChat(Long userId1, Long userId2) {
@@ -186,6 +189,7 @@ public class ChatService {
                 .isRead(false)
                 .build();
         ChatMessage saved = chatMessageRepository.save(chatMessage);
+        publishMessageCreatedV1(saved, getPreviewText(sendMessageRequest.getContent(), List.of()));
 
         //update last activity
         updateChatLastActivity(sendMessageRequest.getChatId(), sendMessageRequest.getContent());
@@ -212,9 +216,11 @@ public class ChatService {
             throw new IllegalArgumentException("User is not a member of this chat");
         }
 
+        UserInfoDTO senderInfo = getUserInfo(senderId);
         ChatMessage message = ChatMessage.builder()
                 .chatId(chatId)
                 .senderId(senderId)
+                .senderName(senderInfo.getDisplayName())
                 .content(content)
                 .messageType(type != null ? type : MessageType.MIXED)
                 .timestamp(LocalDateTime.now())
@@ -235,9 +241,12 @@ public class ChatService {
         }
 
         updateChatLastActivity(chatId, getPreviewText(content, attachments));
+        publishMessageCreatedV1(savedMessage, getPreviewText(content, attachments));
 
-        // Sending via websocket with attachments
-        webSocketService.sendMixedMessageToChat(chatId, savedMessage, attachments);
+        redisService.updatePresence(senderId, chatId);
+        ChatMessageDTO messageDTO = toMessageDTO(savedMessage, senderInfo);
+        webSocketService.sendMessageToChat(chatId, messageDTO);
+        webSocketService.notifyUserJoinedChat(chatId, senderId);
 
         return MessageWithAttachmentsDTO.fromEntity(savedMessage, attachments);
     }
@@ -252,10 +261,12 @@ public class ChatService {
             throw new IllegalArgumentException("User is not a member of this chat");
         }
 
+        UserInfoDTO senderInfo = getUserInfo(senderId);
         // Creating a message without text
         ChatMessage message = ChatMessage.builder()
                 .chatId(chatId)
                 .senderId(senderId)
+                .senderName(senderInfo.getDisplayName())
                 .content(null)
                 .messageType(type)
                 .timestamp(LocalDateTime.now())
@@ -275,8 +286,12 @@ public class ChatService {
         }
 
         updateChatLastActivity(chatId, getPreviewText(null, attachments));
+        publishMessageCreatedV1(savedMessage, getPreviewText(null, attachments));
 
-        webSocketService.sendMixedMessageToChat(chatId, savedMessage, attachments);
+        redisService.updatePresence(senderId, chatId);
+        ChatMessageDTO messageDTO = toMessageDTO(savedMessage, senderInfo);
+        webSocketService.sendMessageToChat(chatId, messageDTO);
+        webSocketService.notifyUserJoinedChat(chatId, senderId);
 
         return MessageWithAttachmentsDTO.fromEntity(savedMessage, attachments);
     }
@@ -342,8 +357,6 @@ public class ChatService {
             return;
         }
 
-        String lastId = unreadMessages.getLast().getId();
-
         for (ChatMessage message : unreadMessages) {
             message.setRead(true);
             message.setReadAt(LocalDateTime.now());
@@ -371,6 +384,53 @@ public class ChatService {
     }
 
     @Transactional
+    public ChatMessageDTO editMessage(String messageId, Long senderId, String newContent) {
+        ChatMessage message = chatMessageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+
+        if (!senderId.equals(message.getSenderId())) {
+            throw new IllegalArgumentException("You can only edit your own messages");
+        }
+
+        MessageType messageType = message.getMessageType() != null ? message.getMessageType() : MessageType.TEXT;
+        if (messageType != MessageType.TEXT && messageType != MessageType.MIXED && messageType != MessageType.ATTACHMENT) {
+            throw new IllegalArgumentException("This message cannot be edited");
+        }
+
+        boolean hasAttachments = !attachmentRepository.findByMessageId(message.getId()).isEmpty();
+
+        String normalizedContent = newContent == null ? "" : newContent.trim();
+        MessageType resultingType;
+
+        if (normalizedContent.isBlank()) {
+            if (!hasAttachments) {
+                throw new IllegalArgumentException("Message content cannot be blank");
+            }
+            message.setContent(null);
+            resultingType = MessageType.ATTACHMENT;
+        } else {
+            message.setContent(normalizedContent);
+            resultingType = hasAttachments ? MessageType.MIXED : MessageType.TEXT;
+        }
+        message.setMessageType(resultingType);
+
+        LocalDateTime editedAt = LocalDateTime.now();
+        message.setEditedAt(editedAt);
+        ChatMessage updatedMessage = chatMessageRepository.save(message);
+
+        webSocketService.notifyMessageEdited(
+                updatedMessage.getId(),
+                updatedMessage.getChatId(),
+                updatedMessage.getContent(),
+                senderId,
+                editedAt,
+                updatedMessage.getMessageType()
+        );
+
+        return toMessageDTO(updatedMessage, getUserInfo(updatedMessage.getSenderId()));
+    }
+
+    @Transactional
     public void leaveChat(String chatId, Long userId) {
         ChatRoom chat = chatRoomRepository.findById(chatId)
                 .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
@@ -393,14 +453,6 @@ public class ChatService {
 
         redisService.markUserOffline(userId);
         webSocketService.notifyUserLeftChat(chatId, userId);
-    }
-
-    public void updateLastActivity(String chatId, String lastMessage) {
-        chatRoomRepository.findById(chatId).ifPresent(chatRoom -> {
-            chatRoom.setLastMessage(lastMessage);
-            chatRoom.setLastActivity(LocalDateTime.now());
-            chatRoomRepository.save(chatRoom);
-        });
     }
 
     public boolean isUserChatMember(String chatId, Long userId) {
@@ -508,20 +560,6 @@ public class ChatService {
         });
     }
 
-    private void createWelcomeMessage(String chatId, Long chatCreatorId) {
-        ChatMessage welcome = ChatMessage.builder()
-                .chatId(chatId)
-                .messageType(MessageType.TEXT)
-                .content("Chat is created! You may start messaging.")
-                .senderId(chatCreatorId)
-                .isRead(false)
-                .timestamp(LocalDateTime.now())
-                .senderName("System")
-                .build();
-
-        chatMessageRepository.save(welcome);
-    }
-
     private ChatMessageDTO toMessageDTO(ChatMessage message, UserInfoDTO senderInfo) {
         ChatMessageDTO dto = ChatMessageDTO.toDTO(message, senderInfo);
 
@@ -545,23 +583,13 @@ public class ChatService {
         return dto;
     }
 
-    private MessageType resolveMessageType(String messageType, List<String> attachmentIds) {
-        if (messageType != null && !messageType.isBlank()) {
-            return MessageType.valueOf(messageType);
-        }
-        if (attachmentIds != null && !attachmentIds.isEmpty()) {
-            return MessageType.ATTACHMENT;
-        }
-        return MessageType.TEXT;
-    }
-
     private String getPreviewText(String content, List<Attachment> attachments) {
         if (content != null && !content.isBlank()) {
             return content.length() > 50 ? content.substring(0, 47) + "..." : content;
         }
         if (attachments != null && !attachments.isEmpty()) {
             if (attachments.size() == 1) {
-                Attachment att = attachments.get(0);
+                Attachment att = attachments.getFirst();
                 if (att.isImage()) {
                     return "Image";
                 }
@@ -571,4 +599,41 @@ public class ChatService {
         }
         return "New message";
     }
+
+    private void publishMessageCreatedV1(ChatMessage savedMessage, String previewText) {
+        ChatRoom room = chatRoomRepository.findById(savedMessage.getChatId())
+                .orElseThrow(() -> new IllegalStateException("Chat room not found for message " + savedMessage.getId()));
+
+        List<Long> recipientIds = room.getMemberIds().stream()
+                .filter(memberId -> !memberId.equals(savedMessage.getSenderId()))
+                .toList();
+
+        if (recipientIds.isEmpty()) {
+            log.debug("Skipping message-created event for message {} because no recipients need push",
+                    savedMessage.getId());
+            return;
+        }
+
+        UserInfoDTO senderDto = getUserInfo(savedMessage.getSenderId());
+        String senderAvatarUrl = senderDto != null ? senderDto.getProfilePicture() : null;
+
+        MessageCreatedEventV1 event = MessageCreatedEventV1.builder()
+                .eventId(UUID.randomUUID())
+                .occurredAt(Instant.now())
+                .schemaVersion(MessageCreatedEventV1.SCHEMA_VERSION_V1)
+                .chatId(savedMessage.getChatId())
+                .messageId(savedMessage.getId())
+                .senderId(savedMessage.getSenderId())
+                .senderDisplayName(savedMessage.getSenderName())
+                .senderAvatarUrl(senderAvatarUrl)
+                .recipientUserIds(recipientIds)
+                .previewText(previewText)
+                .messageType((savedMessage.getMessageType() != null
+                        ? savedMessage.getMessageType()
+                        : MessageType.TEXT).name())
+                .build();
+
+        messageEventPublisher.publishMessageCreated(event);
+    }
+
 }

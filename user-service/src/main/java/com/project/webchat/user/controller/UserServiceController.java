@@ -7,6 +7,7 @@ import com.project.webchat.shared.dto.UserSearchResultDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.CredentialsDTO;
 import com.project.webchat.shared.dto.UserCredentialsResponse;
+import com.project.webchat.user.dto.UserSearchPageResponse;
 import com.project.webchat.user.entity.FriendRequest;
 import com.project.webchat.user.service.ContactService;
 import com.project.webchat.user.service.UserService;
@@ -85,12 +86,25 @@ public class UserServiceController {
     }
 
     @GetMapping("/search")
-    public ResponseEntity<Page<UserSearchResultDTO>> searchUsers(
+    public ResponseEntity<UserSearchPageResponse> searchUsers(
             @RequestParam("query") String query,
-            @RequestHeader(value = "X-User-Id", required = false) Long currentUserId,
+            @RequestHeader(value = "X-User-Id", required = false) String currentUserIdHeader,
             @PageableDefault(size = 20) Pageable pageable) {
+        Long currentUserId = parseOptionalUserIdHeader(currentUserIdHeader);
         Page<UserSearchResultDTO> results = userService.searchUsers(query, currentUserId, pageable);
-        return ResponseEntity.ok(results);
+        return ResponseEntity.ok(UserSearchPageResponse.from(results));
+    }
+
+    private static Long parseOptionalUserIdHeader(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (NumberFormatException e) {
+            log.warn("Ignoring invalid X-User-Id header: {}", raw);
+            return null;
+        }
     }
 
     @PostMapping("/validate-credentials")

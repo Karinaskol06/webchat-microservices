@@ -44,6 +44,32 @@ const useChatStore = create((set, get) => ({
       return { chats: nextChats };
     });
   },
+
+  /** Merge sender / profile fields onto otherUser when it matches senderId */
+  mergeChatSenderIntoOtherUser: (chatId, sender) => {
+    if (!chatId || !sender?.id) return;
+    const sid = Number(sender.id);
+    set((state) => ({
+      chats: state.chats.map((chat) => {
+        if (chat.id !== chatId || !chat.otherUser) return chat;
+        if (Number(chat.otherUser.id) !== sid) return chat;
+        const nextPic =
+          sender.profilePicture !== undefined && sender.profilePicture !== null
+            ? sender.profilePicture
+            : chat.otherUser.profilePicture;
+        return {
+          ...chat,
+          otherUser: {
+            ...chat.otherUser,
+            username: sender.username ?? chat.otherUser.username,
+            firstName: sender.firstName ?? chat.otherUser.firstName,
+            lastName: sender.lastName ?? chat.otherUser.lastName,
+            profilePicture: nextPic,
+          },
+        };
+      }),
+    }));
+  },
   
   setCurrentChat: (chat) => {
     // just update current chat and clear messages;
@@ -155,17 +181,20 @@ const useChatStore = create((set, get) => ({
   },
 
   updateChatLastMessage: (chatId, { content, timestamp, senderId }) => {
+    if (!chatId) return;
+    const key = typeof chatId === 'string' ? chatId : String(chatId);
     set((state) => ({
-      chats: state.chats.map(chat =>
-          chat.id === chatId
-              ? {
-                ...chat,
-                lastMessage: content,
-                lastMessageTime: timestamp,
-                lastMessageSenderId: senderId
-              }
-              : chat
-      )
+      chats: state.chats.map((chat) => {
+        if (String(chat.id) !== key) return chat;
+        const nextPreview = typeof content === 'string' ? content : String(content ?? '');
+        return {
+          ...chat,
+          lastMessage: nextPreview,
+          lastMessageContent: nextPreview,
+          lastMessageTime: timestamp,
+          lastMessageSenderId: senderId,
+        };
+      }),
     }));
   },
 
@@ -198,14 +227,20 @@ const useChatStore = create((set, get) => ({
     }));
   },
 
-  // updating message text
-  updateMessageContent: (messageId, newContent) => {
+  // updating message text (and optional messageType after caption edits)
+  updateMessageContent: (messageId, newContent, editedAt = new Date().toISOString(), messageType) => {
     set((state) => ({
       messages: state.messages.map(msg =>
           msg.id === messageId
-              ? { ...msg, content: newContent, isEdited: true }
+              ? {
+                  ...msg,
+                  content: newContent ?? '',
+                  isEdited: true,
+                  editedAt,
+                  ...(messageType != null ? { messageType } : {}),
+                }
               : msg
-      )
+      ),
     }));
   },
 
