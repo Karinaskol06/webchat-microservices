@@ -72,9 +72,9 @@ public class FileStorageService {
 
             // Size validation
             if (file.getSize() > maxSize) {
+                long maxMb = Math.max(1, maxSize / 1024 / 1024);
                 throw new IllegalArgumentException(
-                        String.format("File size (%d bytes) exceeds maximum allowed (%d bytes). " +
-                                        "Max size: %d MB", file.getSize(), maxSize, maxSize / 1024 / 1024)
+                        String.format("File is too large. Maximum size is %d MB.", maxMb)
                 );
             }
 
@@ -88,9 +88,15 @@ public class FileStorageService {
             String extension = getFileExtension(originalFilename);
             String extensionWithoutDot = extension.startsWith(".") ? extension.substring(1) : extension;
             if (!allowedExtensionSet.contains(extensionWithoutDot.toLowerCase())) {
+                String allowedList = allowedExtensionSet.stream()
+                        .sorted()
+                        .collect(Collectors.joining(", "));
                 throw new IllegalArgumentException(
-                        String.format("File extension '%s' is not allowed. Allowed: %s",
-                                extension, allowedExtensionSet)
+                        String.format(
+                                "This file type is not allowed (.%s). Allowed types: %s.",
+                                extensionWithoutDot.toLowerCase(),
+                                allowedList
+                        )
                 );
             }
 
@@ -110,7 +116,9 @@ public class FileStorageService {
             }
             // verify magic number matches extension
             if (!isValidFileType(fileHeader, extension)) {
-                throw new IllegalArgumentException("File content does not match its extension");
+                throw new IllegalArgumentException(
+                        "This file doesn't match its type. It may be corrupted or renamed with the wrong extension."
+                );
             }
 
             // Generating a safe filename
@@ -200,6 +208,51 @@ public class FileStorageService {
     public Attachment getAttachmentById(String attachmentId) {
         return attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new RuntimeException("Attachment wasn't found"));
+    }
+
+    /**
+     * Copies the stored file and creates a new attachment row for a forwarded message
+     * (each message owns its files so deletes and chat scoping stay correct).
+     */
+    public Attachment cloneAttachmentForForward(Attachment source, String newMessageId, String targetChatId,
+                                              Long uploaderId) {
+        try {
+            Path sourcePath = Paths.get(source.getFilePath()).toAbsolutePath().normalize();
+            if (!Files.exists(sourcePath) || !Files.isRegularFile(sourcePath)) {
+                throw new IllegalArgumentException("Original file is missing for this attachment.");
+            }
+
+            String extension = getFileExtension(source.getFilename());
+            if ((extension == null || extension.isEmpty()) && source.getStoredFilename() != null
+                    && source.getStoredFilename().contains(".")) {
+                extension = source.getStoredFilename().substring(source.getStoredFilename().lastIndexOf('.'));
+            }
+            if (extension == null || extension.isEmpty()) {
+                extension = ".bin";
+            }
+            String normalizedExt = extension.startsWith(".") ? extension : "." + extension;
+            String safeStoredFilename = UUID.randomUUID().toString() + normalizedExt;
+            Path targetPath = uploadPath.resolve(safeStoredFilename);
+            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+            Attachment clone = Attachment.builder()
+                    .id(UUID.randomUUID().toString())
+                    .filename(source.getFilename())
+                    .storedFilename(safeStoredFilename)
+                    .filePath(targetPath.toAbsolutePath().toString())
+                    .size(source.getSize())
+                    .mimeType(source.getMimeType())
+                    .fileType(source.getFileType())
+                    .chatId(targetChatId)
+                    .uploaderId(uploaderId)
+                    .messageId(newMessageId)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            return attachmentRepository.save(clone);
+        } catch (IOException e) {
+            log.error("Failed to clone attachment for forward: {}", e.getMessage());
+            throw new RuntimeException("Failed to clone attachment for forward", e);
+        }
     }
 
     /* helper methods */

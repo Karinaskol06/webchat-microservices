@@ -16,6 +16,7 @@ import MessageList from '../components/chat/MessageList';
 import MessageInput from '../components/chat/MessageInput';
 import EmojiSidebar from '../components/chat/EmojiSidebar';
 import UserProfileDialog from '../components/user/UserProfileDialog';
+import ForwardChatDialog from '../components/chat/ForwardChatDialog';
 import UserSearchDialog from '../components/chat/UserSearchDialog';
 import useWebSocket from '../hooks/useWebSocket';
 import useMessages from '../hooks/useMessages';
@@ -36,7 +37,8 @@ const ChatPage = () => {
   const chats = useChatStore((state) => state.chats);
   const setCurrentChat = useChatStore((state) => state.setCurrentChat);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [profileDialogUser, setProfileDialogUser] = useState(null);
   const [userSearchOpen, setUserSearchOpen] = useState(false);
   const [presenceStatus, setPresenceStatus] = useState(null);
   const [emojiSidebarOpen, setEmojiSidebarOpen] = useState(false);
@@ -57,6 +59,8 @@ const ChatPage = () => {
   const {
     newMessage,
     setNewMessage,
+    composerError,
+    setComposerError,
     handleSendMessage,
     handleTyping,
     handleKeyPress,
@@ -64,7 +68,28 @@ const ChatPage = () => {
     handleSelectAttachments,
     handleRemoveAttachment,
     messagesEndRef,
+    replyToMessage,
+    setReplyToMessage,
   } = useMessages(currentChat);
+
+  const [messageToForward, setMessageToForward] = useState(null);
+
+  const closeProfileDialog = () => {
+    setProfileDialogOpen(false);
+    setProfileDialogUser(null);
+  };
+
+  const openPartnerProfile = () => {
+    if (!otherUser) return;
+    setProfileDialogUser(otherUser);
+    setProfileDialogOpen(true);
+  };
+
+  const openForwardedProfile = (userLike) => {
+    if (userLike == null || userLike.id == null) return;
+    setProfileDialogUser(userLike);
+    setProfileDialogOpen(true);
+  };
 
   useWebSocket(user, currentChat?.id, user?.id);
 
@@ -294,6 +319,18 @@ const ChatPage = () => {
     }
   };
 
+  const handleJoinedRoom = useCallback((dto) => {
+    if (!dto?.id) return;
+    useChatStore.getState().upsertChat(dto);
+    setCurrentChat(dto);
+    setUserSearchOpen(false);
+  }, [setCurrentChat]);
+
+  const channelComposerLocked =
+    Boolean(currentChat) &&
+    String(currentChat?.type || '').toUpperCase() === 'CHANNEL' &&
+    !currentChat?.isCurrentUserChannelCreator;
+
   // UI Rendering block
   if (!currentChat) {
     return (
@@ -310,6 +347,7 @@ const ChatPage = () => {
           open={userSearchOpen}
           onClose={() => setUserSearchOpen(false)}
           onSelectUser={handleSelectUserForNewChat}
+          onJoinedRoom={handleJoinedRoom}
           currentUserId={user?.id}
         />
       </Box>
@@ -329,7 +367,7 @@ const ChatPage = () => {
             presenceStatus={presenceStatus}
             isTyping={isOtherUserTyping} 
             emojiSidebarOpen={emojiSidebarOpen}
-            onOpenProfile={() => setProfileOpen(true)}
+            onOpenProfile={openPartnerProfile}
             onShowEmojiSidebar={() => setEmojiSidebarOpen(true)}
           />
         </Paper>
@@ -358,6 +396,9 @@ const ChatPage = () => {
           messages={messages}
           currentUserId={user?.id}
           messagesEndRef={messagesEndRef}
+          onReply={setReplyToMessage}
+          onOpenForward={(msg) => setMessageToForward(msg)}
+          onOpenForwardedProfile={openForwardedProfile}
         />
 
         <MessageInput
@@ -369,14 +410,25 @@ const ChatPage = () => {
           attachments={selectedAttachments}
           onSelectAttachments={handleSelectAttachments}
           onRemoveAttachment={handleRemoveAttachment}
+          replyToMessage={replyToMessage}
+          onCancelReply={() => setReplyToMessage(null)}
           emojiSidebarOpen={emojiSidebarOpen}
           onToggleEmojiSidebar={() => setEmojiSidebarOpen((prev) => !prev)}
+          composerError={composerError}
+          onDismissComposerError={() => setComposerError('')}
+          channelReadOnly={channelComposerLocked}
         />
 
         <UserProfileDialog
-          open={profileOpen}
-          onClose={() => setProfileOpen(false)}
-          user={otherUser}
+          open={profileDialogOpen && Boolean(profileDialogUser)}
+          onClose={closeProfileDialog}
+          user={profileDialogUser}
+        />
+
+        <ForwardChatDialog
+          open={Boolean(messageToForward)}
+          message={messageToForward}
+          onClose={() => setMessageToForward(null)}
         />
       </Box>
 
@@ -391,6 +443,7 @@ const ChatPage = () => {
         open={userSearchOpen}
         onClose={() => setUserSearchOpen(false)}
         onSelectUser={handleSelectUserForNewChat}
+        onJoinedRoom={handleJoinedRoom}
         currentUserId={user?.id}
       />
     </Box>

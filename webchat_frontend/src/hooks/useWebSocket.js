@@ -76,23 +76,30 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
           const store = useChatStore.getState();
           const routing = routingRef.current;
           const sid = routing.userId;
-          const openId = routing.chatId;
+          // Use live store id: routingRef updates on the next render and lags behind after setCurrentChat
+          // (e.g. forward-to-another-chat), which would skip addMessage for the forwarded message.
+          const openId = store.currentChat?.id;
 
           const senderId = message.senderId || message.sender?.id;
           const isIncoming = Boolean(senderId && Number(senderId) !== Number(sid));
           const lastMessageText = getLastMessagePreview(message);
 
-          store.updateChatLastMessage(id, {
+          const topicChatId = String(message.chatId ?? id);
+
+          store.updateChatLastMessage(topicChatId, {
             content: lastMessageText,
             timestamp: message.timestamp,
             senderId,
           });
 
           if (message.sender) {
-            store.mergeChatSenderIntoOtherUser(id, message.sender);
+            store.mergeChatSenderIntoOtherUser(topicChatId, message.sender);
           }
 
-          const isFocused = String(openId) === String(id);
+          const isFocused =
+            openId != null &&
+            openId !== '' &&
+            String(openId) === topicChatId;
           if (isFocused) {
             store.addMessage(message);
             if (isIncoming) {
@@ -100,12 +107,12 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
                 clearTimeout(markReadTimeoutRef.current);
               }
               markReadTimeoutRef.current = window.setTimeout(() => {
-                chatService.markAsRead(id).catch(() => {});
-                useChatStore.getState().resetUnreadCount(id);
+                chatService.markAsRead(topicChatId).catch(() => {});
+                useChatStore.getState().resetUnreadCount(topicChatId);
               }, 500);
             }
           } else if (isIncoming) {
-            store.incrementUnreadCount(id);
+            store.incrementUnreadCount(topicChatId);
           }
         },
         onPresence: () => {
@@ -177,6 +184,9 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
     if (!user) return;
     const unsubscribe = subscribeToUserChatEvents({
       onChatCreated: (chat) => {
+        useChatStore.getState().upsertChat(chat);
+      },
+      onChatUpdated: (chat) => {
         useChatStore.getState().upsertChat(chat);
       },
     });

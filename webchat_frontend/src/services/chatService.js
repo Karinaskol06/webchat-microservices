@@ -27,6 +27,43 @@ const chatService = {
     }
   },
 
+  discoverRooms: async (q = '', page = 0, size = 20) => {
+    try {
+      const response = await api.get('/api/chat/discover', {
+        params: { q: q?.trim() ?? '', page, size },
+      });
+      const data = response.data;
+      return {
+        rooms: Array.isArray(data?.content) ? data.content : [],
+        totalPages: data?.totalPages ?? 0,
+        page: data?.number ?? page,
+        last: data?.last ?? true,
+      };
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  joinPublicRoom: async (roomId) => {
+    try {
+      const response = await api.post(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/join`
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  joinByInvite: async (token) => {
+    try {
+      const response = await api.post('/api/chat/join-invite', { token });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   bootstrapMessage: async ({ recipientUserId, content, clientRequestKey }) => {
     try {
       const response = await api.post('/api/chat/bootstrap-message', {

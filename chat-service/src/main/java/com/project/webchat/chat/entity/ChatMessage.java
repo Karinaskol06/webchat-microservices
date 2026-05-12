@@ -35,6 +35,15 @@ public class ChatMessage {
 
     private MessageType messageType;
 
+    @Indexed
+    private String replyToMessageId;
+
+    /** Original author when this message is a forward (may differ from {@link #senderId}). */
+    private Long forwardedFromUserId;
+
+    /** Username snapshot for display ("Forwarded from …"). */
+    private String forwardedFromUsername;
+
     @Builder.Default
     private List<String> attachmentIds = new ArrayList<>();
 
@@ -50,7 +59,4 @@ public class ChatMessage {
     @Builder.Default
     private LocalDateTime readAt = null;
 
-    public boolean hasAttachments() {
-        return !attachmentIds.isEmpty();
-    }
 }

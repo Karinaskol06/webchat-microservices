@@ -2,6 +2,7 @@ package com.project.webchat.chat.repository;
 
 import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
+import com.project.webchat.chat.entity.RoomVisibility;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
@@ -26,4 +27,10 @@ public interface ChatRoomRepository extends MongoRepository<ChatRoom, String> {
 
     //check if chat exists for specified user
     boolean existsByIdAndMemberIdsContains(String chatId, Long userId);
+
+    Optional<ChatRoom> findByInviteToken(String inviteToken);
+
+    @Query("{ 'type': { $in: [?0, ?1] }, 'visibility': ?2, 'groupName': { $regex: ?3, $options: 'i' }, 'memberIds': { $nin: [?4] } }")
+    Page<ChatRoom> findPublicDiscoverableRooms(ChatType groupType, ChatType channelType, RoomVisibility publicVisibility,
+                                               String nameRegex, Long excludeUserId, Pageable pageable);
 }

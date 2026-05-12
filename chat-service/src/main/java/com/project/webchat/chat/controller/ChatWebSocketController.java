@@ -23,6 +23,18 @@ public class ChatWebSocketController {
     @MessageMapping("/chat.send")
     public void sendMessage(SendMessageWsRequest request, Principal principal) {
         Long senderId = resolveAuthenticatedUserId(principal);
+        if (request.getChatId() == null || request.getChatId().isBlank()) {
+            throw new IllegalArgumentException("Chat id is required.");
+        }
+
+        if (request.getForwardSourceMessageId() != null && !request.getForwardSourceMessageId().isBlank()) {
+            chatService.forwardMessage(
+                    senderId,
+                    request.getChatId().trim(),
+                    request.getForwardSourceMessageId().trim());
+            return;
+        }
+
         if (!request.isValid()) {
             throw new IllegalArgumentException("Message must have either content or attachments.");
         }
@@ -34,7 +46,8 @@ public class ChatWebSocketController {
                     request.getChatId(),
                     request.getContent(),
                     request.getAttachmentIds(),
-                    request.getType()
+                    request.getType(),
+                    request.getReplyToMessageId()
             );
             return;
         }
@@ -44,6 +57,7 @@ public class ChatWebSocketController {
             SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
                     .chatId(request.getChatId())
                     .content(request.getContent())
+                    .replyToMessageId(request.getReplyToMessageId())
                     .type(request.getType())
                     .build();
             chatService.sendMessage(senderId, sendMessageRequest);
@@ -56,7 +70,8 @@ public class ChatWebSocketController {
                     senderId,
                     request.getChatId(),
                     request.getAttachmentIds(),
-                    request.getType()
+                    request.getType(),
+                    request.getReplyToMessageId()
             );
         }
     }

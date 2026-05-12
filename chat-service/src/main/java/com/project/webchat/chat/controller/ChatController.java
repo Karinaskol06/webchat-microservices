@@ -1,11 +1,16 @@
 package com.project.webchat.chat.controller;
 
-import com.project.webchat.chat.dto.ChatMessageDTO;
+import com.project.webchat.chat.dto.AdminMutationRequest;
 import com.project.webchat.chat.dto.BootstrapMessageRequest;
 import com.project.webchat.chat.dto.BootstrapMessageResponse;
+import com.project.webchat.chat.dto.ChatMessageDTO;
 import com.project.webchat.chat.dto.ChatRoomDTO;
 import com.project.webchat.chat.dto.CreateChatRequest;
+import com.project.webchat.chat.dto.CreateGroupChannelRequest;
+import com.project.webchat.chat.dto.DiscoverableRoomDTO;
 import com.project.webchat.chat.dto.EditMessageRequest;
+import com.project.webchat.chat.dto.InvitePayloadDTO;
+import com.project.webchat.chat.dto.JoinInviteRequest;
 import com.project.webchat.chat.security.CustomUserDetails;
 import com.project.webchat.chat.service.ChatService;
 import com.project.webchat.chat.service.WebSocketService;
@@ -168,12 +173,71 @@ public class ChatController {
         return ResponseEntity.ok().build();
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, String>> handleIllegalArgumentException(
-            IllegalArgumentException e) {
-        log.error("Illegal argument: {}", e.getMessage());
-        return ResponseEntity.badRequest()
-                .body(Map.of("error", e.getMessage()));
+    @PostMapping("/rooms/group")
+    public ResponseEntity<ChatRoomDTO> createGroupRoom(
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestBody @jakarta.validation.Valid CreateGroupChannelRequest request) {
+        ChatRoomDTO dto = chatService.createGroupRoom(currentUser.getId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+    }
+
+    @PostMapping("/rooms/channel")
+    public ResponseEntity<ChatRoomDTO> createChannelRoom(
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestBody @jakarta.validation.Valid CreateGroupChannelRequest request) {
+        ChatRoomDTO dto = chatService.createChannelRoom(currentUser.getId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+    }
+
+    @GetMapping("/discover")
+    public ResponseEntity<Page<DiscoverableRoomDTO>> discoverRooms(
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestParam(required = false) String q,
+            @PageableDefault(size = 20, sort = "lastActivity", direction = Sort.Direction.DESC)
+            Pageable pageable) {
+        Page<DiscoverableRoomDTO> page = chatService.discoverPublicRooms(currentUser.getId(), q, pageable);
+        return ResponseEntity.ok(page);
+    }
+
+    @PostMapping("/rooms/{id}/join")
+    public ResponseEntity<ChatRoomDTO> joinPublicRoom(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        ChatRoomDTO dto = chatService.joinPublicRoom(id, currentUser.getId());
+        return ResponseEntity.ok(dto);
+    }
+
+    @PostMapping("/join-invite")
+    public ResponseEntity<ChatRoomDTO> joinByInvite(
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestBody @jakarta.validation.Valid JoinInviteRequest request) {
+        ChatRoomDTO dto = chatService.joinByInvite(currentUser.getId(), request.getToken());
+        return ResponseEntity.ok(dto);
+    }
+
+    @PostMapping("/rooms/{id}/invite/regenerate")
+    public ResponseEntity<InvitePayloadDTO> regenerateInvite(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        InvitePayloadDTO payload = chatService.regenerateInvite(id, currentUser.getId());
+        return ResponseEntity.ok(payload);
+    }
+
+    @GetMapping("/rooms/{id}/invite")
+    public ResponseEntity<InvitePayloadDTO> getInvite(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        InvitePayloadDTO payload = chatService.getInvitePayload(id, currentUser.getId());
+        return ResponseEntity.ok(payload);
+    }
+
+    @PostMapping("/rooms/{id}/admins")
+    public ResponseEntity<ChatRoomDTO> mutateGroupAdmins(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestBody @jakarta.validation.Valid AdminMutationRequest request) {
+        ChatRoomDTO dto = chatService.mutateGroupAdmins(id, currentUser.getId(), request);
+        return ResponseEntity.ok(dto);
     }
 
 }

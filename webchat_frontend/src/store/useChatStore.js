@@ -1,11 +1,35 @@
 import { create } from 'zustand';
 
+/** Sort key for sidebar: latest activity or last preview line time */
+const chatRecencyMs = (chat) => {
+  const raw = chat?.lastMessageTime ?? chat?.lastActivity ?? null;
+  if (raw == null || raw === '') return 0;
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : 0;
+};
+
+export const reorderChatsByRecent = (chats) => {
+  const arr = Array.isArray(chats) ? [...chats] : [];
+  arr.sort((a, b) => chatRecencyMs(b) - chatRecencyMs(a));
+  return arr;
+};
+
 const useChatStore = create((set, get) => ({
   normalizeMessage: (m) => {
     if (!m || typeof m !== 'object') return m;
-    if (typeof m.isRead === 'boolean') return m;
-    if (typeof m.read === 'boolean') return { ...m, isRead: m.read };
-    return m;
+    const next = { ...m };
+    if (typeof m.read === 'boolean' && typeof m.isRead !== 'boolean') {
+      next.isRead = m.read;
+    }
+    const replyId =
+      m.replyToMessageId ?? m.reply_to_message_id ?? m.replyToMessageID;
+    if (replyId != null && replyId !== '' && !next.replyToMessageId) {
+      next.replyToMessageId = replyId;
+    }
+    if (m.replied_message != null && next.repliedMessage == null) {
+      next.repliedMessage = m.replied_message;
+    }
+    return next;
   },
   // a list of user's chats
   chats: [],
@@ -31,17 +55,20 @@ const useChatStore = create((set, get) => ({
   setChats: (chats) => {
     // Ensure chats is always an array
     const chatsArray = Array.isArray(chats) ? chats : [];
-    set({ chats: chatsArray, error: null });
+    set({ chats: reorderChatsByRecent(chatsArray), error: null });
   },
 
   upsertChat: (chat) => {
-    if (!chat?.id) return;
+    if (chat?.id == null || chat.id === '') return;
+    const cid = String(chat.id);
     set((state) => {
-      const exists = state.chats.some((item) => item.id === chat.id);
+      const exists = state.chats.some((item) => String(item?.id) === cid);
       const nextChats = exists
-        ? state.chats.map((item) => (item.id === chat.id ? { ...item, ...chat } : item))
+        ? state.chats.map((item) =>
+            String(item?.id) === cid ? { ...item, ...chat } : item
+          )
         : [chat, ...state.chats];
-      return { chats: nextChats };
+      return { chats: reorderChatsByRecent(nextChats) };
     });
   },
 
@@ -49,9 +76,10 @@ const useChatStore = create((set, get) => ({
   mergeChatSenderIntoOtherUser: (chatId, sender) => {
     if (!chatId || !sender?.id) return;
     const sid = Number(sender.id);
+    const key = String(chatId);
     set((state) => ({
       chats: state.chats.map((chat) => {
-        if (chat.id !== chatId || !chat.otherUser) return chat;
+        if (String(chat.id) !== key || !chat.otherUser) return chat;
         if (Number(chat.otherUser.id) !== sid) return chat;
         const nextPic =
           sender.profilePicture !== undefined && sender.profilePicture !== null
@@ -75,15 +103,21 @@ const useChatStore = create((set, get) => ({
     // just update current chat and clear messages;
     // the page component is responsible for fetching history
     set((state) => {
-      // If same chat is clicked, don't trigger re-render
-      if (state.currentChat?.id === chat?.id) {
+      const prevId = state.currentChat?.id;
+      const nextId = chat?.id;
+      // Same chat (normalize id types — e.g. list uses string, header uses number) must NOT
+      // clear messages; that was breaking repeated forwards and racing history loads.
+      if (
+        prevId != null &&
+        nextId != null &&
+        String(prevId) === String(nextId)
+      ) {
         return state;
       }
-      // New chat selected - clear messages
-      return { 
-        currentChat: chat, 
+      return {
+        currentChat: chat,
         messages: [],
-        error: null 
+        error: null,
       };
     });
   },
@@ -103,8 +137,10 @@ const useChatStore = create((set, get) => ({
     set((state) => {
       const normalize = get().normalizeMessage;
       const normalizedMessage = normalize(withId);
-      // Check if message already exists (prevents duplicates)
-      const messageExists = state.messages.some((m) => m.id === message.id);
+      const nid = String(normalizedMessage.id ?? resolvedId);
+      const messageExists = state.messages.some(
+        (m) => String(m.id ?? m._id) === nid
+      );
       if (messageExists) return state;
       
       // Add new message and sort by timestamp if needed
@@ -183,8 +219,8 @@ const useChatStore = create((set, get) => ({
   updateChatLastMessage: (chatId, { content, timestamp, senderId }) => {
     if (!chatId) return;
     const key = typeof chatId === 'string' ? chatId : String(chatId);
-    set((state) => ({
-      chats: state.chats.map((chat) => {
+    set((state) => {
+      const next = state.chats.map((chat) => {
         if (String(chat.id) !== key) return chat;
         const nextPreview = typeof content === 'string' ? content : String(content ?? '');
         return {
@@ -194,15 +230,17 @@ const useChatStore = create((set, get) => ({
           lastMessageTime: timestamp,
           lastMessageSenderId: senderId,
         };
-      }),
-    }));
+      });
+      return { chats: reorderChatsByRecent(next) };
+    });
   },
 
   // add to unread counter
   incrementUnreadCount: (chatId) => {
+    const key = String(chatId);
     set((state) => ({
       chats: state.chats.map(chat =>
-          chat.id === chatId
+          String(chat.id) === key
               ? { ...chat, unreadCount: (chat.unreadCount || 0) + 1 }
               : chat
       )
@@ -211,9 +249,10 @@ const useChatStore = create((set, get) => ({
 
   // reset the counter of unread messages
   resetUnreadCount: (chatId) => {
+    const key = String(chatId);
     set((state) => ({
       chats: state.chats.map(chat =>
-          chat.id === chatId
+          String(chat.id) === key
               ? { ...chat, unreadCount: 0 }
               : chat
       )

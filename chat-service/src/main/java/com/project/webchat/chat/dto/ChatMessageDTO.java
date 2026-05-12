@@ -26,6 +26,11 @@ public class ChatMessageDTO {
     private LocalDateTime editedAt;
     private boolean isRead;
     private LocalDateTime readAt;
+    private String replyToMessageId;
+    private ReplyPreviewDTO repliedMessage;
+
+    /** Present when this message was forwarded; click opens original author's profile. */
+    private UserInfoDTO forwardedFrom;
 
     //for websocket (MESSAGE, WRITING, READ_RECEIPT)
     private String type;
@@ -44,6 +49,7 @@ public class ChatMessageDTO {
                 .editedAt(chatMessage.getEditedAt())
                 .isRead(chatMessage.isRead())
                 .readAt(chatMessage.getReadAt())
+                .replyToMessageId(chatMessage.getReplyToMessageId())
                 .type("MESSAGE")
                 .build();
     }

@@ -5,6 +5,7 @@ import Navbar from './components/layout/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ChatPage from './pages/ChatPage';
+import JoinInvitePage from './pages/JoinInvitePage';
 import useAuthStore from './store/useAuthStore';
 import authService from './services/authService';
 import chatService from './services/chatService';
@@ -103,6 +104,14 @@ function App() {
                   <ChatPage />
                 </ProtectedRoute>
               } 
+            />
+            <Route
+              path="/join/:token"
+              element={
+                <ProtectedRoute>
+                  <JoinInvitePage />
+                </ProtectedRoute>
+              }
             />
             <Route path="/" element={<Navigate to="/chat" />} />
           </Routes>

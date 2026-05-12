@@ -1,35 +1,147 @@
-import React from 'react';
-import { Box, Button, Divider, IconButton, Tooltip, Typography } from '@mui/material';
+import React, { useState } from 'react';
+import {
+  Box,
+  Chip,
+  Divider,
+  IconButton,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
-const EMOJIS = [
-  '😀','😃','😄','😁','😆','😅','😂','🤣','🥲','☺️','😊','😇','🙂','🙃','😉','😌',
-  '😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳',
-  '😏','😒','😞','😔','😟','😕','🙁','☹️','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬',
-  '🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🫢','🤭','🫣','🤫','🤥',
-  '😶','😶‍🌫️','😐','😑','😬','🫠','🙄','😯','😦','😧','😮','😮‍💨','😲','🥱','😴','🤤','😪','😵','😵‍💫',
-  '🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠','😈','👿','👹','👺','🤡','💩',
-  '👻','💀','☠️','👽','👾','🤖',
-  '😺','😸','😹','😻','😼','😽','🙀','😿','😾',
-  '👍','👎','👏','🙏','🫶','👋','🤝','👌',
-  '🔥','🎉','❤️','💙','💚','💛','🖤','🤍','💜','💯','✅','❌','⚡','⭐','🌟','💬','📎','📌',
+/**
+ * Curated emoji list by category — rendered natively so ZWJ / skin tones / flags
+ * display correctly (Twemoji CDN filenames are easy to get wrong per sequence).
+ */
+const EMOJI_CATEGORIES = [
+  {
+    label: 'Smileys',
+    emojis: [
+      '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍',
+      '🤩', '😘', '😗', '☺️', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭',
+      '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😶‍🌫️', '😏', '😒', '🙄', '😬', '😮‍💨', '🤥',
+      '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵', '🥶', '🥴', '😵',
+      '😵‍💫', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐', '😕', '🫤', '😟', '🙁', '☹️', '😮', '😯',
+      '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😓',
+      '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺',
+      '👻', '👽', '👾', '🤖', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾',
+    ],
+  },
+  {
+    label: 'Gestures',
+    emojis: [
+      '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟', '🤘', '🤙', '👈',
+      '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '🫶', '👐',
+      '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '🧠',
+      '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅', '👄',
+    ],
+  },
+  {
+    label: 'People',
+    emojis: [
+      '👶', '🧒', '👦', '👧', '🧑', '👱', '👨', '🧔', '👩', '🧓', '👴', '👵', '🙍', '🙎', '🙅',
+      '🙆', '💁', '🙋', '🧏', '🙇', '🤦', '🤷', '👮', '🕵️', '💂', '🥷', '👷', '🤴', '👸', '👳',
+      '👲', '🧕', '🤵', '👰', '🤰', '🤱', '👼', '🎅', '🤶', '🦸', '🦹', '🧙', '🧚', '🧛', '🧜',
+      '🧝', '🧞', '🧟', '💆', '💇', '🚶', '🧍', '🧎', '🏃', '💃', '🕺', '🕴️', '👯', '🧖', '🧗',
+      '🤺', '🏇', '⛷️', '🏂', '🏌️', '🏄', '🚣', '🏊', '⛹️', '🏋️', '🚴', '🚵', '🤸', '🤼', '🤽',
+      '🤾', '🤹', '🧘', '🛀', '🛌',
+    ],
+  },
+  {
+    label: 'Hearts & signs',
+    emojis: [
+      '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❤️‍🔥', '❤️‍🩹', '💕', '💞', '💓',
+      '💗', '💖', '💘', '💝', '💟', '💋', 
+      '✅', '☑️', '✔️', '✖️', '❌', '⭕', '❗', '❓', '❕', '❔', '‼️', '⁉️', '💯', '🔅', '🔆',
+    ],
+  },
+  {
+    label: 'Animals',
+    emojis: [
+      '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐻‍❄️', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸',
+      '🐵', '🙈', '🙉', '🙊', '🐒', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅', '🦉', '🦇',
+      '🐺', '🐗', '🐴', '🦄', '🐝', '🪱', '🐛', '🦋', '🐌', '🐞', '🐜', '🪰', '🪲', '🪳', '🦟',
+      '🦗', '🕷️', '🕸️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕', '🐙', '🦑', '🦐', '🦞', '🦀', '🐡',
+      '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🦣', '🐘', '🦛',
+      '🦏', '🐪', '🐫', '🦒', '🦘', '🦬', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐',
+      '🦌', '🐕', '🐩', '🦮', '🐕‍🦺', '🐈', '🐈‍⬛', '🪶', '🐓', '🦃', '🦤', '🦚', '🦜', '🦢', '🦩',
+      '🕊️', '🐇', '🦝', '🦨', '🦡', '🦫', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔',
+    ],
+  },
+  {
+    label: 'Food',
+    emojis: [
+      '🍎', '🍏', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍',
+      '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🫒', '🧄', '🧅',
+      '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥓', '🥩',
+      '🍗', '🍖', '🦴', '🌭', '🍔', '🍟', '🍕', '🫓', '🥪', '🥙', '🧆', '🌮', '🌯', '🫔', '🥗',
+      '🥘', '🫕', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘',
+      '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬',
+      '🍫', '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '🫖', '☕', '🍵', '🧃', '🥤', '🧋',
+      '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍾', '🧊',
+    ],
+  },
+  {
+    label: 'Activities',
+    emojis: [
+      '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸', '🏒', '🏑',
+      '🥍', '🏏', '🪃', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛼', '🛷',
+      '⛸️', '🥌', '🎿', '⛷️', '🏂', '🪂', '🏋️', '🤼', '🤸', '🤺', '⛹️', '🤾', '🏌️', '🏇', '🧘',
+      '🏄', '🏊', '🤽', '🚣', '🧗', '🚴', '🚵', '🎖️', '🏆', '🥇', '🥈', '🥉', '🏅', '🎫', '🎟️',
+      '🎪', '🤹', '🎭', '🩰', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🪘', '🎷', '🎺', '🪗',
+      '🎸', '🪕', '🎻', '🎲', '♟️', '🎯', '🎳', '🎮', '🎰', '🧩',
+    ],
+  },
+  {
+    label: 'Objects',
+    emojis: [
+      '📱', '📲', '☎️', '📞', '📟', '📠', '🔋', '🪫', '🔌', '💻', '🖥️', '🖨️', '⌨️', '🖱️', '🖲️',
+      '💽', '💾', '💿', '📀', '🧮', '🎥', '🎞️', '📽️', '📷', '📸', '📹', '📼', '🔍', '🔎', '🕯️',
+      '💡', '🔦', '🏮', '🪔', '📔', '📕', '📖', '📗', '📘', '📙', '📚', '📓', '📒', '📃', '📜',
+      '📄', '📰', '🗞️', '📑', '🔖', '🏷️', '💰', '🪙', '💴', '💵', '💶', '💷', '💸', '💳', '🧾',
+      '✉️', '📧', '📨', '📩', '📤', '📥', '📦', '📫', '📪', '📬', '📭', '📮', '✏️', '✒️', '🖋️',
+      '🖊️', '🖌️', '🖍️', '📝', '💼', '📁', '📂', '🗂️', '📅', '📆', '🗒️', '🗓️', '📇', '📈', '📉',
+      '📊', '📌', '📍', '📎', '🖇️', '📏', '📐', '✂️', '🗃️', '🗄️', '🗑️', '🔒', '🔓', '🔏', '🔐',
+      '🔑', '🗝️', '🔨', '🪓', '⛏️', '⚒️', '🛠️', '🗡️', '⚔️', '🔫', '🪃', '🏹', '🛡️', '🪚', '🔧',
+      '🪛', '🔩', '⚙️', '🗜️', '⚖️', '🦯', '🔗', '⛓️', '🪝', '🧰', '🧲', '🪜', '⚗️', '🧪', '🧫',
+      '🦠', '💉', '🩸', '💊', '🩹', '🩼', '🩺', '🩻', '🚪', '🛏️', '🛋️', '🪑', '🚽', '🚿', '🛁',
+      '🧴', '🧷', '🧹', '🧺', '🧻', '🪣', '🧼', '🪥', '🧽', '🧯', '🛒', '🚬', '⚰️', '🪦', '⚱️',
+    ],
+  },
+  {
+    label: 'Nature',
+    emojis: [
+      '🌸', '💮', '🏵️', '🌹', '🥀', '🌺', '🌻', '🌼', '🌷', '🪻', '🌱', '🪴', '🌲', '🌳', '🌴',
+      '🌵', '🌾', '🌿', '☘️', '🍀', '🍁', '🍂', '🍃', '🪹', '🪺', '🍄', '🪾', '🌑', '🌒', '🌓',
+      '🌔', '🌕', '🌖', '🌗', '🌘', '🌙', '🌚', '🌛', '🌜', '🌡️', '☀️', '🌝', '🌞', '⭐', '🌟',
+      '🌠', '☁️', '⛅', '⛈️', '🌤️', '🌥️', '🌦️', '🌧️', '🌨️', '🌩️', '🌪️', '🌫️', '🌬️', '🌀', '🌈',
+      '☂️', '☔', '⛱️', '⚡', '❄️', '☃️', '⛄', '☄️', '🔥', '💧', '🌊',
+    ],
+  },
+  {
+    label: 'Transport',
+    emojis: [
+      '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🦯',
+      '🦽', '🦼', '🛴', '🚲', '🛵', '🏍️', '🛺', '🚨', '🚔', '🚍', '🚘', '🚖', '🚡', '🚠', '🚟',
+      '🚃', '🚋', '🚞', '🚝', '🚄', '🚅', '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '🛫', '🛬', '🛩️',
+      '💺', '🛰️', '🚀', '🛸', '🚁', '🛶', '⛵', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '🪝', '⛽',
+      '🚧', '🚦', '🚥', '🛑', '🚏', '🗺️', '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡', '🎢', '🎠',
+      '⛲', '⛱️', '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', '🗻', '🏕️', '⛺', '🛖', '🏠', '🏡', '🏘️',
+      '🏚️', '🏗️', '🏭', '🏢', '🏬', '🏣', '🏤', '🏥', '🏦', '🏨', '🏪', '🏫', '🏩', '💒', '🏛️',
+    ],
+  },
 ];
 
-const TWEMOJI_BASE =
-  'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/';
-
-const emojiToTwemojiUrl = (emoji) => {
-  const codepoints = Array.from(emoji)
-    .map((c) => c.codePointAt(0).toString(16))
-    .join('-');
-  return `${TWEMOJI_BASE}${codepoints}.svg`;
-};
+const EMOJI_FONT =
+  'system-ui, "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
 
 const EmojiSidebar = ({ onClose, onEmojiClick }) => {
+  const [activeLabel, setActiveLabel] = useState(EMOJI_CATEGORIES[0]?.label ?? '');
+
   return (
     <Box
       sx={{
-        width: 280,
+        width: 300,
         borderLeft: 1,
         borderColor: 'divider',
         bgcolor: 'background.paper',
@@ -38,7 +150,15 @@ const EmojiSidebar = ({ onClose, onEmojiClick }) => {
         minHeight: 0,
       }}
     >
-      <Box sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Box
+        sx={{
+          p: 1.5,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexShrink: 0,
+        }}
+      >
         <Typography variant="subtitle2">Emojis</Typography>
         <Tooltip title="Hide emoji sidebar">
           <IconButton size="small" onClick={onClose}>
@@ -47,29 +167,103 @@ const EmojiSidebar = ({ onClose, onEmojiClick }) => {
         </Tooltip>
       </Box>
       <Divider />
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 1 }}>
-          {EMOJIS.map((emoji) => (
-            <Button
-              key={emoji}
-              variant="text"
-              onClick={() => onEmojiClick?.(emoji)}
-              sx={{ minWidth: 0, p: 0.75, lineHeight: 1 }}
+      <Box
+        sx={{
+          pt: 2,
+          pb: 1.25,
+          px: 1,
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 0.75,
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          flexShrink: 0,
+          borderBottom: 1,
+          borderColor: 'divider',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'thin',
+          '&::-webkit-scrollbar': { height: 6 },
+          '&::-webkit-scrollbar-thumb': {
+            borderRadius: 3,
+            bgcolor: 'action.selected',
+          },
+        }}
+      >
+        {EMOJI_CATEGORIES.map((cat) => (
+          <Chip
+            key={cat.label}
+            label={cat.label}
+            size="small"
+            onClick={() => setActiveLabel(cat.label)}
+            color={activeLabel === cat.label ? 'primary' : 'default'}
+            variant={activeLabel === cat.label ? 'filled' : 'outlined'}
+            sx={{ fontSize: '0.7rem', flexShrink: 0 }}
+          />
+        ))}
+      </Box>
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 1.25 }}>
+        {EMOJI_CATEGORIES.filter((c) => c.label === activeLabel).map((cat) => (
+          <Box key={cat.label}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(8, 1fr)',
+                gap: 0.25,
+              }}
             >
-              <Box
-                component="img"
-                src={emojiToTwemojiUrl(emoji)}
-                alt={emoji}
-                loading="lazy"
-                sx={{ width: 26, height: 26, display: 'block' }}
-              />
-            </Button>
-          ))}
-        </Box>
+              {cat.emojis.map((emoji) => (
+                <Tooltip key={`${cat.label}:${emoji}`} title={emoji} placement="top">
+                  <Box
+                    component="button"
+                    type="button"
+                    onClick={() => onEmojiClick?.(emoji)}
+                    sx={{
+                      border: 0,
+                      borderRadius: 1,
+                      bgcolor: 'transparent',
+                      cursor: 'pointer',
+                      p: 0.5,
+                      m: 0,
+                      minWidth: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontFamily: EMOJI_FONT,
+                      fontSize: '1.5rem',
+                      lineHeight: 1,
+                      transition: 'background-color 120ms ease',
+                      '&:hover': { bgcolor: 'action.hover' },
+                      '&:focus-visible': {
+                        outline: (theme) => `2px solid ${theme.palette.primary.main}`,
+                        outlineOffset: 0,
+                      },
+                    }}
+                  >
+                    <Box
+                      component="span"
+                      sx={{
+                        fontFamily: EMOJI_FONT,
+                        fontSize: '1.5rem',
+                        lineHeight: 1,
+                        display: 'block',
+                        // Avoid clipping composite emoji (ZWJ / flags)
+                        overflow: 'visible',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {emoji}
+                    </Box>
+                  </Box>
+                </Tooltip>
+              ))}
+            </Box>
+          </Box>
+        ))}
       </Box>
     </Box>
   );
 };
 
 export default EmojiSidebar;
-

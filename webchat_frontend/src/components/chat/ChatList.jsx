@@ -10,7 +10,8 @@ import {
   Box,
   CircularProgress,
   Alert,
-  Button
+  Button,
+  Chip
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import useChatStore from '../../store/useChatStore';
@@ -102,7 +103,10 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
     const loadPresence = async () => {
       const snapshot = Array.isArray(chats) ? chats : [];
       const privateChats = snapshot.filter(
-        (chat) => String(chat?.type || '').toUpperCase() !== 'GROUP' && chat?.id && chat?.otherUser?.id,
+        (chat) =>
+          String(chat?.type || '').toUpperCase() === 'PRIVATE' &&
+          chat?.id &&
+          chat?.otherUser?.id,
       );
       if (privateChats.length === 0) {
         if (!cancelled) setPresenceByChatId({});
@@ -144,7 +148,7 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
         ? useChatStore.getState().chats
         : [];
       const chat = snapshot.find((c) => String(c.id) === String(chatId));
-      if (!chat?.otherUser?.id || String(chat?.type || '').toUpperCase() === 'GROUP') return;
+      if (!chat?.otherUser?.id || String(chat?.type || '').toUpperCase() !== 'PRIVATE') return;
       await mergePresenceIntoState([chat]);
     };
     window.addEventListener('webchat:presence-refresh', onBump);
@@ -245,16 +249,21 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
       </Box>
       <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
       {chatList.map((chat) => {
-        const isGroup = String(chat.type || '').toUpperCase() === 'GROUP';
-        const otherUser = !isGroup ? chat.otherUser : null;
-        const otherUserName = isGroup
-          ? (chat.groupName || 'Group chat')
-          : (
-              (otherUser?.firstName || otherUser?.lastName)
-                ? `${otherUser?.firstName || ''} ${otherUser?.lastName || ''}`.trim()
-                : (otherUser?.username || 'Unknown User')
-            );
-        const otherUserId = !isGroup ? otherUser?.id : null;
+        const chatType = String(chat.type || '').toUpperCase();
+        const isGroup = chatType === 'GROUP';
+        const isChannel = chatType === 'CHANNEL';
+        const isGroupOrChannel = isGroup || isChannel;
+        const otherUser = !isGroupOrChannel ? chat.otherUser : null;
+        const otherUserName = isChannel
+          ? (chat.groupName || 'Channel')
+          : isGroup
+            ? (chat.groupName || 'Group chat')
+            : (
+                (otherUser?.firstName || otherUser?.lastName)
+                  ? `${otherUser?.firstName || ''} ${otherUser?.lastName || ''}`.trim()
+                  : (otherUser?.username || 'Unknown User')
+              );
+        const otherUserId = !isGroupOrChannel ? otherUser?.id : null;
         const presence = presenceByChatId[chat.id];
         const presenceState = derivePresenceState(presence);
         
@@ -269,6 +278,8 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
         
         // Get avatar letter safely
         const avatarLetter = otherUserName?.[0]?.toUpperCase() || '?';
+        const roomAvatarSrc =
+          isGroupOrChannel ? (chat.groupPhoto || undefined) : otherUser?.profilePicture || undefined;
 
         return (
           <ListItem
@@ -303,17 +314,22 @@ const ChatList = ({ onFindUsers, onSelectChat }) => {
                   },
                 }}
               >
-                <Avatar src={otherUser?.profilePicture || undefined}>
-                  {!otherUser?.profilePicture ? avatarLetter : null}
+                <Avatar src={roomAvatarSrc}>
+                  {!roomAvatarSrc ? avatarLetter : null}
                 </Avatar>
               </Badge>
             </ListItemAvatar>
             
             <ListItemText
               primary={
-                <Typography variant="subtitle2" noWrap>
-                  {otherUserName}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                  {isChannel ? (
+                    <Chip size="small" label="Channel" color="primary" variant="outlined" sx={{ flexShrink: 0 }} />
+                  ) : null}
+                  <Typography variant="subtitle2" noWrap sx={{ minWidth: 0 }}>
+                    {otherUserName}
+                  </Typography>
+                </Box>
               }
               secondary={
                 <Typography

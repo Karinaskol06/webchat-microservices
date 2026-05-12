@@ -15,6 +15,8 @@ public class SendMessageWsRequest {
     private String content; // may be null
     private MessageType type;
     private List<String> attachmentIds;
+    private String replyToMessageId;
+    private String forwardSourceMessageId;
 
     public boolean hasContent() {
         return content != null && !content.isBlank();

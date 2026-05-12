@@ -23,11 +23,27 @@ public class ChatRoom {
     @Id
     private String id;
 
-    //PRIVATE, GROUP
+    // PRIVATE, GROUP, CHANNEL
     private ChatType type;
+
+    /**
+     * Meaningful for GROUP and CHANNEL. Null on legacy documents — treat as PRIVATE when read.
+     */
+    private RoomVisibility visibility;
 
     @Builder.Default
     private Set<Long> memberIds = new HashSet<>();
+
+    /**
+     * Admins for GROUP rooms only (invite regeneration, promotion). Ignored for CHANNEL.
+     */
+    @Builder.Default
+    private Set<Long> adminIds = new HashSet<>();
+
+    /**
+     * Opaque invite token for private GROUP / CHANNEL rooms.
+     */
+    private String inviteToken;
 
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

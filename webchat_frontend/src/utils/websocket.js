@@ -12,6 +12,8 @@ let pendingChatSubscriptions = [];
 let userEventSubscriptions = [];
 let pendingUserEventHandlers = [];
 
+const isStompConnected = () => Boolean(stompClient && stompClient.connected);
+
 export const connectWebSocket = () => {
   const token = localStorage.getItem('token');
   if (!token) {
@@ -64,7 +66,7 @@ export const connectWebSocket = () => {
 };
 
 const attachChatSubscriptions = (subscription) => {
-  if (!stompClient || !stompClient.connected) {
+  if (!isStompConnected()) {
     console.warn('Cannot attach subscriptions - not connected');
     return;
   }
@@ -216,7 +218,7 @@ export const subscribeToChat = (chatId, handlers) => {
   const subscription = { chatId, handlers, _subscriptions: [] };
   pendingChatSubscriptions.push(subscription);
 
-  if (stompClient && stompClient.connected) {
+  if (isStompConnected()) {
     attachChatSubscriptions(subscription);
   }
 
@@ -269,8 +271,8 @@ export const disconnectWebSocket = () => {
   }
 };
 
-const attachUserEventSubscriptions = ({ onChatCreated } = {}) => {
-  if (!stompClient || !stompClient.connected) return [];
+const attachUserEventSubscriptions = ({ onChatCreated, onChatUpdated } = {}) => {
+  if (!isStompConnected()) return [];
   const subscriptions = [];
   if (onChatCreated) {
     subscriptions.push(
@@ -283,11 +285,22 @@ const attachUserEventSubscriptions = ({ onChatCreated } = {}) => {
       })
     );
   }
+  if (onChatUpdated) {
+    subscriptions.push(
+      stompClient.subscribe(`/user/queue/chats/updated`, (frame) => {
+        try {
+          onChatUpdated(JSON.parse(frame.body));
+        } catch (error) {
+          console.error("Failed to parse chat updated event:", error);
+        }
+      })
+    );
+  }
   return subscriptions;
 };
 
-export const subscribeToUserChatEvents = ({ onChatCreated } = {}) => {
-  const handlers = { onChatCreated };
+export const subscribeToUserChatEvents = ({ onChatCreated, onChatUpdated } = {}) => {
+  const handlers = { onChatCreated, onChatUpdated };
   pendingUserEventHandlers.push(handlers);
   const subscriptions = attachUserEventSubscriptions(handlers);
   userEventSubscriptions.push(...subscriptions);
@@ -308,7 +321,7 @@ export const subscribeToUserChatEvents = ({ onChatCreated } = {}) => {
 };
 
 export const sendMessage = (destination, payload) => {
-  if (stompClient && stompClient.connected) {
+  if (isStompConnected()) {
     console.log(`Sending message to /app/${destination}:`, payload);
     stompClient.publish({
       destination: `/app/${destination}`,
@@ -321,7 +334,7 @@ export const sendMessage = (destination, payload) => {
 };
 
 export const sendChatMessage = (payload) => {
-  if (!stompClient || !stompClient.connected) {
+  if (!isStompConnected()) {
     console.error('WebSocket not connected, message not sent');
     return false;
   }
@@ -330,7 +343,8 @@ export const sendChatMessage = (payload) => {
     chatId: payload.chatId,
     content: payload.content || null,  // can be null only for messages with attachments
     attachmentIds: payload.attachmentIds || [],
-    type: payload.type || 'TEXT'
+    type: payload.type || 'TEXT',
+    replyToMessageId: payload.replyToMessageId || null
   };
   console.log('Sending message via WebSocket:', message);
 
@@ -339,6 +353,32 @@ export const sendChatMessage = (payload) => {
     body: JSON.stringify(message)
   });
 
+  return true;
+};
+
+/** Server copies content and attachments; client cannot edit the forwarded payload. */
+export const sendForwardMessage = ({ chatId, forwardSourceMessageId }) => {
+  if (!isStompConnected()) {
+    console.warn('WebSocket not connected, forward not sent');
+    return false;
+  }
+  const cid = chatId != null ? String(chatId) : '';
+  const sid = forwardSourceMessageId != null ? String(forwardSourceMessageId) : '';
+  if (!cid || !sid) {
+    return false;
+  }
+  const body = {
+    chatId: cid,
+    forwardSourceMessageId: sid,
+    content: null,
+    attachmentIds: [],
+    type: 'TEXT',
+    replyToMessageId: null
+  };
+  stompClient.publish({
+    destination: '/app/chat.send',
+    body: JSON.stringify(body)
+  });
   return true;
 };
 
@@ -355,6 +395,7 @@ export default {
   disconnectWebSocket,
   sendMessage,
   sendChatMessage,
+  sendForwardMessage,
   sendTypingEvent,
   subscribeToChat,
   subscribeToUserChatEvents

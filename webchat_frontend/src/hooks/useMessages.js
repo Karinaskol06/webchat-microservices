@@ -3,6 +3,7 @@ import useChatStore from '../store/useChatStore';
 import chatService from '../services/chatService';
 import { useShallow } from 'zustand/react/shallow';
 import { sendChatMessage, sendTypingEvent } from '../utils/websocket';
+import { getAttachmentUploadErrorMessage } from '../utils/attachmentUploadErrors';
 
 const useMessages = (currentChat) => {
   const { messages, setMessages } = useChatStore(
@@ -19,68 +20,109 @@ const useMessages = (currentChat) => {
   const [loading, setLoading] = useState(false); // eslint-disable-line no-unused-vars
   const [selectedAttachments, setSelectedAttachments] = useState([]);
   const [isSending, setIsSending] = useState(false);
+  const [composerError, setComposerError] = useState('');
+  const [replyToMessage, setReplyToMessage] = useState(null);
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
   const bootstrapRequestKeyRef = useRef(null);
 
-  // Scroll to bottom when messages change
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
   // Load messages when chat changes
   useEffect(() => {
+    setReplyToMessage(null);
+  }, [currentChat?.id]);
+
+  useEffect(() => {
+    const chatId = currentChat?.id;
+    let cancelled = false;
+
     const loadMessages = async () => {
-      if (!currentChat || !currentChat.id) return;
+      if (!chatId) return;
 
       try {
         setLoading(true);
-        const data = await chatService.getMessages(currentChat.id);
+        const data = await chatService.getMessages(chatId);
+        if (cancelled) return;
+
         const messagesArray =
           (Array.isArray(data) && data) ||
           (Array.isArray(data?.content) && data.content) ||
           (Array.isArray(data?.messages) && data.messages) ||
           (Array.isArray(data?.data) && data.data) ||
           [];
-        
+
         const sorted = [...messagesArray].sort(
           (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
         );
-        setMessages(sorted);
+
+        // Merge with any messages already in state (e.g. forwarded via WebSocket before this
+        // fetch finished) so history load does not wipe them.
+        const normalize = useChatStore.getState().normalizeMessage;
+        useChatStore.setState((state) => {
+          if (String(state.currentChat?.id) !== String(chatId)) return state;
+          const byId = new Map(
+            sorted.map((m) => [String(m.id ?? m._id), normalize(m)])
+          );
+          for (const m of state.messages) {
+            const mid = String(m.id ?? m._id);
+            if (!byId.has(mid)) byId.set(mid, m);
+          }
+          const merged = [...byId.values()].sort(
+            (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+          );
+          return { messages: merged };
+        });
+
         // Do not block UI on read receipt
-        chatService.markAsRead(currentChat.id).catch((e) => {
+        chatService.markAsRead(chatId).catch((e) => {
           console.error('Failed to mark messages as read:', e);
         });
       } catch (error) {
         console.error('Failed to load messages:', error);
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadMessages();
-  }, [currentChat?.id, setMessages]);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentChat?.id]);
 
   const handleSendMessage = async () => {
     if (!currentChat || isSending) return;
+
+    const channelLocked =
+      String(currentChat?.type || '').toUpperCase() === 'CHANNEL' &&
+      !currentChat?.isCurrentUserChannelCreator;
+    if (channelLocked) return;
 
     const trimmedMessage = newMessage.trim();
     const hasText = trimmedMessage.length > 0;
     const hasAttachments = selectedAttachments.length > 0;
     if (!trimmedMessage && selectedAttachments.length === 0) return;
 
+    if (!currentChat.id && hasAttachments) {
+      setComposerError(
+        'Send a text message first to start the chat. You can attach files in the next messages.'
+      );
+      return;
+    }
+
+    setComposerError('');
+
     const previousText = newMessage;
     const previousAttachments = [...selectedAttachments];
+    const previousReply = replyToMessage;
     setNewMessage('');
     setSelectedAttachments([]);
+    setReplyToMessage(null);
 
     try {
       setIsSending(true);
       let attachmentIds = [];
-
-      if (!currentChat.id && hasAttachments) {
-        throw new Error('Attachments are available after chat creation only');
-      }
 
       if (hasAttachments) {
         console.log('Uploading attachments:', selectedAttachments.length);
@@ -98,7 +140,7 @@ const useMessages = (currentChat) => {
         const bootstrap = await chatService.bootstrapMessage({
           recipientUserId: currentChat.otherUser?.id,
           content: trimmedMessage,
-          clientRequestKey: bootstrapRequestKeyRef.current,
+          clientRequestKey: bootstrapRequestKeyRef.current
         });
 
         const latestChats = await chatService.getUserChats();
@@ -118,7 +160,8 @@ const useMessages = (currentChat) => {
           chatId: currentChat.id,
           content: hasText ? trimmedMessage : null,
           attachmentIds,
-          type: hasAttachments ? 'MIXED' : 'TEXT'
+          type: hasAttachments ? 'MIXED' : 'TEXT',
+          replyToMessageId: replyToMessage?.id || null
         });
         if (!sent) {
           throw new Error('WebSocket is not connected');
@@ -131,8 +174,18 @@ const useMessages = (currentChat) => {
     } catch (error) {
       setNewMessage(previousText);
       setSelectedAttachments(previousAttachments);
+      setReplyToMessage(previousReply);
       console.error('Failed to send message:', error);
-      alert('Failed to send message. Please try again.');
+      const isUploadFailure =
+        previousAttachments.length > 0 &&
+        error?.config?.url &&
+        String(error.config.url).includes('/attachments');
+      const message = isUploadFailure
+        ? getAttachmentUploadErrorMessage(error, 'Could not upload the file. Please try again.')
+        : error?.message === 'WebSocket is not connected'
+          ? 'Not connected. Wait for the connection to recover, then try again.'
+          : 'Could not send the message. Please try again.';
+      setComposerError(message);
     } finally {
       setIsSending(false);
     }
@@ -140,6 +193,10 @@ const useMessages = (currentChat) => {
 
   const handleTyping = () => {
     if (!currentChat?.id) return;
+    const channelLocked =
+      String(currentChat?.type || '').toUpperCase() === 'CHANNEL' &&
+      !currentChat?.isCurrentUserChannelCreator;
+    if (channelLocked) return;
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -155,7 +212,12 @@ const useMessages = (currentChat) => {
 
   const handleSelectAttachments = (files) => {
     if (!files || files.length === 0) return;
+    const channelLocked =
+      String(currentChat?.type || '').toUpperCase() === 'CHANNEL' &&
+      !currentChat?.isCurrentUserChannelCreator;
+    if (channelLocked) return;
     const nextFiles = Array.from(files);
+    setComposerError('');
     setSelectedAttachments((prev) => [...prev, ...nextFiles]);
   };
 
@@ -180,6 +242,8 @@ const useMessages = (currentChat) => {
     messages,
     newMessage,
     setNewMessage,
+    composerError,
+    setComposerError,
     handleSendMessage,
     handleTyping,
     handleKeyPress,
@@ -187,6 +251,8 @@ const useMessages = (currentChat) => {
     handleSelectAttachments,
     handleRemoveAttachment,
     messagesEndRef,
+    replyToMessage,
+    setReplyToMessage,
   };
 };
 

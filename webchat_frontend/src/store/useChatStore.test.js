@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import useChatStore from "./useChatStore";
+import useChatStore, { reorderChatsByRecent } from "./useChatStore";
 
 describe("useChatStore", () => {
   beforeEach(() => {
@@ -16,7 +16,28 @@ describe("useChatStore", () => {
     expect(useChatStore.getState().chats[0].lastMessage).toBe("updated");
   });
 
-  it("setCurrentChat clears messages only for a different chat", () => {
+  it("reorderChatsByRecent puts more recent activity first", () => {
+    const older = { id: "a", lastActivity: "2020-01-01T00:00:00" };
+    const newer = { id: "b", lastMessageTime: "2025-06-01T12:00:00" };
+    const sorted = reorderChatsByRecent([older, newer]);
+    expect(sorted[0].id).toBe("b");
+    expect(sorted[1].id).toBe("a");
+  });
+
+  it("upsertChat moves updated chat toward top when lastMessageTime is newer", () => {
+    useChatStore.getState().setChats([
+      { id: "1", lastMessageTime: "2025-01-01T10:00:00" },
+      { id: "2", lastMessageTime: "2025-01-02T10:00:00" },
+    ]);
+    useChatStore.getState().upsertChat({
+      id: "1",
+      lastMessageTime: "2025-01-03T10:00:00",
+      lastMessage: "ping",
+    });
+    const ids = useChatStore.getState().chats.map((c) => c.id);
+    expect(ids[0]).toBe("1");
+    expect(ids[1]).toBe("2");
+  });
     useChatStore.getState().setMessages([{ id: "m1", content: "text" }]);
     useChatStore.getState().setCurrentChat({ id: "chat-1" });
     expect(useChatStore.getState().messages).toEqual([]);

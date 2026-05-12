@@ -2,6 +2,7 @@ package com.project.webchat.chat.service;
 
 import com.project.webchat.chat.dto.*;
 import com.project.webchat.chat.entity.*;
+import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import com.project.webchat.chat.feign.UserServiceClient;
 import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.BootstrapMessageRecordRepository;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -39,6 +41,7 @@ public class ChatService {
     private final WebSocketService webSocketService;
     private final UserServiceClient userServiceClient;
     private final MessageEventPublisher messageEventPublisher;
+    private final FileStorageService fileStorageService;
 
     @Transactional
     public ChatRoomDTO createChat(Long userId1, Long userId2) {
@@ -106,6 +109,7 @@ public class ChatService {
         //find or create a private chat
         PrivateChatLookup lookup = findOrCreatePrivateChat(senderId, request.getRecipientUserId());
         ChatRoom chatRoom = lookup.chatRoom();
+        boolean chatJustCreated = lookup.createdNew();
 
         //send an actual message
         SendMessageRequest sendMessageRequest = SendMessageRequest.builder()
@@ -120,6 +124,17 @@ public class ChatService {
         bootstrapRecord.setChatId(chatRoom.getId());
         bootstrapRecord.setMessageId(messageDTO.getId());
         bootstrapMessageRecordRepository.save(bootstrapRecord);
+
+        if (chatJustCreated) {
+            ChatRoom freshRoom = chatRoomRepository.findById(chatRoom.getId()).orElse(chatRoom);
+            Long recipientId = request.getRecipientUserId();
+            int unreadForSender = getUnreadCount(freshRoom.getId(), senderId);
+            int unreadForRecipient = getUnreadCount(freshRoom.getId(), recipientId);
+            webSocketService.notifyChatCreated(senderId,
+                    enrichChatWithUserData(freshRoom, senderId, unreadForSender));
+            webSocketService.notifyChatCreated(recipientId,
+                    enrichChatWithUserData(freshRoom, recipientId, unreadForRecipient));
+        }
 
         //create a pending friend request from sender to recipient
         userServiceClient.createContactRequestIfEligible(ContactRequestCreateDTO.builder()
@@ -176,6 +191,10 @@ public class ChatService {
             throw new IllegalArgumentException("User is not a member of this chat.");
         }
 
+        ChatRoom room = chatRoomRepository.findById(sendMessageRequest.getChatId())
+                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+        assertCanPostMessage(room, senderId);
+
         UserInfoDTO senderInfo = getUserInfo(senderId);
 
         //create and save a message
@@ -183,6 +202,7 @@ public class ChatService {
                 .chatId(sendMessageRequest.getChatId())
                 .messageType(sendMessageRequest.getType() != null ? sendMessageRequest.getType() : MessageType.TEXT)
                 .content(sendMessageRequest.getContent())
+                .replyToMessageId(normalizeReplyToMessageId(sendMessageRequest.getReplyToMessageId()))
                 .senderId(senderId)
                 .senderName(senderInfo.getDisplayName())
                 .timestamp(LocalDateTime.now())
@@ -207,14 +227,85 @@ public class ChatService {
         return messageDTO;
     }
 
+    /**
+     * Forwards a message into target chat with content and attachments copied server-side
+     * (client cannot alter the payload). Files are duplicated on disk for the new message.
+     */
+    @Transactional
+    public ChatMessageDTO forwardMessage(Long senderId, String targetChatId, String forwardSourceMessageId) {
+        if (forwardSourceMessageId == null || forwardSourceMessageId.isBlank()) {
+            throw new IllegalArgumentException("Forward source message is required.");
+        }
+        String sourceId = forwardSourceMessageId.trim();
+        ChatMessage source = chatMessageRepository.findById(sourceId)
+                .orElseThrow(() -> new IllegalArgumentException("Forwarded message was not found."));
+        validateForwardAccess(senderId, targetChatId, source);
+        ChatRoom targetRoom = chatRoomRepository.findById(targetChatId)
+                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+        assertCanPostMessage(targetRoom, senderId);
+
+        List<Attachment> sourceAttachments = collectAttachmentsForMessage(source);
+        String rawContent = source.getContent();
+        boolean hasText = rawContent != null && !rawContent.isBlank();
+        boolean hasAttachments = !sourceAttachments.isEmpty();
+        if (!hasText && !hasAttachments) {
+            throw new IllegalArgumentException("Nothing to forward.");
+        }
+
+        MessageType type;
+        if (hasText && hasAttachments) {
+            type = MessageType.MIXED;
+        } else if (hasText) {
+            type = MessageType.TEXT;
+        } else {
+            type = source.getMessageType() != null && source.getMessageType() != MessageType.TEXT
+                    ? source.getMessageType()
+                    : MessageType.ATTACHMENT;
+        }
+
+        UserInfoDTO senderInfo = getUserInfo(senderId);
+        ForwardOrigin forwardOrigin = buildForwardOriginFromSource(source);
+        ChatMessage saved = chatMessageRepository.save(ChatMessage.builder()
+                .chatId(targetChatId)
+                .senderId(senderId)
+                .senderName(senderInfo.getDisplayName())
+                .content(hasText ? rawContent : null)
+                .replyToMessageId(null)
+                .messageType(type)
+                .timestamp(LocalDateTime.now())
+                .isRead(false)
+                .forwardedFromUserId(forwardOrigin.userId())
+                .forwardedFromUsername(forwardOrigin.username())
+                .build());
+
+        List<Attachment> newAttachments = new ArrayList<>();
+        for (Attachment att : sourceAttachments) {
+            Attachment clone = fileStorageService.cloneAttachmentForForward(att, saved.getId(),
+                    targetChatId, senderId);
+            newAttachments.add(clone);
+        }
+        updateChatLastActivity(targetChatId, getPreviewText(saved.getContent(), newAttachments));
+        publishMessageCreatedV1(saved, getPreviewText(saved.getContent(), newAttachments));
+
+        redisService.updatePresence(senderId, targetChatId);
+        ChatMessageDTO messageDTO = toMessageDTO(saved, senderInfo);
+        webSocketService.sendMessageToChat(targetChatId, messageDTO);
+        webSocketService.notifyUserJoinedChat(targetChatId, senderId);
+        return messageDTO;
+    }
+
     // Sending message with both text and attachments (mixed)
     @Transactional
     public MessageWithAttachmentsDTO sendMixedMessage(Long senderId, String chatId,
                                                       String content, List<String> attachmentIds,
-                                                      MessageType type) {
+                                                      MessageType type, String replyToMessageId) {
         if (!isUserChatMember(chatId, senderId)) {
             throw new IllegalArgumentException("User is not a member of this chat");
         }
+
+        ChatRoom room = chatRoomRepository.findById(chatId)
+                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+        assertCanPostMessage(room, senderId);
 
         UserInfoDTO senderInfo = getUserInfo(senderId);
         ChatMessage message = ChatMessage.builder()
@@ -222,6 +313,7 @@ public class ChatService {
                 .senderId(senderId)
                 .senderName(senderInfo.getDisplayName())
                 .content(content)
+                .replyToMessageId(normalizeReplyToMessageId(replyToMessageId))
                 .messageType(type != null ? type : MessageType.MIXED)
                 .timestamp(LocalDateTime.now())
                 .isRead(false)
@@ -255,11 +347,16 @@ public class ChatService {
     @Transactional
     public MessageWithAttachmentsDTO sendAttachmentsOnlyMessage(Long senderId, String chatId,
                                                                 List<String> attachmentIds,
-                                                                MessageType type) {
+                                                                MessageType type,
+                                                                String replyToMessageId) {
 
         if (!isUserChatMember(chatId, senderId)) {
             throw new IllegalArgumentException("User is not a member of this chat");
         }
+
+        ChatRoom room = chatRoomRepository.findById(chatId)
+                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+        assertCanPostMessage(room, senderId);
 
         UserInfoDTO senderInfo = getUserInfo(senderId);
         // Creating a message without text
@@ -268,6 +365,7 @@ public class ChatService {
                 .senderId(senderId)
                 .senderName(senderInfo.getDisplayName())
                 .content(null)
+                .replyToMessageId(normalizeReplyToMessageId(replyToMessageId))
                 .messageType(type)
                 .timestamp(LocalDateTime.now())
                 .isRead(false)
@@ -449,10 +547,169 @@ public class ChatService {
         } else {
             chatRoomRepository.save(chat);
             webSocketService.notifyUserLeftChatForAll(chatId, userId, otherMembers);
+            notifyRoomMembersChatUpdated(chat);
         }
 
         redisService.markUserOffline(userId);
         webSocketService.notifyUserLeftChat(chatId, userId);
+    }
+
+    @Transactional
+    public ChatRoomDTO createGroupRoom(Long creatorId, CreateGroupChannelRequest request) {
+        return createGroupOrChannelRoom(creatorId, request, ChatType.GROUP);
+    }
+
+    @Transactional
+    public ChatRoomDTO createChannelRoom(Long creatorId, CreateGroupChannelRequest request) {
+        return createGroupOrChannelRoom(creatorId, request, ChatType.CHANNEL);
+    }
+
+    public Page<DiscoverableRoomDTO> discoverPublicRooms(Long currentUserId, String q, Pageable pageable) {
+        String regex = (q == null || q.trim().isEmpty()) ? ".*" : Pattern.quote(q.trim());
+        Page<ChatRoom> page = chatRoomRepository.findPublicDiscoverableRooms(
+                ChatType.GROUP,
+                ChatType.CHANNEL,
+                RoomVisibility.PUBLIC,
+                regex,
+                currentUserId,
+                pageable);
+        return page.map(DiscoverableRoomDTO::fromRoom);
+    }
+
+    @Transactional
+    public ChatRoomDTO joinPublicRoom(String roomId, Long userId) {
+        ChatRoom room = chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("This chat cannot be joined from discovery");
+        }
+        RoomVisibility vis = room.getVisibility() != null ? room.getVisibility() : RoomVisibility.PRIVATE;
+        if (vis != RoomVisibility.PUBLIC) {
+            throw new IllegalArgumentException("This room is not public");
+        }
+        if (room.isMember(userId)) {
+            return enrichChatWithUserData(room, userId, getUnreadCount(room.getId(), userId));
+        }
+        room.addMember(userId);
+        ChatRoom saved = chatRoomRepository.save(room);
+        notifyRoomMembersChatUpdated(saved);
+        return enrichChatWithUserData(saved, userId, getUnreadCount(saved.getId(), userId));
+    }
+
+    @Transactional
+    public ChatRoomDTO joinByInvite(Long userId, String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new IllegalArgumentException("Invite token is required");
+        }
+        String token = rawToken.trim();
+        ChatRoom room = chatRoomRepository.findByInviteToken(token)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired invite"));
+        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Invalid invite");
+        }
+        RoomVisibility vis = room.getVisibility() != null ? room.getVisibility() : RoomVisibility.PRIVATE;
+        if (vis != RoomVisibility.PRIVATE) {
+            throw new IllegalArgumentException("This invite is not valid for this room");
+        }
+        if (room.isMember(userId)) {
+            return enrichChatWithUserData(room, userId, getUnreadCount(room.getId(), userId));
+        }
+        room.addMember(userId);
+        ChatRoom saved = chatRoomRepository.save(room);
+        notifyRoomMembersChatUpdated(saved);
+        return enrichChatWithUserData(saved, userId, getUnreadCount(saved.getId(), userId));
+    }
+
+    @Transactional
+    public InvitePayloadDTO regenerateInvite(String roomId, Long userId) {
+        ChatRoom room = loadRoom(roomId);
+        if (!room.isMember(userId)) {
+            throw new ForbiddenChatOperationException("You must be a member to regenerate this invite");
+        }
+        RoomVisibility vis = room.getVisibility() != null ? room.getVisibility() : RoomVisibility.PRIVATE;
+        if (vis != RoomVisibility.PRIVATE) {
+            throw new IllegalArgumentException("Invite links are only available for private rooms");
+        }
+        if (room.getType() == ChatType.GROUP) {
+            if (!effectiveAdminIds(room).contains(userId)) {
+                throw new ForbiddenChatOperationException("Only group admins can regenerate the invite link");
+            }
+        } else if (room.getType() == ChatType.CHANNEL) {
+            if (room.getCreatedBy() == null || !room.getCreatedBy().equals(userId)) {
+                throw new ForbiddenChatOperationException("Only the channel creator can regenerate the invite link");
+            }
+        } else {
+            throw new IllegalArgumentException("This room does not support invite links");
+        }
+        String newToken = UUID.randomUUID().toString();
+        room.setInviteToken(newToken);
+        ChatRoom saved = chatRoomRepository.save(room);
+        notifyRoomMembersChatUpdated(saved);
+        return new InvitePayloadDTO(newToken);
+    }
+
+    public InvitePayloadDTO getInvitePayload(String roomId, Long userId) {
+        ChatRoom room = loadRoom(roomId);
+        if (!room.isMember(userId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        RoomVisibility vis = room.getVisibility() != null ? room.getVisibility() : RoomVisibility.PRIVATE;
+        if (vis != RoomVisibility.PRIVATE) {
+            throw new IllegalArgumentException("This room has no invite link");
+        }
+        if (room.getType() == ChatType.GROUP) {
+            if (!effectiveAdminIds(room).contains(userId)) {
+                throw new ForbiddenChatOperationException("Only group admins can view the invite link");
+            }
+        } else if (room.getType() == ChatType.CHANNEL) {
+            if (room.getCreatedBy() == null || !room.getCreatedBy().equals(userId)) {
+                throw new ForbiddenChatOperationException("Only the channel creator can view the invite link");
+            }
+        } else {
+            throw new IllegalArgumentException("This room does not support invite links");
+        }
+        if (room.getInviteToken() == null || room.getInviteToken().isBlank()) {
+            throw new IllegalArgumentException("This room has no invite link");
+        }
+        return new InvitePayloadDTO(room.getInviteToken());
+    }
+
+    @Transactional
+    public ChatRoomDTO mutateGroupAdmins(String roomId, Long actorId, AdminMutationRequest request) {
+        ChatRoom room = loadRoom(roomId);
+        if (room.getType() != ChatType.GROUP) {
+            throw new IllegalArgumentException("Admin actions apply only to group chats");
+        }
+        if (!room.isMember(actorId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        if (!effectiveAdminIds(room).contains(actorId)) {
+            throw new ForbiddenChatOperationException("Only admins can change admin roles");
+        }
+        Long target = request.getUserId();
+        if (!room.isMember(target)) {
+            throw new IllegalArgumentException("That user is not a member of this group");
+        }
+        Set<Long> admins = new HashSet<>(effectiveAdminIds(room));
+        if (request.getAction() == AdminAction.PROMOTE) {
+            admins.add(target);
+        } else if (request.getAction() == AdminAction.DEMOTE) {
+            if (!admins.contains(target)) {
+                throw new IllegalArgumentException("That user is not an admin");
+            }
+            Set<Long> after = new HashSet<>(admins);
+            after.remove(target);
+            if (after.isEmpty()) {
+                throw new IllegalArgumentException("Cannot demote the last admin. Promote another member first.");
+            }
+            admins = after;
+        } else {
+            throw new IllegalArgumentException("Unsupported admin action");
+        }
+        room.setAdminIds(admins);
+        ChatRoom saved = chatRoomRepository.save(room);
+        notifyRoomMembersChatUpdated(saved);
+        return enrichChatWithUserData(saved, actorId, getUnreadCount(saved.getId(), actorId));
     }
 
     public boolean isUserChatMember(String chatId, Long userId) {
@@ -518,13 +775,22 @@ public class ChatService {
 
     //add user(s) data to chat
     private ChatRoomDTO enrichChatWithUserData(ChatRoom chat, Long currentUserId, int unreadCount) {
+        RoomVisibility visibility = chat.getVisibility() != null ? chat.getVisibility() : RoomVisibility.PRIVATE;
+
         ChatRoomDTO.ChatRoomDTOBuilder builder = ChatRoomDTO.builder()
                 .id(chat.getId())
                 .type(chat.getType().toString())
+                .visibility(visibility.name())
                 .createdAt(chat.getCreatedAt())
                 .lastActivity(chat.getLastActivity())
                 .lastMessage(chat.getLastMessage())
-                .unreadCount(unreadCount);
+                .unreadCount(unreadCount)
+                .createdBy(chat.getCreatedBy())
+                .memberCount(chat.getMemberIds() != null ? chat.getMemberIds().size() : 0)
+                .currentUserAdmin(chat.getType() == ChatType.GROUP && effectiveAdminIds(chat).contains(currentUserId))
+                .currentUserChannelCreator(chat.getType() == ChatType.CHANNEL
+                        && chat.getCreatedBy() != null
+                        && chat.getCreatedBy().equals(currentUserId));
 
         //for private chats - find the other user
         if (chat.getType() == ChatType.PRIVATE) {
@@ -538,8 +804,8 @@ public class ChatService {
             }
         }
 
-        //for group chats - get all members
-        if (chat.getType() == ChatType.GROUP) {
+        //for group and channel chats - get all members
+        if (chat.getType() == ChatType.GROUP || chat.getType() == ChatType.CHANNEL) {
             List<UserInfoDTO> members = chat.getMemberIds().stream()
                     .map(this::getUserInfo)
                     .toList();
@@ -580,7 +846,107 @@ public class ChatService {
                 .forEach(att -> attachmentMap.put(att.getId(), att));
 
         dto.setAttachments(new ArrayList<>(attachmentMap.values()));
+        dto.setRepliedMessage(buildReplyPreview(message));
+        enrichForwardedFrom(message, dto);
         return dto;
+    }
+
+    private record ForwardOrigin(Long userId, String username) {}
+
+    private void validateForwardAccess(Long senderId, String targetChatId, ChatMessage source) {
+        if (!isUserChatMember(source.getChatId(), senderId)) {
+            throw new IllegalArgumentException("You cannot forward this message.");
+        }
+        if (!isUserChatMember(targetChatId, senderId)) {
+            throw new IllegalArgumentException("User is not a member of this chat.");
+        }
+    }
+
+    private ForwardOrigin buildForwardOriginFromSource(ChatMessage source) {
+        Long originAuthorId = source.getForwardedFromUserId() != null
+                ? source.getForwardedFromUserId()
+                : source.getSenderId();
+
+        String username = source.getForwardedFromUsername();
+        if (username == null || username.isBlank()) {
+            UserInfoDTO originInfo = getUserInfo(originAuthorId);
+            if (originInfo != null && originInfo.getUsername() != null && !originInfo.getUsername().isBlank()) {
+                username = originInfo.getUsername();
+            } else if (originInfo != null) {
+                username = originInfo.getDisplayName();
+            }
+        }
+        if (username == null || username.isBlank()) {
+            username = source.getSenderName() != null ? source.getSenderName() : "Unknown";
+        }
+
+        return new ForwardOrigin(originAuthorId, username);
+    }
+
+    private List<Attachment> collectAttachmentsForMessage(ChatMessage source) {
+        Map<String, Attachment> byId = new LinkedHashMap<>();
+        if (source.getAttachmentIds() != null) {
+            for (String id : source.getAttachmentIds()) {
+                if (id == null || id.isBlank()) {
+                    continue;
+                }
+                attachmentRepository.findById(id.trim()).ifPresent(att -> byId.put(att.getId(), att));
+            }
+        }
+        attachmentRepository.findByMessageId(source.getId())
+                .forEach(att -> byId.put(att.getId(), att));
+        return new ArrayList<>(byId.values());
+    }
+
+    private void enrichForwardedFrom(ChatMessage message, ChatMessageDTO dto) {
+        if (message.getForwardedFromUserId() == null) {
+            return;
+        }
+        UserInfoDTO enriched = getUserInfo(message.getForwardedFromUserId());
+        UserInfoDTO forwarded = UserInfoDTO.builder()
+                .id(message.getForwardedFromUserId())
+                .username(message.getForwardedFromUsername() != null && !message.getForwardedFromUsername().isBlank()
+                        ? message.getForwardedFromUsername()
+                        : (enriched != null ? enriched.getUsername() : null))
+                .firstName(enriched != null ? enriched.getFirstName() : null)
+                .lastName(enriched != null ? enriched.getLastName() : null)
+                .profilePicture(enriched != null ? enriched.getProfilePicture() : null)
+                .online(enriched != null && enriched.isOnline())
+                .build();
+        dto.setForwardedFrom(forwarded);
+    }
+
+    private String normalizeReplyToMessageId(String replyToMessageId) {
+        if (replyToMessageId == null || replyToMessageId.isBlank()) {
+            return null;
+        }
+        return replyToMessageId.trim();
+    }
+
+    private ReplyPreviewDTO buildReplyPreview(ChatMessage message) {
+        String replyToMessageId = normalizeReplyToMessageId(message.getReplyToMessageId());
+        if (replyToMessageId == null) {
+            return null;
+        }
+
+        Optional<ChatMessage> parentOptional = chatMessageRepository.findById(replyToMessageId);
+        if (parentOptional.isEmpty()) {
+            return ReplyPreviewDTO.builder()
+                    .messageId(replyToMessageId)
+                    .deleted(true)
+                    .build();
+        }
+
+        ChatMessage parent = parentOptional.get();
+        UserInfoDTO senderInfo = getUserInfo(parent.getSenderId());
+        return ReplyPreviewDTO.builder()
+                .messageId(parent.getId())
+                .senderId(parent.getSenderId())
+                .senderDisplayName(senderInfo != null ? senderInfo.getDisplayName() : parent.getSenderName())
+                .content(getPreviewText(parent.getContent(), attachmentRepository.findByMessageId(parent.getId())))
+                .messageType(parent.getMessageType())
+                .deleted(false)
+                .build();
     }
 
     private String getPreviewText(String content, List<Attachment> attachments) {
@@ -598,6 +964,83 @@ public class ChatService {
             return attachments.size() + " files";
         }
         return "New message";
+    }
+
+    private ChatRoomDTO createGroupOrChannelRoom(Long creatorId, CreateGroupChannelRequest request, ChatType type) {
+        if (type != ChatType.GROUP && type != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Invalid room type");
+        }
+        String name = request.getName().trim();
+        if (name.isEmpty()) {
+            throw new IllegalArgumentException("Name is required");
+        }
+        Set<Long> members = new HashSet<>();
+        if (request.getMemberIds() != null) {
+            members.addAll(request.getMemberIds());
+        }
+        members.remove(null);
+        members.add(creatorId);
+
+        RoomVisibility visibility = request.getVisibility();
+        String inviteToken = visibility == RoomVisibility.PRIVATE ? UUID.randomUUID().toString() : null;
+        Set<Long> adminIds = type == ChatType.GROUP ? new HashSet<>(Set.of(creatorId)) : new HashSet<>();
+
+        ChatRoom room = ChatRoom.builder()
+                .type(type)
+                .visibility(visibility)
+                .memberIds(members)
+                .groupName(name)
+                .groupPhoto(request.getGroupPhoto())
+                .createdBy(creatorId)
+                .adminIds(adminIds)
+                .inviteToken(inviteToken)
+                .lastActivity(LocalDateTime.now())
+                .createdAt(LocalDateTime.now())
+                .lastMessage("Chat was created!")
+                .build();
+
+        ChatRoom saved = chatRoomRepository.save(room);
+        for (Long memberId : saved.getMemberIds()) {
+            webSocketService.notifyChatCreated(memberId,
+                    enrichChatWithUserData(saved, memberId, getUnreadCount(saved.getId(), memberId)));
+        }
+        return enrichChatWithUserData(saved, creatorId, getUnreadCount(saved.getId(), creatorId));
+    }
+
+    private void notifyRoomMembersChatUpdated(ChatRoom room) {
+        if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {
+            return;
+        }
+        for (Long memberId : new HashSet<>(room.getMemberIds())) {
+            ChatRoomDTO dto = enrichChatWithUserData(room, memberId, getUnreadCount(room.getId(), memberId));
+            webSocketService.notifyChatUpdated(room.getId(), dto, Set.of(memberId));
+        }
+    }
+
+    private ChatRoom loadRoom(String roomId) {
+        return chatRoomRepository.findById(roomId)
+                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+    }
+
+    private void assertCanPostMessage(ChatRoom room, Long senderId) {
+        if (room.getType() == ChatType.CHANNEL
+                && (room.getCreatedBy() == null || !room.getCreatedBy().equals(senderId))) {
+            throw new ForbiddenChatOperationException("Only the channel creator can post in this channel.");
+        }
+    }
+
+    private Set<Long> effectiveAdminIds(ChatRoom room) {
+        if (room.getType() != ChatType.GROUP) {
+            return Set.of();
+        }
+        Set<Long> raw = room.getAdminIds();
+        if (raw != null && !raw.isEmpty()) {
+            return new HashSet<>(raw);
+        }
+        if (room.getCreatedBy() != null) {
+            return new HashSet<>(Set.of(room.getCreatedBy()));
+        }
+        return new HashSet<>();
     }
 
     private void publishMessageCreatedV1(ChatMessage savedMessage, String previewText) {

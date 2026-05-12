@@ -27,9 +27,4 @@ public class UserInfoDTO {
             return username;
         }
     }
-
-    //for profile click
-    public String getProfileUrl() {
-        return "/profile/" + id;
-    }
 }
