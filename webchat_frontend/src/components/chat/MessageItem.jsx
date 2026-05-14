@@ -31,6 +31,7 @@ import { parseQuotedSnippet } from '../../utils/quotedMessagePreview';
 import { QuotedKindIcon } from './QuotedKindIcon';
 import chatService from '../../services/chatService';
 import useChatStore from '../../store/useChatStore';
+import { canModerateOthersMessages } from '../../utils/channelPermissions';
 
 /** Larger previews; landscape uses bubble width, portrait shrinks to stay on-screen. */
 const MEDIA_BUBBLE_MAX_WIDTH = 560;
@@ -43,11 +44,13 @@ const mediaMaxHeight = (capPx) => `min(${capPx}px, calc(100dvh - ${MEDIA_VIEWPOR
 const MessageItem = ({
     message,
     currentUserId,
+    room = null,
     onReply,
     onOpenForward,
     onOpenForwardedProfile,
     onJumpToMessage,
     isHighlighted,
+    hideReplyActions = false,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [imagesLoaded, setImagesLoaded] = useState({});
@@ -60,9 +63,20 @@ const MessageItem = ({
     const [isDeleting, setIsDeleting] = useState(false);
     const [deleteError, setDeleteError] = useState('');
     const [contextMenuPosition, setContextMenuPosition] = useState(null);
+    const [moderatorEditOpen, setModeratorEditOpen] = useState(false);
 
     const sender = message.sender || { id: message.senderId };
     const isOwn = Number(sender?.id) === Number(currentUserId);
+    const canModerateOthers = canModerateOthersMessages(room, currentUserId);
+    const messageTypeUpper = String(
+        message.messageType || message.message_type || 'TEXT',
+    ).toUpperCase();
+    const canEditMessageType =
+        messageTypeUpper === 'TEXT' ||
+        messageTypeUpper === 'MIXED' ||
+        messageTypeUpper === 'ATTACHMENT';
+    const canEditThis = (isOwn || canModerateOthers) && canEditMessageType;
+    const canDeleteThis = isOwn || canModerateOthers;
     const attachments = Array.isArray(message.attachments) ? message.attachments : [];
     const hasAttachments = attachments.length > 0;
     const hasText = message.content && message.content.trim().length > 0;
@@ -167,6 +181,7 @@ const MessageItem = ({
     };
 
     const handleReply = () => {
+        if (hideReplyActions) return;
         onReply?.(message);
         closeMenu();
         closeContextMenu();
@@ -195,9 +210,14 @@ const MessageItem = ({
     };
 
     const handleStartEdit = () => {
+        if (!canEditThis) return;
         setEditedContent(message.content || '');
         setEditError('');
-        setIsEditMode(true);
+        if (isOwn) {
+            setIsEditMode(true);
+        } else {
+            setModeratorEditOpen(true);
+        }
         closeMenu();
         closeContextMenu();
     };
@@ -206,6 +226,7 @@ const MessageItem = ({
         setEditedContent(message.content || '');
         setEditError('');
         setIsEditMode(false);
+        setModeratorEditOpen(false);
     };
 
     const captionUnchanged =
@@ -228,6 +249,7 @@ const MessageItem = ({
                 updated?.messageType
             );
             setIsEditMode(false);
+            setModeratorEditOpen(false);
         } catch (error) {
             const responseMessage =
                 error?.error ||
@@ -950,10 +972,10 @@ const MessageItem = ({
                     horizontal: isOwn ? 'right' : 'left',
                 }}
             >
-                <MenuItem onClick={handleReply}>Reply</MenuItem>
+                {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
                 <MenuItem onClick={handleForward}>Forward</MenuItem>
-                {isOwn && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
-                {isOwn && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
+                {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
+                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
             </Menu>
 
             <Menu
@@ -966,11 +988,46 @@ const MessageItem = ({
                         : undefined
                 }
             >
-                <MenuItem onClick={handleReply}>Reply</MenuItem>
+                {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
                 <MenuItem onClick={handleForward}>Forward</MenuItem>
-                {isOwn && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
-                {isOwn && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
+                {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
+                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
             </Menu>
+
+            <Dialog open={moderatorEditOpen} onClose={handleCancelEdit} fullWidth maxWidth="sm">
+                <DialogTitle>Edit message</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        fullWidth
+                        multiline
+                        minRows={3}
+                        label="Message text"
+                        value={editedContent}
+                        error={Boolean(editError)}
+                        helperText={editError}
+                        onChange={(e) => {
+                            setEditedContent(e.target.value);
+                            if (editError) setEditError('');
+                        }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCancelEdit} disabled={isSavingEdit}>
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="contained"
+                        onClick={() => {
+                            handleSaveEdit().catch(() => {});
+                        }}
+                        disabled={isSavingEdit || captionUnchanged}
+                    >
+                        Save
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
                 <DialogTitle>Delete message?</DialogTitle>

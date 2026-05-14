@@ -26,7 +26,7 @@ const MessageInput = ({
   composerError,
   onDismissComposerError,
   channelReadOnly = false,
-  channelReadOnlyHint = 'Only the channel creator can post.',
+  channelReadOnlyHint = 'Only the channel owner or admins can post in this channel.',
 }) => {
   const fileInputRef = useRef(null);
 
@@ -63,7 +63,7 @@ const MessageInput = ({
           {composerError}
         </Alert>
       ) : null}
-      {replyToMessage && quotedComposer && quotedComposer.kind !== 'deleted' && (
+      {replyToMessage && !channelReadOnly && quotedComposer && quotedComposer.kind !== 'deleted' && (
         <Box
           sx={{
             display: 'flex',
@@ -151,56 +151,52 @@ const MessageInput = ({
         </Box>
       )}
       {channelReadOnly ? (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ py: 0.5 }}>
           {channelReadOnlyHint}
         </Typography>
-      ) : null}
-      <Box display="flex" alignItems="center">
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          hidden
-          onChange={handleFileSelection}
-          accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,image/*,video/*"
-        />
-        <IconButton onClick={handleOpenFilePicker} disabled={channelReadOnly}>
-          <AttachFileIcon />
-        </IconButton>
-
-        <Tooltip title={emojiSidebarOpen ? 'Hide emoji sidebar' : 'Show emoji sidebar'}>
-          <IconButton onClick={onToggleEmojiSidebar} disabled={channelReadOnly}>
-            {emojiSidebarOpen ? <ChevronLeftIcon /> : <EmojiEmotionsOutlinedIcon />}
+      ) : (
+        <Box display="flex" alignItems="center">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            hidden
+            onChange={handleFileSelection}
+            accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,image/*,video/*"
+          />
+          <IconButton onClick={handleOpenFilePicker}>
+            <AttachFileIcon />
           </IconButton>
-        </Tooltip>
 
-        <TextField
-          fullWidth
-          multiline
-          maxRows={4}
-          placeholder="Write a message..."
-          value={value}
-          onChange={handleChange}
-          onKeyPress={onKeyPress}
-          disabled={channelReadOnly}
-          sx={{
-            mx: 1,
-            '& .MuiInputBase-input': {
-              fontFamily:
-                'inherit, system-ui, "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
-            },
-          }}
-          inputRef={inputRef}
-        />
+          <Tooltip title={emojiSidebarOpen ? 'Hide emoji sidebar' : 'Show emoji sidebar'}>
+            <IconButton onClick={onToggleEmojiSidebar}>
+              {emojiSidebarOpen ? <ChevronLeftIcon /> : <EmojiEmotionsOutlinedIcon />}
+            </IconButton>
+          </Tooltip>
 
-        <IconButton
-          color="primary"
-          onClick={onSend}
-          disabled={!canSend}
-        >
-          <SendIcon />
-        </IconButton>
-      </Box>
+          <TextField
+            fullWidth
+            multiline
+            maxRows={4}
+            placeholder="Write a message..."
+            value={value}
+            onChange={handleChange}
+            onKeyPress={onKeyPress}
+            sx={{
+              mx: 1,
+              '& .MuiInputBase-input': {
+                fontFamily:
+                  'inherit, system-ui, "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
+              },
+            }}
+            inputRef={inputRef}
+          />
+
+          <IconButton color="primary" onClick={onSend} disabled={!canSend}>
+            <SendIcon />
+          </IconButton>
+        </Box>
+      )}
     </Paper>
   );
 };

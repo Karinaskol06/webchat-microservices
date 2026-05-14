@@ -4,6 +4,8 @@ import chatService from '../services/chatService';
 import { useShallow } from 'zustand/react/shallow';
 import { sendChatMessage, sendTypingEvent } from '../utils/websocket';
 import { getAttachmentUploadErrorMessage } from '../utils/attachmentUploadErrors';
+import { WEBCHAT_MESSAGES_MARKED_READ } from '../constants/chatEvents';
+import { canPostInChannel } from '../utils/channelPermissions';
 
 const useMessages = (currentChat) => {
   const { messages, setMessages } = useChatStore(
@@ -30,6 +32,17 @@ const useMessages = (currentChat) => {
   useEffect(() => {
     setReplyToMessage(null);
   }, [currentChat?.id]);
+
+  useEffect(() => {
+    if (currentChat && !canPostInChannel(currentChat)) {
+      setReplyToMessage(null);
+    }
+  }, [
+    currentChat?.id,
+    currentChat?.type,
+    currentChat?.isCurrentUserChannelCreator,
+    currentChat?.isCurrentUserChannelAdmin,
+  ]);
 
   useEffect(() => {
     const chatId = currentChat?.id;
@@ -73,11 +86,28 @@ const useMessages = (currentChat) => {
         });
 
         // Do not block UI on read receipt
-        chatService.markAsRead(chatId).catch((e) => {
-          console.error('Failed to mark messages as read:', e);
-        });
+        chatService
+          .markAsRead(chatId)
+          .then(() => {
+            window.dispatchEvent(
+              new CustomEvent(WEBCHAT_MESSAGES_MARKED_READ, { detail: { chatId } }),
+            );
+          })
+          .catch((e) => {
+            console.error('Failed to mark messages as read:', e);
+          });
       } catch (error) {
         console.error('Failed to load messages:', error);
+        const status = error?.response?.status;
+        useChatStore.setState((state) => {
+          if (String(state.currentChat?.id) !== String(chatId)) {
+            return state;
+          }
+          if (status === 403 || status === 404) {
+            return { messages: [], currentChat: null };
+          }
+          return { messages: [] };
+        });
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -94,10 +124,7 @@ const useMessages = (currentChat) => {
   const handleSendMessage = async () => {
     if (!currentChat || isSending) return;
 
-    const channelLocked =
-      String(currentChat?.type || '').toUpperCase() === 'CHANNEL' &&
-      !currentChat?.isCurrentUserChannelCreator;
-    if (channelLocked) return;
+    if (!canPostInChannel(currentChat)) return;
 
     const trimmedMessage = newMessage.trim();
     const hasText = trimmedMessage.length > 0;
@@ -193,10 +220,7 @@ const useMessages = (currentChat) => {
 
   const handleTyping = () => {
     if (!currentChat?.id) return;
-    const channelLocked =
-      String(currentChat?.type || '').toUpperCase() === 'CHANNEL' &&
-      !currentChat?.isCurrentUserChannelCreator;
-    if (channelLocked) return;
+    if (!canPostInChannel(currentChat)) return;
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -212,10 +236,7 @@ const useMessages = (currentChat) => {
 
   const handleSelectAttachments = (files) => {
     if (!files || files.length === 0) return;
-    const channelLocked =
-      String(currentChat?.type || '').toUpperCase() === 'CHANNEL' &&
-      !currentChat?.isCurrentUserChannelCreator;
-    if (channelLocked) return;
+    if (!canPostInChannel(currentChat)) return;
     const nextFiles = Array.from(files);
     setComposerError('');
     setSelectedAttachments((prev) => [...prev, ...nextFiles]);

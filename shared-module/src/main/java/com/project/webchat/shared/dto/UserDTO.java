@@ -1,6 +1,7 @@
 package com.project.webchat.shared.dto;
 
-import jakarta.validation.constraints.Email;
+import com.project.webchat.shared.validation.InternationalPhone;
+import com.project.webchat.shared.validation.ValidEmailDomain;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -21,7 +22,7 @@ public class UserDTO {
     @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
     private String username;
 
-    @Email(message = "Email should be valid")
+    @ValidEmailDomain
     private String email;
 
     private String firstName;
@@ -30,6 +31,10 @@ public class UserDTO {
     private String backgroundPicture;
     private String description;
     private LocalDate birthday;
+
+    @InternationalPhone
     private String phoneNumber;
+
+    private String countryCode;
 
 }

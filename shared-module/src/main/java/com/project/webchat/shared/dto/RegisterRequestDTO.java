@@ -1,12 +1,15 @@
 package com.project.webchat.shared.dto;
 
-import jakarta.validation.constraints.Email;
+import com.project.webchat.shared.validation.InternationalPhone;
+import com.project.webchat.shared.validation.ValidEmailDomain;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Data
-@Getter
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
@@ -19,8 +22,17 @@ public class RegisterRequestDTO {
     @Size(min = 5, message = "Password must be longer than 5 characters")
     private String password;
 
-    @Email(message = "Email should be valid")
+    @NotBlank(message = "Email is required")
+    @ValidEmailDomain
     private String email;
+
+    @NotBlank(message = "Phone number is required")
+    @InternationalPhone
+    private String phoneNumber;
+
+    @NotBlank(message = "Country is required")
+    private String countryCode;
+
     private String firstName;
     private String lastName;
 }

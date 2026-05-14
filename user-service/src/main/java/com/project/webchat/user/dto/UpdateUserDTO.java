@@ -1,5 +1,6 @@
 package com.project.webchat.user.dto;
 
+import com.project.webchat.shared.validation.InternationalPhone;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -24,6 +25,9 @@ public class UpdateUserDTO {
 
     private LocalDate birthday;
 
-    @Size(max = 30, message = "Phone number can be at most 30 characters")
+    @Size(max = 16, message = "Phone number exceeds maximum length")
+    @InternationalPhone
     private String phoneNumber;
+
+    private String countryCode;
 }

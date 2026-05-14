@@ -7,8 +7,10 @@ import com.project.webchat.auth.security.JwtService;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -25,24 +27,31 @@ public class AuthService {
     private final UserServiceClient userServiceClient;
     private final AuthenticationManager authenticationManager;
 
+    private static final int PASSWORD_MIN_LENGTH = 6;
+    private static final String PASSWORD_LENGTH_MESSAGE =
+            "Password must be at least 6 characters long";
+    private static final String USER_DOES_NOT_EXIST_MESSAGE = "User does not exist";
+    private static final String INCORRECT_PASSWORD_MESSAGE = "Incorrect password";
+
     public LoginResponseDTO login(LoginRequestDTO loginRequestDTO) {
+        String username = loginRequestDTO.getUsername();
+        String password = loginRequestDTO.getPassword();
+
+        if (password == null || password.length() < PASSWORD_MIN_LENGTH) {
+            throw new IllegalArgumentException(PASSWORD_LENGTH_MESSAGE);
+        }
 
         try {
-            // authenticate using Spring Security
+            Boolean exists = userServiceClient.existsByUsername(username).getBody();
+            if (!Boolean.TRUE.equals(exists)) {
+                throw new IllegalArgumentException(USER_DOES_NOT_EXIST_MESSAGE);
+            }
+
             Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            loginRequestDTO.getUsername(),
-                            loginRequestDTO.getPassword()
-                    )
-            );
+                    new UsernamePasswordAuthenticationToken(username, password));
 
-            // get UserDetails for authentication
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-
-            // generate JWT token
             String token = jwtService.generateToken(userDetails);
-
-            // cast to CustomUserDetails to get additional fields
             CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
 
             return LoginResponseDTO.builder()
@@ -54,9 +63,26 @@ public class AuthService {
                     .build();
 
         } catch (BadCredentialsException e) {
-            log.warn("Failed login attempt for user: {}", loginRequestDTO.getUsername());
-            throw new BadCredentialsException("Invalid username or password");
+            log.warn("Failed login attempt for user: {}", username);
+            throw new BadCredentialsException(INCORRECT_PASSWORD_MESSAGE, e);
+        } catch (ResponseStatusException e) {
+            log.error("User service error during login: {}", e.getStatusCode(), e);
+            throw mapUserServiceFailureToLoginResponse(e);
+        } catch (FeignException e) {
+            log.error("Feign error during login: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Authentication service temporarily unavailable", e);
         }
+    }
+
+    private static ResponseStatusException mapUserServiceFailureToLoginResponse(ResponseStatusException e) {
+        HttpStatusCode status = e.getStatusCode();
+        if (status.is5xxServerError() || status.equals(HttpStatus.BAD_GATEWAY)
+                || status.equals(HttpStatus.SERVICE_UNAVAILABLE) || status.equals(HttpStatus.GATEWAY_TIMEOUT)) {
+            return new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Authentication service temporarily unavailable", e);
+        }
+        return e;
     }
 
     public UserDTO register(RegisterRequestDTO registerRequestDTO) {
@@ -67,8 +93,9 @@ public class AuthService {
                 throw new IllegalArgumentException("Username already exists");
             }
 
-            //check if email exists
-            Boolean emailExists = userServiceClient.existsByEmail(registerRequestDTO.getEmail()).getBody();
+            //check if email exists (trimmed to match persistence and duplicate checks)
+            String email = registerRequestDTO.getEmail() == null ? null : registerRequestDTO.getEmail().trim();
+            Boolean emailExists = userServiceClient.existsByEmail(email).getBody();
             if (Boolean.TRUE.equals(emailExists)) {
                 throw new IllegalArgumentException("Email already exists");
             }
@@ -82,9 +109,19 @@ public class AuthService {
             log.info("User registered successfully: {}", registerRequestDTO.getUsername());
             return response.getBody();
 
+        } catch (ResponseStatusException e) {
+            log.error("User service error during registration: {}", e.getStatusCode(), e);
+            HttpStatusCode status = e.getStatusCode();
+            if (status.is5xxServerError() || status.equals(HttpStatus.BAD_GATEWAY)
+                    || status.equals(HttpStatus.SERVICE_UNAVAILABLE) || status.equals(HttpStatus.GATEWAY_TIMEOUT)) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "Registration service temporarily unavailable", e);
+            }
+            throw e;
         } catch (FeignException e) {
             log.error("Feign error during registration: {}", e.getMessage());
-            throw new RuntimeException("Registration service unavailable", e);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Registration service temporarily unavailable", e);
         }
     }
 
@@ -99,6 +136,9 @@ public class AuthService {
             if (response.getStatusCode().is2xxSuccessful()) {
                 return response.getBody();
             }
+            return null;
+        } catch (ResponseStatusException e) {
+            log.error("Error getting user: {}", e.getStatusCode(), e);
             return null;
         } catch (FeignException e) {
             log.error("Error getting user: {}", e.getMessage());

@@ -6,7 +6,10 @@ import com.project.webchat.shared.dto.UserDTO;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -46,15 +49,27 @@ public class CustomUserDetailsService implements UserDetailsService {
                     .active(true)
                     .build();
 
+        } catch (ResponseStatusException e) {
+            HttpStatusCode status = e.getStatusCode();
+            if (status.equals(HttpStatus.NOT_FOUND)) {
+                log.warn("User not found via user-service: {}", username);
+                throw new UsernameNotFoundException("User not found: " + username);
+            }
+            if (status.is5xxServerError() || status.equals(HttpStatus.BAD_GATEWAY)
+                    || status.equals(HttpStatus.SERVICE_UNAVAILABLE) || status.equals(HttpStatus.GATEWAY_TIMEOUT)) {
+                log.error("User service error loading user: {}, status: {}", username, status, e);
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "Authentication service temporarily unavailable", e);
+            }
+            log.error("User service client error loading user: {}, status: {}", username, status, e);
+            throw e;
         } catch (FeignException.NotFound e) {
-            log.error("User not found via Feign: {}", username);
+            log.warn("User not found via Feign: {}", username);
             throw new UsernameNotFoundException("User not found: " + username);
         } catch (FeignException e) {
             log.error("Feign error loading user: {}, status: {}", username, e.status(), e);
-            throw new UsernameNotFoundException("Error loading user: " + username);
-        } catch (Exception e) {
-            log.error("Unexpected error loading user: {}", username, e);
-            throw new UsernameNotFoundException("Unexpected error loading user");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Authentication service temporarily unavailable", e);
         }
     }
 }

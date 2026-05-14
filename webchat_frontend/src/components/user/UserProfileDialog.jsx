@@ -20,10 +20,18 @@ import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import userService from "../../services/userService";
 import { getApiErrorMessage } from "../../services/api";
 import useAuthStore from "../../store/useAuthStore";
+import PhoneCountryField from "../common/PhoneCountryField";
+import { isValidInternationalPhone } from "../../utils/internationalPhone";
 
 const toInputDate = (value) => (value ? new Date(value) : null);
 const toIsoDate = (value) => (value ? value.toISOString().slice(0, 10) : null);
 const appendVersion = (url) => (url ? `${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}` : null);
+
+const normalizeCountryCode = (u) => {
+  const c = u?.countryCode;
+  if (c == null || String(c).trim() === "") return "UA";
+  return String(c).trim().toUpperCase();
+};
 
 const userToProfileShape = (u) => ({
   firstName: u?.firstName || "",
@@ -31,6 +39,7 @@ const userToProfileShape = (u) => ({
   description: u?.description || "",
   birthday: toInputDate(u?.birthday),
   phoneNumber: u?.phoneNumber || "",
+  countryCode: normalizeCountryCode(u),
   username: u?.username || "",
   email: u?.email || "",
   profilePicture: u?.profilePicture || null,
@@ -67,6 +76,7 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
       description: seedShape.description || "",
       birthday: toIsoDate(seedShape.birthday),
       phoneNumber: seedShape.phoneNumber || "",
+      countryCode: (seedShape.countryCode || "").toUpperCase(),
     });
 
     setFetchLoading(true);
@@ -86,6 +96,7 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
           description: shape.description || "",
           birthday: toIsoDate(shape.birthday),
           phoneNumber: shape.phoneNumber || "",
+          countryCode: (shape.countryCode || "").toUpperCase(),
         });
       })
       .catch((err) => {
@@ -126,6 +137,7 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
       description: updated.description || "",
       birthday: toIsoDate(toInputDate(updated.birthday)),
       phoneNumber: updated.phoneNumber || "",
+      countryCode: (updated.countryCode || "").toUpperCase(),
     });
     if (showMessage) {
       setSnackbar(showMessage);
@@ -137,12 +149,18 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
     setError("");
     setIsSaving(true);
     try {
+      const phone = (profile.phoneNumber || "").trim();
+      if (phone && !isValidInternationalPhone(phone)) {
+        setError("Wrong phone number format");
+        return;
+      }
       const payload = {
         firstName: profile.firstName || "",
         lastName: profile.lastName || "",
         description: profile.description || "",
         birthday: toIsoDate(profile.birthday),
-        phoneNumber: profile.phoneNumber || "",
+        phoneNumber: phone,
+        countryCode: (profile.countryCode || "").toUpperCase(),
       };
       const dirtyPayload = Object.fromEntries(
         Object.entries(payload).filter(([key, value]) => value !== initialProfile?.[key]),
@@ -165,6 +183,7 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
         description: updated.description || "",
         birthday: toIsoDate(toInputDate(updated.birthday)),
         phoneNumber: updated.phoneNumber || "",
+        countryCode: (updated.countryCode || "").toUpperCase(),
       });
       setIsEditing(false);
       setSnackbar("Profile updated");
@@ -326,12 +345,18 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
               disabled={!editable || !isEditing}
               slotProps={{ textField: { fullWidth: true } }}
             />
-            <TextField
-              label="Phone number"
-              value={profile.phoneNumber || ""}
-              onChange={(event) => handleFieldChange("phoneNumber", event.target.value)}
-              InputProps={{ readOnly: !editable || !isEditing }}
-            />
+            {editable && isEditing ? (
+              <PhoneCountryField
+                phoneNumber={profile.phoneNumber}
+                countryCode={profile.countryCode}
+                onChange={({ phoneNumber, countryCode }) =>
+                  setProfile((prev) => ({ ...prev, phoneNumber, countryCode }))
+                }
+                disabled={isSaving}
+              />
+            ) : (
+              <TextField label="Phone number" value={profile.phoneNumber || ""} InputProps={{ readOnly: true }} />
+            )}
             {error ? <Alert severity="error">{error}</Alert> : null}
           </Stack>
         </LocalizationProvider>

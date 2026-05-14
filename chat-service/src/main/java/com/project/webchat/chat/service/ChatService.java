@@ -213,6 +213,7 @@ public class ChatService {
 
         //update last activity
         updateChatLastActivity(sendMessageRequest.getChatId(), sendMessageRequest.getContent());
+        chatRoomRepository.findById(sendMessageRequest.getChatId()).ifPresent(this::notifyRoomMembersChatUpdated);
 
         //mark user online or refresh online status
         redisService.updatePresence(senderId, sendMessageRequest.getChatId());
@@ -285,6 +286,7 @@ public class ChatService {
             newAttachments.add(clone);
         }
         updateChatLastActivity(targetChatId, getPreviewText(saved.getContent(), newAttachments));
+        chatRoomRepository.findById(targetChatId).ifPresent(this::notifyRoomMembersChatUpdated);
         publishMessageCreatedV1(saved, getPreviewText(saved.getContent(), newAttachments));
 
         redisService.updatePresence(senderId, targetChatId);
@@ -333,6 +335,7 @@ public class ChatService {
         }
 
         updateChatLastActivity(chatId, getPreviewText(content, attachments));
+        chatRoomRepository.findById(chatId).ifPresent(this::notifyRoomMembersChatUpdated);
         publishMessageCreatedV1(savedMessage, getPreviewText(content, attachments));
 
         redisService.updatePresence(senderId, chatId);
@@ -384,6 +387,7 @@ public class ChatService {
         }
 
         updateChatLastActivity(chatId, getPreviewText(null, attachments));
+        chatRoomRepository.findById(chatId).ifPresent(this::notifyRoomMembersChatUpdated);
         publishMessageCreatedV1(savedMessage, getPreviewText(null, attachments));
 
         redisService.updatePresence(senderId, chatId);
@@ -466,28 +470,29 @@ public class ChatService {
     }
 
     @Transactional
-    public void deleteMessage(String messageId, Long senderId) {
+    public void deleteMessage(String messageId, Long actorId) {
         ChatMessage toDelete = chatMessageRepository.findById(messageId)
                 .orElseThrow(() -> new IllegalArgumentException("Message not found"));
 
-        if (!senderId.equals(toDelete.getSenderId())) {
-            throw new IllegalArgumentException("You can only delete your own messages");
+        ChatRoom room = loadRoom(toDelete.getChatId());
+        if (!canEditOrDeleteMessage(room, actorId, toDelete.getSenderId())) {
+            throw new ForbiddenChatOperationException("You cannot delete this message");
         }
 
-        //storing chat id for websocket
         String chatId = toDelete.getChatId();
 
         chatMessageRepository.delete(toDelete);
-        webSocketService.notifyMessageDeleted(messageId, chatId, senderId);
+        webSocketService.notifyMessageDeleted(messageId, chatId, actorId);
     }
 
     @Transactional
-    public ChatMessageDTO editMessage(String messageId, Long senderId, String newContent) {
+    public ChatMessageDTO editMessage(String messageId, Long actorId, String newContent) {
         ChatMessage message = chatMessageRepository.findById(messageId)
                 .orElseThrow(() -> new IllegalArgumentException("Message not found"));
 
-        if (!senderId.equals(message.getSenderId())) {
-            throw new IllegalArgumentException("You can only edit your own messages");
+        ChatRoom room = loadRoom(message.getChatId());
+        if (!canEditOrDeleteMessage(room, actorId, message.getSenderId())) {
+            throw new ForbiddenChatOperationException("You cannot edit this message");
         }
 
         MessageType messageType = message.getMessageType() != null ? message.getMessageType() : MessageType.TEXT;
@@ -520,7 +525,7 @@ public class ChatService {
                 updatedMessage.getId(),
                 updatedMessage.getChatId(),
                 updatedMessage.getContent(),
-                senderId,
+                actorId,
                 editedAt,
                 updatedMessage.getMessageType()
         );
@@ -540,6 +545,12 @@ public class ChatService {
         Set<Long> otherMembers = new HashSet<>(chat.getMemberIds());
         otherMembers.remove(userId);
         chat.getMemberIds().remove(userId);
+        if (chat.getAdminIds() != null) {
+            chat.getAdminIds().remove(userId);
+        }
+        if (chat.getChannelPosterIds() != null) {
+            chat.getChannelPosterIds().remove(userId);
+        }
 
         if (chat.getMemberIds().isEmpty()) {
             chatRoomRepository.delete(chat);
@@ -574,6 +585,24 @@ public class ChatService {
                 currentUserId,
                 pageable);
         return page.map(DiscoverableRoomDTO::fromRoom);
+    }
+
+    /**
+     * Group chats and channels the user is already in, optionally filtered by room name.
+     */
+    public Page<DiscoverableRoomDTO> searchMyGroupChannels(Long currentUserId, String q, Pageable pageable) {
+        String regex = (q == null || q.trim().isEmpty()) ? ".*" : Pattern.quote(q.trim());
+        return chatRoomRepository
+                .findMemberGroupChannelsByName(currentUserId, ChatType.GROUP, ChatType.CHANNEL, regex, pageable)
+                .map(room -> DiscoverableRoomDTO.fromRoom(room, true));
+    }
+
+    public ChatRoomDTO getRoomForMember(String roomId, Long userId) {
+        ChatRoom room = loadRoom(roomId);
+        if (!room.isMember(userId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        return enrichChatWithUserData(room, userId, getUnreadCount(room.getId(), userId));
     }
 
     @Transactional
@@ -635,8 +664,8 @@ public class ChatService {
                 throw new ForbiddenChatOperationException("Only group admins can regenerate the invite link");
             }
         } else if (room.getType() == ChatType.CHANNEL) {
-            if (room.getCreatedBy() == null || !room.getCreatedBy().equals(userId)) {
-                throw new ForbiddenChatOperationException("Only the channel creator can regenerate the invite link");
+            if (!effectiveChannelModeratorIds(room).contains(userId)) {
+                throw new ForbiddenChatOperationException("Only channel owners and moderators can regenerate the invite link");
             }
         } else {
             throw new IllegalArgumentException("This room does not support invite links");
@@ -662,8 +691,8 @@ public class ChatService {
                 throw new ForbiddenChatOperationException("Only group admins can view the invite link");
             }
         } else if (room.getType() == ChatType.CHANNEL) {
-            if (room.getCreatedBy() == null || !room.getCreatedBy().equals(userId)) {
-                throw new ForbiddenChatOperationException("Only the channel creator can view the invite link");
+            if (!effectiveChannelModeratorIds(room).contains(userId)) {
+                throw new ForbiddenChatOperationException("Only channel owners and moderators can view the invite link");
             }
         } else {
             throw new IllegalArgumentException("This room does not support invite links");
@@ -677,38 +706,122 @@ public class ChatService {
     @Transactional
     public ChatRoomDTO mutateGroupAdmins(String roomId, Long actorId, AdminMutationRequest request) {
         ChatRoom room = loadRoom(roomId);
-        if (room.getType() != ChatType.GROUP) {
-            throw new IllegalArgumentException("Admin actions apply only to group chats");
+        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Admin actions apply only to group chats and channels");
         }
         if (!room.isMember(actorId)) {
             throw new ForbiddenChatOperationException("You are not a member of this chat");
         }
-        if (!effectiveAdminIds(room).contains(actorId)) {
-            throw new ForbiddenChatOperationException("Only admins can change admin roles");
-        }
         Long target = request.getUserId();
-        if (!room.isMember(target)) {
-            throw new IllegalArgumentException("That user is not a member of this group");
-        }
-        Set<Long> admins = new HashSet<>(effectiveAdminIds(room));
-        if (request.getAction() == AdminAction.PROMOTE) {
-            admins.add(target);
-        } else if (request.getAction() == AdminAction.DEMOTE) {
-            if (!admins.contains(target)) {
-                throw new IllegalArgumentException("That user is not an admin");
+        AdminAction action = request.getAction();
+
+        if (room.getType() == ChatType.GROUP) {
+            if (action != AdminAction.PROMOTE && action != AdminAction.DEMOTE) {
+                throw new IllegalArgumentException("Unsupported admin action for groups");
             }
-            Set<Long> after = new HashSet<>(admins);
-            after.remove(target);
-            if (after.isEmpty()) {
-                throw new IllegalArgumentException("Cannot demote the last admin. Promote another member first.");
+            if (!effectiveAdminIds(room).contains(actorId)) {
+                throw new ForbiddenChatOperationException("Only admins can change admin roles");
             }
-            admins = after;
+            if (!room.isMember(target)) {
+                throw new IllegalArgumentException("That user is not a member of this group");
+            }
+            Set<Long> admins = new HashSet<>(effectiveAdminIds(room));
+            if (action == AdminAction.PROMOTE) {
+                admins.add(target);
+            } else {
+                if (!admins.contains(target)) {
+                    throw new IllegalArgumentException("That user is not an admin");
+                }
+                Set<Long> after = new HashSet<>(admins);
+                after.remove(target);
+                if (after.isEmpty()) {
+                    throw new IllegalArgumentException("Cannot demote the last admin. Promote another member first.");
+                }
+                admins = after;
+            }
+            room.setAdminIds(admins);
         } else {
-            throw new IllegalArgumentException("Unsupported admin action");
+            if (!effectiveChannelModeratorIds(room).contains(actorId)) {
+                throw new ForbiddenChatOperationException("Only channel owners and moderators can manage roles");
+            }
+            if (!room.isMember(target)) {
+                throw new IllegalArgumentException("That user is not a member of this channel");
+            }
+            if (room.getCreatedBy() != null && room.getCreatedBy().equals(target)
+                    && (action == AdminAction.DEMOTE || action == AdminAction.REVOKE_POST)) {
+                throw new IllegalArgumentException("Cannot change the channel owner's moderator role or posting rights");
+            }
+            switch (action) {
+                case PROMOTE -> {
+                    if (room.getCreatedBy() != null && room.getCreatedBy().equals(target)) {
+                        throw new IllegalArgumentException("The channel owner is already a moderator");
+                    }
+                    if (room.getAdminIds() == null) {
+                        room.setAdminIds(new HashSet<>());
+                    }
+                    room.getAdminIds().add(target);
+                    if (room.getChannelPosterIds() != null) {
+                        room.getChannelPosterIds().remove(target);
+                    }
+                }
+                case DEMOTE -> {
+                    if (room.getAdminIds() == null || !room.getAdminIds().contains(target)) {
+                        throw new IllegalArgumentException("That user is not a channel moderator");
+                    }
+                    room.getAdminIds().remove(target);
+                }
+                case GRANT_POST -> {
+                    if (room.getCreatedBy() != null && room.getCreatedBy().equals(target)) {
+                        throw new IllegalArgumentException("The channel owner can already post");
+                    }
+                    if (room.getAdminIds() != null && room.getAdminIds().contains(target)) {
+                        throw new IllegalArgumentException("Channel moderators can already post");
+                    }
+                    if (room.getChannelPosterIds() == null) {
+                        room.setChannelPosterIds(new HashSet<>());
+                    }
+                    room.getChannelPosterIds().add(target);
+                }
+                case REVOKE_POST -> {
+                    if (room.getChannelPosterIds() == null || !room.getChannelPosterIds().contains(target)) {
+                        throw new IllegalArgumentException("That user does not have explicit posting permission");
+                    }
+                    room.getChannelPosterIds().remove(target);
+                }
+                default -> throw new IllegalArgumentException("Unsupported admin action");
+            }
         }
-        room.setAdminIds(admins);
         ChatRoom saved = chatRoomRepository.save(room);
         notifyRoomMembersChatUpdated(saved);
+        return enrichChatWithUserData(saved, actorId, getUnreadCount(saved.getId(), actorId));
+    }
+
+    @Transactional
+    public ChatRoomDTO addRoomMember(String roomId, Long actorId, Long newMemberId) {
+        if (newMemberId == null) {
+            throw new IllegalArgumentException("User id is required");
+        }
+        ChatRoom room = loadRoom(roomId);
+        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Members can only be added to groups or channels");
+        }
+        if (!room.isMember(actorId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        boolean canInvite = room.getType() == ChatType.GROUP
+                ? effectiveAdminIds(room).contains(actorId)
+                : effectiveChannelModeratorIds(room).contains(actorId);
+        if (!canInvite) {
+            throw new ForbiddenChatOperationException("You cannot add members to this room");
+        }
+        if (room.isMember(newMemberId)) {
+            return enrichChatWithUserData(room, actorId, getUnreadCount(room.getId(), actorId));
+        }
+        room.addMember(newMemberId);
+        ChatRoom saved = chatRoomRepository.save(room);
+        notifyRoomMembersChatUpdated(saved);
+        webSocketService.notifyChatCreated(newMemberId,
+                enrichChatWithUserData(saved, newMemberId, getUnreadCount(saved.getId(), newMemberId)));
         return enrichChatWithUserData(saved, actorId, getUnreadCount(saved.getId(), actorId));
     }
 
@@ -787,10 +900,19 @@ public class ChatService {
                 .unreadCount(unreadCount)
                 .createdBy(chat.getCreatedBy())
                 .memberCount(chat.getMemberIds() != null ? chat.getMemberIds().size() : 0)
-                .currentUserAdmin(chat.getType() == ChatType.GROUP && effectiveAdminIds(chat).contains(currentUserId))
-                .currentUserChannelCreator(chat.getType() == ChatType.CHANNEL
-                        && chat.getCreatedBy() != null
-                        && chat.getCreatedBy().equals(currentUserId));
+                .currentUserAdmin(chat.getType() == ChatType.GROUP && effectiveAdminIds(chat).contains(currentUserId));
+
+        boolean channelCreator = chat.getType() == ChatType.CHANNEL
+                && chat.getCreatedBy() != null
+                && chat.getCreatedBy().equals(currentUserId);
+        boolean channelPromotedAdmin = chat.getType() == ChatType.CHANNEL
+                && chat.getAdminIds() != null
+                && chat.getAdminIds().contains(currentUserId);
+        boolean channelPoster = chat.getType() == ChatType.CHANNEL
+                && channelPosterIdsSet(chat).contains(currentUserId);
+        builder.currentUserChannelCreator(channelCreator)
+                .currentUserChannelAdmin(channelPromotedAdmin)
+                .currentUserChannelPoster(channelPoster);
 
         //for private chats - find the other user
         if (chat.getType() == ChatType.PRIVATE) {
@@ -812,6 +934,15 @@ public class ChatService {
             builder.members(members);
             builder.groupName(chat.getGroupName());
             builder.groupPhoto(chat.getGroupPhoto());
+            builder.description(chat.getDescription());
+            if (chat.getType() == ChatType.GROUP) {
+                builder.adminUserIds(new ArrayList<>(effectiveAdminIds(chat)));
+            } else if (chat.getType() == ChatType.CHANNEL) {
+                builder.adminUserIds(chat.getAdminIds() == null
+                        ? new ArrayList<>()
+                        : new ArrayList<>(chat.getAdminIds()));
+                builder.channelPosterUserIds(new ArrayList<>(channelPosterIdsSet(chat)));
+            }
         }
 
         return builder.build();
@@ -985,14 +1116,19 @@ public class ChatService {
         String inviteToken = visibility == RoomVisibility.PRIVATE ? UUID.randomUUID().toString() : null;
         Set<Long> adminIds = type == ChatType.GROUP ? new HashSet<>(Set.of(creatorId)) : new HashSet<>();
 
+        String groupPhoto = normalizeGroupPhoto(request.getGroupPhoto());
+        String description = normalizeRoomDescription(request.getDescription());
+
         ChatRoom room = ChatRoom.builder()
                 .type(type)
                 .visibility(visibility)
                 .memberIds(members)
                 .groupName(name)
-                .groupPhoto(request.getGroupPhoto())
+                .groupPhoto(groupPhoto)
+                .description(description)
                 .createdBy(creatorId)
                 .adminIds(adminIds)
+                .channelPosterIds(new HashSet<>())
                 .inviteToken(inviteToken)
                 .lastActivity(LocalDateTime.now())
                 .createdAt(LocalDateTime.now())
@@ -1022,11 +1158,75 @@ public class ChatService {
                 .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
     }
 
-    private void assertCanPostMessage(ChatRoom room, Long senderId) {
-        if (room.getType() == ChatType.CHANNEL
-                && (room.getCreatedBy() == null || !room.getCreatedBy().equals(senderId))) {
-            throw new ForbiddenChatOperationException("Only the channel creator can post in this channel.");
+    private String normalizeGroupPhoto(String raw) {
+        if (raw == null) {
+            return null;
         }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (trimmed.startsWith("data:image/")) {
+            return trimmed;
+        }
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            return trimmed;
+        }
+        throw new IllegalArgumentException("Room image must be an https URL or a pasted image (data URL).");
+    }
+
+    private String normalizeRoomDescription(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private void assertCanPostMessage(ChatRoom room, Long senderId) {
+        if (room.getType() != ChatType.CHANNEL) {
+            return;
+        }
+        boolean canPost = room.getCreatedBy() != null && room.getCreatedBy().equals(senderId)
+                || (room.getAdminIds() != null && room.getAdminIds().contains(senderId))
+                || channelPosterIdsSet(room).contains(senderId);
+        if (!canPost) {
+            throw new ForbiddenChatOperationException("You do not have permission to post in this channel.");
+        }
+    }
+
+    private Set<Long> effectiveChannelModeratorIds(ChatRoom room) {
+        if (room.getType() != ChatType.CHANNEL) {
+            return Set.of();
+        }
+        Set<Long> out = new HashSet<>();
+        if (room.getCreatedBy() != null) {
+            out.add(room.getCreatedBy());
+        }
+        if (room.getAdminIds() != null) {
+            out.addAll(room.getAdminIds());
+        }
+        return out;
+    }
+
+    private Set<Long> channelPosterIdsSet(ChatRoom room) {
+        if (room.getChannelPosterIds() == null) {
+            return new HashSet<>();
+        }
+        return new HashSet<>(room.getChannelPosterIds());
+    }
+
+    private boolean canEditOrDeleteMessage(ChatRoom room, Long actorId, Long messageSenderId) {
+        if (actorId.equals(messageSenderId)) {
+            return true;
+        }
+        if (room.getType() == ChatType.GROUP) {
+            return effectiveAdminIds(room).contains(actorId);
+        }
+        if (room.getType() == ChatType.CHANNEL) {
+            return effectiveChannelModeratorIds(room).contains(actorId);
+        }
+        return false;
     }
 
     private Set<Long> effectiveAdminIds(ChatRoom room) {

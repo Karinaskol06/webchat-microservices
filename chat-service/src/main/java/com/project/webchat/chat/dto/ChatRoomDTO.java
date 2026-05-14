@@ -11,6 +11,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -30,6 +31,12 @@ public class ChatRoomDTO {
     private boolean currentUserAdmin;
     @JsonProperty("isCurrentUserChannelCreator")
     private boolean currentUserChannelCreator;
+    /** CHANNEL: promoted moderator (in adminIds), not the creator. */
+    @JsonProperty("isCurrentUserChannelAdmin")
+    private boolean currentUserChannelAdmin;
+    /** CHANNEL: member explicitly allowed to post (not creator / channel admin). */
+    @JsonProperty("isCurrentUserChannelPoster")
+    private boolean currentUserChannelPoster;
     private int memberCount;
 
     //for private chat
@@ -38,6 +45,11 @@ public class ChatRoomDTO {
     //for group chats
     private String groupName;
     private String groupPhoto;
+    private String description;
+    /** GROUP: admin user ids. CHANNEL: promoted moderator user ids (excludes creator). */
+    private List<Long> adminUserIds = new ArrayList<>();
+    /** CHANNEL only: user ids with posting permission without being a channel admin. */
+    private List<Long> channelPosterUserIds = new ArrayList<>();
     private List<UserInfoDTO> members;
 
     public static ChatRoomDTO toDTO(ChatRoom chatRoom, Integer unreadCount) {
@@ -55,6 +67,7 @@ public class ChatRoomDTO {
         if (chatRoom.getType() == ChatType.GROUP || chatRoom.getType() == ChatType.CHANNEL) {
             builder.groupName(chatRoom.getGroupName());
             builder.groupPhoto(chatRoom.getGroupPhoto());
+            builder.description(chatRoom.getDescription());
         }
 
         return builder.build();

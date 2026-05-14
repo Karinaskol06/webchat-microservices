@@ -68,7 +68,11 @@ const useChatStore = create((set, get) => ({
             String(item?.id) === cid ? { ...item, ...chat } : item
           )
         : [chat, ...state.chats];
-      return { chats: reorderChatsByRecent(nextChats) };
+      const next = { chats: reorderChatsByRecent(nextChats) };
+      if (state.currentChat && String(state.currentChat.id) === cid) {
+        next.currentChat = { ...state.currentChat, ...chat };
+      }
+      return next;
     });
   },
 

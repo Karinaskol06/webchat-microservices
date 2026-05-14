@@ -50,6 +50,9 @@ public class User {
     @Column(name = "phone_number", length = 30)
     private String phoneNumber;
 
+    @Column(name = "country_code", length = 2)
+    private String countryCode;
+
     @Column(name = "is_active")
     private boolean isActive = true;
 

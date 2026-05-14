@@ -7,6 +7,10 @@ import {
   subscribeToChat,
   subscribeToUserChatEvents,
 } from '../utils/websocket';
+import {
+  WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT,
+  WEBCHAT_MESSAGES_MARKED_READ,
+} from '../constants/chatEvents';
 
 const normalizeWsMessagePayload = (event) =>
   event?.type === 'MESSAGE_SENT' && event.message != null ? event.message : event;
@@ -34,7 +38,10 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
     chatId: currentChatId,
     userId: currentUserId,
   });
-  routingRef.current = { chatId: currentChatId, userId: currentUserId };
+
+  useEffect(() => {
+    routingRef.current = { chatId: currentChatId, userId: currentUserId };
+  }, [currentChatId, currentUserId]);
 
   const presenceBumpTimersRef = useRef({});
 
@@ -103,12 +110,26 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
           if (isFocused) {
             store.addMessage(message);
             if (isIncoming) {
+              window.dispatchEvent(
+                new CustomEvent(WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT, {
+                  detail: { chatId: topicChatId, message },
+                }),
+              );
               if (markReadTimeoutRef.current) {
                 clearTimeout(markReadTimeoutRef.current);
               }
               markReadTimeoutRef.current = window.setTimeout(() => {
-                chatService.markAsRead(topicChatId).catch(() => {});
-                useChatStore.getState().resetUnreadCount(topicChatId);
+                chatService
+                  .markAsRead(topicChatId)
+                  .then(() => {
+                    window.dispatchEvent(
+                      new CustomEvent(WEBCHAT_MESSAGES_MARKED_READ, {
+                        detail: { chatId: topicChatId },
+                      }),
+                    );
+                    useChatStore.getState().resetUnreadCount(topicChatId);
+                  })
+                  .catch(() => {});
               }, 500);
             }
           } else if (isIncoming) {
@@ -134,7 +155,6 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
         markReadTimeoutRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chatIdsKey encodes memberships
   }, [user, chatIdsKey]);
 
   /** Focused chat: typing / read receipts / deletes / edits / attachments — not messages (handled above). */

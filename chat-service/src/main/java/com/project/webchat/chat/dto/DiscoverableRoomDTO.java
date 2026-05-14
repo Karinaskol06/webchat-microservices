@@ -19,8 +19,14 @@ public class DiscoverableRoomDTO {
     private String groupPhoto;
     private int memberCount;
     private Long createdBy;
+    /** When true, the current user is already a member (open from sidebar instead of join). */
+    private boolean alreadyMember;
 
     public static DiscoverableRoomDTO fromRoom(ChatRoom room) {
+        return fromRoom(room, false);
+    }
+
+    public static DiscoverableRoomDTO fromRoom(ChatRoom room, boolean alreadyMember) {
         return DiscoverableRoomDTO.builder()
                 .id(room.getId())
                 .type(room.getType() != null ? room.getType().name() : null)
@@ -29,6 +35,7 @@ public class DiscoverableRoomDTO {
                 .groupPhoto(room.getGroupPhoto())
                 .memberCount(room.getMemberIds() != null ? room.getMemberIds().size() : 0)
                 .createdBy(room.getCreatedBy())
+                .alreadyMember(alreadyMember)
                 .build();
     }
 }

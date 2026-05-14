@@ -64,6 +64,110 @@ const chatService = {
     }
   },
 
+  mutateRoomAdmins: async (roomId, userId, action) => {
+    try {
+      const response = await api.post(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/admins`,
+        { userId, action },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  addRoomMember: async (roomId, userId) => {
+    try {
+      const response = await api.post(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/members`,
+        { userId },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createGroupRoom: async ({ name, visibility, description, groupPhoto, memberIds }) => {
+    try {
+      const response = await api.post('/api/chat/rooms/group', {
+        name,
+        visibility,
+        description: description || undefined,
+        groupPhoto: groupPhoto || undefined,
+        memberIds: memberIds ?? [],
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createChannelRoom: async ({ name, visibility, description, groupPhoto, memberIds }) => {
+    try {
+      const response = await api.post('/api/chat/rooms/channel', {
+        name,
+        visibility,
+        description: description || undefined,
+        groupPhoto: groupPhoto || undefined,
+        memberIds: memberIds ?? [],
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  searchMyGroupChannels: async (q = '', page = 0, size = 20) => {
+    try {
+      const response = await api.get('/api/chat/my-rooms', {
+        params: { q: q?.trim() ?? '', page, size },
+      });
+      const data = response.data;
+      return {
+        rooms: Array.isArray(data?.content) ? data.content : [],
+        totalPages: data?.totalPages ?? 0,
+        page: data?.number ?? page,
+        last: data?.last ?? true,
+      };
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  getRoom: async (roomId) => {
+    try {
+      const response = await api.get(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}`,
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  getRoomInvite: async (roomId) => {
+    try {
+      const response = await api.get(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/invite`,
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  regenerateRoomInvite: async (roomId) => {
+    try {
+      const response = await api.post(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/invite/regenerate`,
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   bootstrapMessage: async ({ recipientUserId, content, clientRequestKey }) => {
     try {
       const response = await api.post('/api/chat/bootstrap-message', {

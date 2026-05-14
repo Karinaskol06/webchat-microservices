@@ -11,6 +11,8 @@ let stompClient = null;
 let pendingChatSubscriptions = [];
 let userEventSubscriptions = [];
 let pendingUserEventHandlers = [];
+/** JWT string last used for an active STOMP session — prevents session fixation if token changes while client is still active */
+let lastBoundToken = null;
 
 const isStompConnected = () => Boolean(stompClient && stompClient.connected);
 
@@ -22,7 +24,10 @@ export const connectWebSocket = () => {
   }
 
   if (stompClient?.active) {
-    return stompClient;
+    if (lastBoundToken === token) {
+      return stompClient;
+    }
+    disconnectWebSocket();
   }
 
   // Same host as REST API (api-gateway routes /ws/** to chat-service)
@@ -44,6 +49,7 @@ export const connectWebSocket = () => {
     heartbeatOutgoing: 4000,
     onConnect: () => {
       console.log('WebSocket connected');
+      lastBoundToken = token;
 
       // attach any subscriptions that were requested before connection
       pendingChatSubscriptions.forEach((sub) => {
@@ -268,6 +274,7 @@ export const disconnectWebSocket = () => {
     stompClient.deactivate();
     stompClient = null;
     pendingChatSubscriptions = [];
+    lastBoundToken = null;
   }
 };
 

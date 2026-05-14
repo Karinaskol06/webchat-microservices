@@ -41,9 +41,13 @@ public class UserService {
             throw new IllegalArgumentException("Username is already in use");
         }
 
-        if(userRepository.existsByEmail(registerDTO.getEmail())) {
+        String email = registerDTO.getEmail().trim();
+        if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Email is already in use");
         }
+
+        String phoneNumber = registerDTO.getPhoneNumber().trim();
+        String countryCode = registerDTO.getCountryCode().trim().toUpperCase(Locale.ROOT);
 
         String encodedPassword = passwordEncoder.encode(registerDTO.getPassword());
 
@@ -51,7 +55,9 @@ public class UserService {
                 .username(registerDTO.getUsername())
                 .firstName(registerDTO.getFirstName())
                 .lastName(registerDTO.getLastName())
-                .email(registerDTO.getEmail())
+                .email(email)
+                .phoneNumber(phoneNumber)
+                .countryCode(countryCode)
                 .passwordHash(encodedPassword)
                 .isActive(true)
                 .build();
@@ -84,7 +90,12 @@ public class UserService {
             user.setBirthday(updateUserDTO.getBirthday());
         }
         if (providedFields.contains("phoneNumber")) {
-            user.setPhoneNumber(updateUserDTO.getPhoneNumber());
+            String p = updateUserDTO.getPhoneNumber();
+            user.setPhoneNumber(p == null || p.isBlank() ? null : p.trim());
+        }
+        if (providedFields.contains("countryCode")) {
+            String cc = updateUserDTO.getCountryCode();
+            user.setCountryCode(cc == null || cc.isBlank() ? null : cc.trim().toUpperCase(Locale.ROOT));
         }
 
         User savedUser = userRepository.save(user);
@@ -135,7 +146,10 @@ public class UserService {
     }
 
     public boolean existsByEmail(String email) {
-        return userRepository.existsByEmail(email);
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+        return userRepository.existsByEmail(email.trim());
     }
 
     public boolean validateCredentials(String username, String password) {
@@ -212,6 +226,7 @@ public class UserService {
                 .description(user.getDescription())
                 .birthday(user.getBirthday())
                 .phoneNumber(user.getPhoneNumber())
+                .countryCode(user.getCountryCode())
                 .build();
     }
 

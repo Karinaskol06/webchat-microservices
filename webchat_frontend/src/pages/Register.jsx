@@ -7,11 +7,14 @@ import {
   Typography,
   Box,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Stack,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import useAuthStore from '../store/useAuthStore';
+import PhoneCountryField from '../components/common/PhoneCountryField';
+import { isValidInternationalPhone } from '../utils/internationalPhone';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -22,6 +25,8 @@ const Register = () => {
     email: '',
     firstName: '',
     lastName: '',
+    phoneNumber: '',
+    countryCode: 'UA',
     password: '',
     confirmPassword: ''
   });
@@ -54,6 +59,16 @@ const Register = () => {
     
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    const phone = (formData.phoneNumber || '').trim();
+    if (!phone) {
+      setError('Phone number is required.');
+      return;
+    }
+    if (!isValidInternationalPhone(phone)) {
+      setError('Wrong phone number format');
       return;
     }
 
@@ -136,7 +151,18 @@ const Register = () => {
               margin="normal"
               disabled={loading}
             />
-            
+
+            <Stack sx={{ mt: 1, mb: 0 }}>
+              <PhoneCountryField
+                phoneNumber={formData.phoneNumber}
+                countryCode={formData.countryCode}
+                onChange={({ phoneNumber, countryCode }) =>
+                  setFormData((prev) => ({ ...prev, phoneNumber, countryCode }))
+                }
+                disabled={loading}
+              />
+            </Stack>
+
             <TextField
               fullWidth
               label="Password *"

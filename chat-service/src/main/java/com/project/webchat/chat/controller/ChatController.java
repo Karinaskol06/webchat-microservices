@@ -1,5 +1,6 @@
 package com.project.webchat.chat.controller;
 
+import com.project.webchat.chat.dto.AddRoomMemberRequest;
 import com.project.webchat.chat.dto.AdminMutationRequest;
 import com.project.webchat.chat.dto.BootstrapMessageRequest;
 import com.project.webchat.chat.dto.BootstrapMessageResponse;
@@ -189,6 +190,30 @@ public class ChatController {
         return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
+    /**
+     * Returns a single group/channel/private room for the current user (member-only).
+     */
+    @GetMapping("/rooms/{id}")
+    public ResponseEntity<ChatRoomDTO> getRoomForMember(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        ChatRoomDTO dto = chatService.getRoomForMember(id, currentUser.getId());
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * Search group chats and channels the user already belongs to, by name.
+     */
+    @GetMapping("/my-rooms")
+    public ResponseEntity<Page<DiscoverableRoomDTO>> searchMyGroupChannels(
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestParam(required = false) String q,
+            @PageableDefault(size = 20, sort = "lastActivity", direction = Sort.Direction.DESC)
+            Pageable pageable) {
+        Page<DiscoverableRoomDTO> page = chatService.searchMyGroupChannels(currentUser.getId(), q, pageable);
+        return ResponseEntity.ok(page);
+    }
+
     @GetMapping("/discover")
     public ResponseEntity<Page<DiscoverableRoomDTO>> discoverRooms(
             @AuthenticationPrincipal CustomUserDetails currentUser,
@@ -237,6 +262,15 @@ public class ChatController {
             @AuthenticationPrincipal CustomUserDetails currentUser,
             @RequestBody @jakarta.validation.Valid AdminMutationRequest request) {
         ChatRoomDTO dto = chatService.mutateGroupAdmins(id, currentUser.getId(), request);
+        return ResponseEntity.ok(dto);
+    }
+
+    @PostMapping("/rooms/{id}/members")
+    public ResponseEntity<ChatRoomDTO> addRoomMember(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestBody @jakarta.validation.Valid AddRoomMemberRequest request) {
+        ChatRoomDTO dto = chatService.addRoomMember(id, currentUser.getId(), request.getUserId());
         return ResponseEntity.ok(dto);
     }
 

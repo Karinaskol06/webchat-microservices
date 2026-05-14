@@ -1,16 +1,23 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Box } from '@mui/material';
 import MessageItem from './MessageItem';
+import MessageUnreadSeparator from './MessageUnreadSeparator';
 
 const HIGHLIGHT_MS = 2200;
+
+const messageRowId = (message) => String(message?.id ?? message?._id ?? '');
 
 const MessageList = ({
   messages,
   currentUserId,
+  room = null,
   messagesEndRef,
   onReply,
   onOpenForward,
   onOpenForwardedProfile,
+  openSeparatorIndex = null,
+  liveBeforeMessageId = null,
+  hideChannelReplyActions = false,
 }) => {
   const safeMessages = Array.isArray(messages) ? messages : [];
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
@@ -60,18 +67,33 @@ const MessageList = ({
       }}
     >
       <div ref={contentRef}>
-        {safeMessages.map((message) => (
-          <MessageItem
-            key={message.id}
-            message={message}
-            currentUserId={currentUserId}
-            onReply={onReply}
-            onOpenForward={onOpenForward}
-            onOpenForwardedProfile={onOpenForwardedProfile}
-            onJumpToMessage={handleJumpToMessage}
-            isHighlighted={String(highlightedMessageId) === String(message.id)}
-          />
-        ))}
+        {safeMessages.map((message, index) => {
+          const mid = messageRowId(message);
+          const showOpen = openSeparatorIndex === index;
+          const showLive =
+            liveBeforeMessageId != null &&
+            liveBeforeMessageId !== '' &&
+            liveBeforeMessageId === mid;
+          const combined = showOpen && showLive;
+          return (
+            <Fragment key={mid || `idx-${index}`}>
+              {combined && <MessageUnreadSeparator label="New messages" />}
+              {!combined && showOpen && <MessageUnreadSeparator label="Unread messages" />}
+              {!combined && showLive && <MessageUnreadSeparator label="New messages" />}
+              <MessageItem
+                message={message}
+                currentUserId={currentUserId}
+                room={room}
+                onReply={onReply}
+                onOpenForward={onOpenForward}
+                onOpenForwardedProfile={onOpenForwardedProfile}
+                onJumpToMessage={handleJumpToMessage}
+                isHighlighted={String(highlightedMessageId) === String(message.id ?? message._id)}
+                hideReplyActions={hideChannelReplyActions}
+              />
+            </Fragment>
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
     </Box>

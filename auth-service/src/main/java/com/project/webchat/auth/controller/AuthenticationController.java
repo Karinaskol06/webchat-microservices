@@ -11,10 +11,8 @@ import feign.FeignException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -35,12 +33,8 @@ public class AuthenticationController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponseDTO> login(
             @Valid @RequestBody LoginRequestDTO loginRequestDTO) {
-        try {
-            LoginResponseDTO response = authService.login(loginRequestDTO);
-            return ResponseEntity.ok(response);
-        } catch (BadCredentialsException e) {
-            throw e;
-        }
+        LoginResponseDTO response = authService.login(loginRequestDTO);
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/logout")
@@ -54,8 +48,8 @@ public class AuthenticationController {
         try {
             ResponseEntity<Boolean> usernameExists = userServiceClient
                     .existsByUsername(registerRequest.getUsername());
-            ResponseEntity<Boolean> emailExists = userServiceClient
-                    .existsByEmail(registerRequest.getEmail());
+            String email = registerRequest.getEmail() == null ? null : registerRequest.getEmail().trim();
+            ResponseEntity<Boolean> emailExists = userServiceClient.existsByEmail(email);
 
             if (Boolean.TRUE.equals(usernameExists.getBody())) {
                 return ResponseEntity.badRequest().body("Username already exists");
@@ -68,7 +62,7 @@ public class AuthenticationController {
             return ResponseEntity.status(HttpStatus.CREATED).body(registered);
 
         } catch (FeignException e) {
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("USer service unavailable");
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body("User service unavailable");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

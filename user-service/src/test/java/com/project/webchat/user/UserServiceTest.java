@@ -44,6 +44,8 @@ public class UserServiceTest {
                 .username("karinaskol")
                 .email("karinaskol@gmail.com")
                 .password("11111")
+                .phoneNumber("+48572579928")
+                .countryCode("PL")
                 .firstName("Karina")
                 .lastName("Skoliboh")
                 .build();
@@ -55,6 +57,8 @@ public class UserServiceTest {
         assertThat(result.getEmail()).isEqualTo("karinaskol@gmail.com");
         assertThat(result.getFirstName()).isEqualTo("Karina");
         assertThat(result.getLastName()).isEqualTo("Skoliboh");
+        assertThat(result.getPhoneNumber()).isEqualTo("+15551234567");
+        assertThat(result.getCountryCode()).isEqualTo("US");
 
         User savedUser = userRepository.findByUsername("karinaskol").orElseThrow();
         assertThat(savedUser).isNotNull();
@@ -67,6 +71,8 @@ public class UserServiceTest {
                 .username("duplicate")
                 .password("11111")
                 .email("email1@gmail.com")
+                .phoneNumber("+48572579928")
+                .countryCode("PL")
                 .build();
 
         userService.registerUser(request1);
@@ -75,6 +81,8 @@ public class UserServiceTest {
                 .username("duplicate")
                 .password("22222")
                 .email("email2@gmail.com")
+                .phoneNumber("+48572579928")
+                .countryCode("PL")
                 .build();
 
         assertThatThrownBy(() -> userService.registerUser(request2))
@@ -88,6 +96,8 @@ public class UserServiceTest {
                 .username("karinaskol")
                 .email("karinaskol@gmail.com")
                 .password("11111")
+                .phoneNumber("+48572579928")
+                .countryCode("PL")
                 .firstName("Karina")
                 .lastName("Skoliboh")
                 .build();
@@ -110,6 +120,8 @@ public class UserServiceTest {
                 .username("testGet")
                 .email("testGet@gmail.com")
                 .password("11111")
+                .phoneNumber("+48572579928")
+                .countryCode("PL")
                 .firstName("Karina")
                 .lastName("Skoliboh")
                 .build();
@@ -132,16 +144,22 @@ public class UserServiceTest {
                 .username("alice")
                 .email("alice@gmail.com")
                 .password("11111")
+                .phoneNumber("+48572579928")
+                .countryCode("PL")
                 .build());
         UserDTO alex = userService.registerUser(RegisterRequestDTO.builder()
                 .username("alex")
                 .email("alex@gmail.com")
                 .password("11111")
+                .phoneNumber("+15552222222")
+                .countryCode("US")
                 .build());
         userService.registerUser(RegisterRequestDTO.builder()
                 .username("bob")
                 .email("bob@gmail.com")
                 .password("11111")
+                .phoneNumber("+15553333333")
+                .countryCode("US")
                 .build());
 
         List<UserSearchResultDTO> searchResults = userService

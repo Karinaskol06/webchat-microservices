@@ -9,7 +9,9 @@ import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.user.entity.ProfileImage;
 import com.project.webchat.user.service.ProfileImageService;
 import com.project.webchat.user.service.UserService;
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Valid;
+import jakarta.validation.Validator;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -19,6 +21,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 @RestController
@@ -28,14 +32,17 @@ public class UserController {
     private final UserService userService;
     private final ProfileImageService profileImageService;
     private final ObjectMapper objectMapper;
+    private final Validator validator;
 
     public UserController(
             UserService userService,
             ProfileImageService profileImageService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            Validator validator) {
         this.userService = userService;
         this.profileImageService = profileImageService;
         this.objectMapper = objectMapper;
+        this.validator = validator;
     }
 
     @GetMapping("/profile")
@@ -52,6 +59,20 @@ public class UserController {
             @RequestBody JsonNode payload) {
         try {
             UpdateUserDTO updateUserDTO = objectMapper.treeToValue(payload, UpdateUserDTO.class);
+            Set<ConstraintViolation<UpdateUserDTO>> violations = validator.validate(updateUserDTO);
+            if (!violations.isEmpty()) {
+                Map<String, String> fieldErrors = new LinkedHashMap<>();
+                for (ConstraintViolation<UpdateUserDTO> v : violations) {
+                    fieldErrors.put(v.getPropertyPath().toString(), v.getMessage());
+                }
+                Map<String, Object> errorResponse = new LinkedHashMap<>();
+                errorResponse.put("status", HttpStatus.BAD_REQUEST.value());
+                errorResponse.put("error", "Validation Failed");
+                errorResponse.put("message", "Invalid input data");
+                errorResponse.put("fieldErrors", fieldErrors);
+                errorResponse.put("timestamp", System.currentTimeMillis());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+            }
             UserDTO updatedUser = userService.updateUser(username, updateUserDTO, extractProvidedFields(payload));
             return ResponseEntity.ok(updatedUser);
         } catch (IllegalArgumentException e) {

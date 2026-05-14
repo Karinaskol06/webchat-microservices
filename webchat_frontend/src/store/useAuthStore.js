@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import useChatStore from "./useChatStore";
+import { disconnectWebSocket } from "../utils/websocket";
 
 const useAuthStore = create((set) => ({
   // holds the authentication state of the user
@@ -19,13 +21,15 @@ const useAuthStore = create((set) => ({
 
   // called after successful login to save user data and token
   login: (userData, token) => {
-    // save token to local storage for persistence across sessions
+    disconnectWebSocket();
+    useChatStore.getState().clearStore();
     localStorage.setItem("token", token);
-    // update the store with user data and set authenticated to true
     set({ user: userData, isAuthenticated: true, isInitialized: true });
   },
 
   logout: () => {
+    disconnectWebSocket();
+    useChatStore.getState().clearStore();
     localStorage.removeItem("token");
     set({ user: null, isAuthenticated: false, isInitialized: true });
   },

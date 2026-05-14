@@ -33,4 +33,9 @@ public interface ChatRoomRepository extends MongoRepository<ChatRoom, String> {
     @Query("{ 'type': { $in: [?0, ?1] }, 'visibility': ?2, 'groupName': { $regex: ?3, $options: 'i' }, 'memberIds': { $nin: [?4] } }")
     Page<ChatRoom> findPublicDiscoverableRooms(ChatType groupType, ChatType channelType, RoomVisibility publicVisibility,
                                                String nameRegex, Long excludeUserId, Pageable pageable);
+
+    /** Group and channel rooms the user is already a member of, filtered by name (case-insensitive). */
+    @Query("{ 'memberIds': ?0, 'type': { $in: [?1, ?2] }, 'groupName': { $regex: ?3, $options: 'i' } }")
+    Page<ChatRoom> findMemberGroupChannelsByName(Long memberId, ChatType groupType, ChatType channelType,
+                                               String nameRegex, Pageable pageable);
 }

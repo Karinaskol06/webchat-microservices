@@ -38,6 +38,23 @@ describe("useChatStore", () => {
     expect(ids[0]).toBe("1");
     expect(ids[1]).toBe("2");
   });
+
+  it("updateChatLastMessage reorders chats by preview timestamp", () => {
+    useChatStore.getState().setChats([
+      { id: "1", lastMessageTime: "2025-01-03T10:00:00" },
+      { id: "2", lastMessageTime: "2025-01-04T10:00:00" },
+    ]);
+    useChatStore.getState().updateChatLastMessage("1", {
+      content: "new",
+      timestamp: "2025-01-05T10:00:00",
+      senderId: 99,
+    });
+    const ids = useChatStore.getState().chats.map((c) => c.id);
+    expect(ids[0]).toBe("1");
+    expect(ids[1]).toBe("2");
+  });
+
+  it("setCurrentChat clears messages when switching to a different chat", () => {
     useChatStore.getState().setMessages([{ id: "m1", content: "text" }]);
     useChatStore.getState().setCurrentChat({ id: "chat-1" });
     expect(useChatStore.getState().messages).toEqual([]);

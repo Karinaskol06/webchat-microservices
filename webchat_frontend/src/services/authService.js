@@ -1,4 +1,4 @@
-import api from "./api";
+import api, { getApiErrorMessage } from "./api";
 
 //all requests to auth-service are made through api gateway
 const authService = {
@@ -11,7 +11,9 @@ const authService = {
       }
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      throw new Error(
+        getApiErrorMessage(error, "Login failed. Please try again.")
+      );
     }
   },
 

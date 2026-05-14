@@ -69,8 +69,13 @@ public class UserServiceController {
     @GetMapping("/by-username/{username}/with-password")
     public ResponseEntity<UserCredentialsResponse> getUserWithPasswordByUsername(
             @PathVariable String username) {
-        UserCredentialsResponse user = userService.getUserCredentialsByUsername(username);
-        return ResponseEntity.ok(user);
+        try {
+            UserCredentialsResponse user = userService.getUserCredentialsByUsername(username);
+            return ResponseEntity.ok(user);
+        } catch (UsernameNotFoundException e) {
+            log.warn("User not found for credentials lookup: {}", username);
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @GetMapping("/exists/username/{username}")

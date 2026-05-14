@@ -7,7 +7,9 @@ import Register from './pages/Register';
 import ChatPage from './pages/ChatPage';
 import JoinInvitePage from './pages/JoinInvitePage';
 import useAuthStore from './store/useAuthStore';
+import useChatStore from './store/useChatStore';
 import authService from './services/authService';
+import { disconnectWebSocket } from './utils/websocket';
 import chatService from './services/chatService';
 import pushNotificationService from './services/pushNotificationService';
 import { Box, CircularProgress } from '@mui/material';
@@ -41,7 +43,8 @@ function App() {
       const token = localStorage.getItem('token');
 
       if (!token) {
-        // no token, mark as initialized with no user
+        disconnectWebSocket();
+        useChatStore.getState().clearStore();
         setUser(null);
         return;
       }
@@ -52,6 +55,8 @@ function App() {
       } catch (error) {
         console.error('Failed to load user:', error);
         localStorage.removeItem('token');
+        disconnectWebSocket();
+        useChatStore.getState().clearStore();
         setUser(null);
       }
     };
