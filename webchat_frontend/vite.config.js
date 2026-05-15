@@ -20,6 +20,11 @@ export default defineConfig({
         target: 'http://localhost:8089',
         changeOrigin: true,
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', () => {
+            // SockJS reconnects; avoid noisy ECONNRESET logs when backend restarts
+          });
+        },
       },
     },
   },

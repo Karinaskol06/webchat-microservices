@@ -8,6 +8,7 @@ import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.BootstrapMessageRecordRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
+import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.shared.dto.ContactRequestCreateDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.UserInfoDTO;
@@ -35,6 +36,7 @@ public class ChatService {
 
     private final ChatMessageRepository chatMessageRepository;
     private final ChatRoomRepository chatRoomRepository;
+    private final RoomMemberInviteRepository roomMemberInviteRepository;
     private final AttachmentRepository attachmentRepository;
     private final BootstrapMessageRecordRepository bootstrapMessageRecordRepository;
     private final RedisService redisService;
@@ -802,31 +804,133 @@ public class ChatService {
             throw new IllegalArgumentException("User id is required");
         }
         ChatRoom room = loadRoom(roomId);
+        assertCanInviteMembers(room, actorId);
+        if (room.isMember(newMemberId)) {
+            return enrichChatWithUserData(room, actorId, getUnreadCount(room.getId(), actorId));
+        }
+        ChatRoom saved = addMemberToRoom(room, newMemberId);
+        return enrichChatWithUserData(saved, actorId, getUnreadCount(saved.getId(), actorId));
+    }
+
+    @Transactional
+    public ChatRoomDTO updateRoomPhoto(String roomId, Long actorId, String groupPhotoRaw) {
+        ChatRoom room = loadRoom(roomId);
         if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
-            throw new IllegalArgumentException("Members can only be added to groups or channels");
+            throw new IllegalArgumentException("Photo can only be updated for groups or channels");
         }
         if (!room.isMember(actorId)) {
             throw new ForbiddenChatOperationException("You are not a member of this chat");
         }
-        boolean canInvite = room.getType() == ChatType.GROUP
+        boolean canEdit = room.getType() == ChatType.GROUP
                 ? effectiveAdminIds(room).contains(actorId)
                 : effectiveChannelModeratorIds(room).contains(actorId);
-        if (!canInvite) {
-            throw new ForbiddenChatOperationException("You cannot add members to this room");
+        if (!canEdit) {
+            throw new ForbiddenChatOperationException("You cannot update this room photo");
         }
-        if (room.isMember(newMemberId)) {
-            return enrichChatWithUserData(room, actorId, getUnreadCount(room.getId(), actorId));
-        }
-        room.addMember(newMemberId);
+        room.setGroupPhoto(normalizeGroupPhoto(groupPhotoRaw));
         ChatRoom saved = chatRoomRepository.save(room);
         notifyRoomMembersChatUpdated(saved);
-        webSocketService.notifyChatCreated(newMemberId,
-                enrichChatWithUserData(saved, newMemberId, getUnreadCount(saved.getId(), newMemberId)));
         return enrichChatWithUserData(saved, actorId, getUnreadCount(saved.getId(), actorId));
     }
 
+    public List<RoomMemberInviteDTO> listPendingRoomMemberInvites(Long inviteeUserId) {
+        return roomMemberInviteRepository
+                .findByInviteeUserIdAndStateOrderByCreatedAtDesc(inviteeUserId, RoomMemberInviteState.PENDING)
+                .stream()
+                .map(this::toRoomMemberInviteDto)
+                .toList();
+    }
+
+    @Transactional
+    public RoomMemberInviteDTO inviteRoomMemberByUsername(String roomId, Long actorId, String rawUsername) {
+        String username = normalizeUsername(rawUsername);
+        if (username.isEmpty()) {
+            throw new IllegalArgumentException("Username is required");
+        }
+        ChatRoom room = loadRoom(roomId);
+        assertCanInviteMembers(room, actorId);
+
+        Long inviteeId = resolveUserIdByUsername(username);
+        if (inviteeId.equals(actorId)) {
+            throw new IllegalArgumentException("You cannot invite yourself");
+        }
+        if (room.isMember(inviteeId)) {
+            throw new IllegalArgumentException("That user is already a member");
+        }
+        roomMemberInviteRepository
+                .findByRoomIdAndInviteeUserIdAndState(roomId, inviteeId, RoomMemberInviteState.PENDING)
+                .ifPresent(existing -> {
+                    throw new IllegalArgumentException("An invite is already pending for that user");
+                });
+
+        RoomMemberInvite invite = RoomMemberInvite.builder()
+                .roomId(roomId)
+                .roomName(room.getGroupName())
+                .roomType(room.getType())
+                .invitedByUserId(actorId)
+                .inviteeUserId(inviteeId)
+                .state(RoomMemberInviteState.PENDING)
+                .createdAt(LocalDateTime.now())
+                .build();
+        RoomMemberInvite saved = roomMemberInviteRepository.save(invite);
+        RoomMemberInviteDTO dto = toRoomMemberInviteDto(saved);
+        webSocketService.notifyRoomMemberInvite(inviteeId, dto);
+        return dto;
+    }
+
+    @Transactional
+    public ChatRoomDTO acceptRoomMemberInvite(String inviteId, Long inviteeId) {
+        RoomMemberInvite invite = roomMemberInviteRepository.findById(inviteId)
+                .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+        if (!inviteeId.equals(invite.getInviteeUserId())) {
+            throw new ForbiddenChatOperationException("You cannot accept this invite");
+        }
+        if (invite.getState() != RoomMemberInviteState.PENDING) {
+            throw new IllegalArgumentException("Invite is no longer pending");
+        }
+        ChatRoom room = loadRoom(invite.getRoomId());
+        ChatRoom saved = addMemberToRoom(room, inviteeId);
+        invite.setState(RoomMemberInviteState.ACCEPTED);
+        invite.setRespondedAt(LocalDateTime.now());
+        roomMemberInviteRepository.save(invite);
+        return enrichChatWithUserData(saved, inviteeId, getUnreadCount(saved.getId(), inviteeId));
+    }
+
+    @Transactional
+    public void declineRoomMemberInvite(String inviteId, Long inviteeId) {
+        RoomMemberInvite invite = roomMemberInviteRepository.findById(inviteId)
+                .orElseThrow(() -> new IllegalArgumentException("Invite not found"));
+        if (!inviteeId.equals(invite.getInviteeUserId())) {
+            throw new ForbiddenChatOperationException("You cannot decline this invite");
+        }
+        if (invite.getState() != RoomMemberInviteState.PENDING) {
+            throw new IllegalArgumentException("Invite is no longer pending");
+        }
+        invite.setState(RoomMemberInviteState.DECLINED);
+        invite.setRespondedAt(LocalDateTime.now());
+        roomMemberInviteRepository.save(invite);
+    }
+
     public boolean isUserChatMember(String chatId, Long userId) {
-        return chatRoomRepository.existsByIdAndMemberIdsContains(chatId, userId);
+        if (chatId == null || chatId.isBlank() || userId == null) {
+            return false;
+        }
+        return chatRoomRepository.findById(chatId)
+                .map(room -> room.isMember(userId))
+                .orElse(false);
+    }
+
+    /**
+     * Attachments that were sent in messages for this room (excludes pending uploads).
+     */
+    public List<AttachmentDTO> listChatAttachmentsForRoom(String chatId) {
+        return attachmentRepository.findByChatId(chatId).stream()
+                .filter(a -> a.getMessageId() != null && !a.getMessageId().isBlank())
+                .sorted(Comparator.comparing(
+                        Attachment::getCreatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(AttachmentDTO::fromEntity)
+                .toList();
     }
 
     public int getUnreadCount(String chatId, Long currentUserId) {
@@ -1156,6 +1260,73 @@ public class ChatService {
     private ChatRoom loadRoom(String roomId) {
         return chatRoomRepository.findById(roomId)
                 .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+    }
+
+    private ChatRoom addMemberToRoom(ChatRoom room, Long newMemberId) {
+        if (room.isMember(newMemberId)) {
+            return room;
+        }
+        room.addMember(newMemberId);
+        ChatRoom saved = chatRoomRepository.save(room);
+        notifyRoomMembersChatUpdated(saved);
+        webSocketService.notifyChatCreated(newMemberId,
+                enrichChatWithUserData(saved, newMemberId, getUnreadCount(saved.getId(), newMemberId)));
+        return saved;
+    }
+
+    private void assertCanInviteMembers(ChatRoom room, Long actorId) {
+        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Members can only be invited to groups or channels");
+        }
+        if (!room.isMember(actorId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        boolean canInvite = room.getType() == ChatType.GROUP
+                ? effectiveAdminIds(room).contains(actorId)
+                : effectiveChannelModeratorIds(room).contains(actorId);
+        if (!canInvite) {
+            throw new ForbiddenChatOperationException("You cannot invite members to this room");
+        }
+    }
+
+    private Long resolveUserIdByUsername(String username) {
+        try {
+            ResponseEntity<UserDTO> response = userServiceClient.getUserByUsername(username);
+            UserDTO user = response.getBody();
+            if (user == null || user.getId() == null) {
+                throw new IllegalArgumentException("User not found");
+            }
+            return user.getId();
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("Failed to resolve username {}: {}", username, e.getMessage());
+            throw new IllegalArgumentException("User not found");
+        }
+    }
+
+    private String normalizeUsername(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.startsWith("@")) {
+            trimmed = trimmed.substring(1).trim();
+        }
+        return trimmed;
+    }
+
+    private RoomMemberInviteDTO toRoomMemberInviteDto(RoomMemberInvite invite) {
+        return RoomMemberInviteDTO.builder()
+                .id(invite.getId())
+                .roomId(invite.getRoomId())
+                .roomName(invite.getRoomName())
+                .roomType(invite.getRoomType() != null ? invite.getRoomType().name() : null)
+                .invitedByUserId(invite.getInvitedByUserId())
+                .invitedBy(getUserInfo(invite.getInvitedByUserId()))
+                .state(invite.getState() != null ? invite.getState().name() : null)
+                .createdAt(invite.getCreatedAt())
+                .build();
     }
 
     private String normalizeGroupPhoto(String raw) {

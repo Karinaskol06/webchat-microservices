@@ -1,11 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light;
-  color: #213547;
-  background-color: #ffffff;
+  color: #1a1a2e;
+  background-color: #121218;
+
+  --chat-nav-bg: transparent;
+  --chat-shell-bg: transparent;
+  --chat-surface: rgba(255, 255, 255, 0.26);
+  --chat-surface-muted: rgba(255, 255, 255, 0.14);
+  --chat-surface-lavender: rgba(255, 255, 255, 0.2);
+  --chat-primary: #9b87ff;
+  --chat-conversation-bg: #130c1c;
+  --chat-bubble: #18103D;
+  --chat-bubble-in: #18103D;
+  --chat-bubble-out: #18103D;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;

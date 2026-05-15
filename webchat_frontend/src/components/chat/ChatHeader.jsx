@@ -11,8 +11,9 @@ import {
 import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import LinkIcon from '@mui/icons-material/Link';
+import SearchIcon from '@mui/icons-material/Search';
 import { getPresenceLabel } from '../../utils/presence';
-
+import { chatColors } from '../../theme/chatDesignTokens';
 const ChatHeader = ({
   otherUser,
   presenceStatus,
@@ -29,6 +30,9 @@ const ChatHeader = ({
   headerAvatarClickable = true,
   showCopyInvite,
   onCopyInvite,
+  isGroupOrChannel = false,
+  inChatSearchOpen = false,
+  onToggleInChatSearch,
 }) => {
   const [menuAnchor, setMenuAnchor] = useState(null);
 
@@ -68,8 +72,11 @@ const ChatHeader = ({
 
   const avatarEl = (
     <Avatar
+      variant="rounded"
       sx={{
-        mr: 1,
+        mr: 1.5,
+        width: 48,
+        height: 48,
         cursor: avatarInteractive ? 'pointer' : 'default',
         flexShrink: 0,
       }}
@@ -84,12 +91,37 @@ const ChatHeader = ({
     <Box display="flex" alignItems="center" gap={1} minWidth={0}>
       {avatarInteractive ? <Tooltip title={avatarTooltip}>{avatarEl}</Tooltip> : avatarEl}
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography variant="subtitle1" noWrap>
+        <Typography
+          variant="h6"
+          noWrap
+          sx={{ fontWeight: 700, lineHeight: 1.25, color: chatColors.textPrimary }}
+        >
           {title}
         </Typography>
-        <Typography variant="caption" color="text.secondary" noWrap display="block">
+        <Typography
+          variant="body2"
+          noWrap
+          display="block"
+          sx={{ color: chatColors.textSecondary }}
+        >
           {subtitle}
         </Typography>
+      </Box>
+
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+        {onToggleInChatSearch ? (
+          <Tooltip title={inChatSearchOpen ? 'Close search' : 'Search in chat'}>
+            <IconButton
+              aria-label="Search in chat"
+              aria-pressed={inChatSearchOpen}
+              size="small"
+              onClick={onToggleInChatSearch}
+              sx={{ color: inChatSearchOpen ? chatColors.primary : chatColors.textPrimary }}
+            >
+              <SearchIcon />
+            </IconButton>
+          </Tooltip>
+        ) : null}
       </Box>
 
       {showCopyInvite ? (
@@ -99,7 +131,7 @@ const ChatHeader = ({
               aria-label="Chat menu"
               onClick={(e) => setMenuAnchor(e.currentTarget)}
               size="small"
-              sx={{ flexShrink: 0 }}
+              sx={{ flexShrink: 0, color: chatColors.textPrimary }}
             >
               <MoreVertIcon />
             </IconButton>
@@ -122,7 +154,7 @@ const ChatHeader = ({
       {!emojiSidebarOpen && (
         <Box sx={{ ml: 'auto', flexShrink: 0 }}>
           <Tooltip title="Show emoji sidebar">
-            <IconButton onClick={onShowEmojiSidebar}>
+            <IconButton onClick={onShowEmojiSidebar} sx={{ color: chatColors.textPrimary }}>
               <EmojiEmotionsOutlinedIcon />
             </IconButton>
           </Tooltip>

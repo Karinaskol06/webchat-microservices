@@ -26,8 +26,10 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ForwardIcon from '@mui/icons-material/Forward';
-import AuthenticatedImage from './AuthenticatedImage';
+import ChatImageAttachment, { ChatImageGridCell } from './ChatImageAttachment';
+import HighlightedMessageText from './HighlightedMessageText';
 import { parseQuotedSnippet } from '../../utils/quotedMessagePreview';
+import { chatColors, chatMenuSlotProps } from '../../theme/chatDesignTokens';
 import { QuotedKindIcon } from './QuotedKindIcon';
 import chatService from '../../services/chatService';
 import useChatStore from '../../store/useChatStore';
@@ -41,6 +43,17 @@ const MEDIA_VIDEO_MAX_HEIGHT = 420;
 const MEDIA_VIEWPORT_RESERVE_PX = 280;
 const mediaMaxHeight = (capPx) => `min(${capPx}px, calc(100dvh - ${MEDIA_VIEWPORT_RESERVE_PX}px))`;
 
+const formatMessageTime = (timestamp) =>
+    new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+const avatarSx = {
+    width: 40,
+    height: 40,
+    borderRadius: '12px',
+    alignSelf: 'flex-end',
+    flexShrink: 0,
+};
+
 const MessageItem = ({
     message,
     currentUserId,
@@ -51,9 +64,11 @@ const MessageItem = ({
     onJumpToMessage,
     isHighlighted,
     hideReplyActions = false,
+    inChatSearchQuery = '',
+    inChatSearchMatches = [],
+    activeInChatSearchMatch = null,
 }) => {
     const [expanded, setExpanded] = useState(false);
-    const [imagesLoaded, setImagesLoaded] = useState({});
     const [menuAnchorEl, setMenuAnchorEl] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
     const [editedContent, setEditedContent] = useState(message.content || '');
@@ -80,6 +95,40 @@ const MessageItem = ({
     const attachments = Array.isArray(message.attachments) ? message.attachments : [];
     const hasAttachments = attachments.length > 0;
     const hasText = message.content && message.content.trim().length > 0;
+    const messageIdStr = String(message.id ?? message._id ?? '');
+
+    const renderMessageText = (sx = {}) => {
+        if (!hasText) return null;
+        const query = String(inChatSearchQuery || '').trim();
+        const ranges = query
+            ? inChatSearchMatches
+                  .filter((m) => String(m.messageId) === messageIdStr)
+                  .map(({ start, end }) => ({ start, end }))
+            : [];
+        const activeRange =
+            activeInChatSearchMatch &&
+            String(activeInChatSearchMatch.messageId) === messageIdStr
+                ? {
+                      start: activeInChatSearchMatch.start,
+                      end: activeInChatSearchMatch.end,
+                  }
+                : null;
+        const typographySx = { whiteSpace: 'pre-wrap', wordBreak: 'break-word', ...sx };
+
+        return (
+            <Typography variant="body1" sx={typographySx}>
+                {ranges.length ? (
+                    <HighlightedMessageText
+                        text={message.content}
+                        ranges={ranges}
+                        activeRange={activeRange}
+                    />
+                ) : (
+                    message.content
+                )}
+            </Typography>
+        );
+    };
     const forwardedFrom = message.forwardedFrom;
     const forwardedDisplayName =
         forwardedFrom?.username ||
@@ -294,146 +343,59 @@ const MessageItem = ({
 
     const showExpandButton = hasAttachments && attachments.length > 3;
 
+    const messageTime = formatMessageTime(message.timestamp);
+
+    const isSingleImageOnly =
+        images.length === 1 &&
+        !hasText &&
+        videos.length === 0 &&
+        documents.length === 0 &&
+        !isEditMode &&
+        !forwardedFrom &&
+        !isReplyBubble;
+
+    const isForwardedImageMessage =
+        Boolean(
+            forwardedFrom &&
+                images.length === 1 &&
+                videos.length === 0 &&
+                documents.length === 0,
+        );
+
+    const renderSingleChatImage = (attachment, { showOverlay = false } = {}) => (
+        <Box key={attachment.id} sx={{ width: '100%' }}>
+            <ChatImageAttachment
+                attachment={attachment}
+                isOwn={isOwn}
+                isRead={Boolean(message.isRead)}
+                timestamp={showOverlay ? messageTime : null}
+                attachCaptionBelow={hasText}
+                onOpen={() => openAttachment(attachment, { download: false }).catch(() => {})}
+            />
+        </Box>
+    );
+
     const renderMediaAndFiles = () => (
         <>
             {images.length > 0 && (
                 images.length === 1 ? (
-                    <Box
-                        sx={{
-                            mt: 0,
-                            maxWidth: '100%',
-                            maxHeight: mediaMaxHeight(MEDIA_IMAGE_MAX_HEIGHT),
-                            backgroundColor: '#f0f0f0',
-                            borderRadius: 1,
-                            overflow: 'hidden',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                        }}
-                    >
-                        {(expanded ? images : images.slice(0, 1)).map((attachment) => (
-                            <Link
-                                key={attachment.id}
-                                href="#"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    openAttachment(attachment, { download: false }).catch(() => {});
-                                }}
-                                sx={{
-                                    display: 'block',
-                                    maxWidth: '100%',
-                                    textDecoration: 'none',
-                                    lineHeight: 0,
-                                    '&:hover': { opacity: 0.92 },
-                                }}
-                            >
-                                <Box
-                                    sx={{
-                                        position: 'relative',
-                                        display: 'inline-block',
-                                        maxWidth: '100%',
-                                        maxHeight: mediaMaxHeight(MEDIA_IMAGE_MAX_HEIGHT),
-                                        lineHeight: 0,
-                                    }}
-                                >
-                                    <AuthenticatedImage
-                                        attachmentId={attachment.id}
-                                        alt={attachment.filename}
-                                        onLoad={() => {
-                                            setImagesLoaded((prev) => ({ ...prev, [attachment.id]: true }));
-                                        }}
-                                        sx={{
-                                            display: 'block',
-                                            width: 'auto',
-                                            height: 'auto',
-                                            maxWidth: '100%',
-                                            maxHeight: mediaMaxHeight(MEDIA_IMAGE_MAX_HEIGHT),
-                                            objectFit: 'contain',
-                                            objectPosition: 'center',
-                                            mx: 'auto',
-                                        }}
-                                    />
-                                    {!imagesLoaded[attachment.id] && (
-                                        <Box
-                                            sx={{
-                                                position: 'absolute',
-                                                top: '50%',
-                                                left: '50%',
-                                                transform: 'translate(-50%, -50%)',
-                                                minHeight: 120,
-                                                minWidth: 160,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                            }}
-                                        >
-                                            <ImageIcon sx={{ color: '#999', fontSize: 40 }} />
-                                        </Box>
-                                    )}
-                                </Box>
-                            </Link>
-                        ))}
-                    </Box>
+                    renderSingleChatImage(images[0], { showOverlay: false })
                 ) : (
                     <Box
                         mt={0}
                         sx={{
                             display: 'grid',
-                            gridTemplateColumns: `repeat(${Math.min(images.length, 3)}, minmax(132px, 1fr))`,
-                            gap: 0.75,
+                            gridTemplateColumns: `repeat(${Math.min(images.length, 3)}, minmax(100px, 1fr))`,
+                            gap: 1,
                             maxWidth: '100%',
                         }}
                     >
                         {(expanded ? images : images.slice(0, 3)).map((attachment) => (
-                            <Link
+                            <ChatImageGridCell
                                 key={attachment.id}
-                                href="#"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    openAttachment(attachment, { download: false }).catch(() => {});
-                                }}
-                                sx={{ display: 'block', textDecoration: 'none' }}
-                            >
-                                <Box
-                                    sx={{
-                                        position: 'relative',
-                                        aspectRatio: '1 / 1',
-                                        backgroundColor: '#f0f0f0',
-                                        borderRadius: 1,
-                                        overflow: 'hidden',
-                                        cursor: 'pointer',
-                                        minHeight: { xs: 120, sm: 148 },
-                                        '&:hover': { opacity: 0.9 },
-                                    }}
-                                >
-                                    <AuthenticatedImage
-                                        attachmentId={attachment.id}
-                                        alt={attachment.filename}
-                                        onLoad={() => {
-                                            setImagesLoaded((prev) => ({ ...prev, [attachment.id]: true }));
-                                        }}
-                                        sx={{
-                                            position: 'absolute',
-                                            inset: 0,
-                                            width: '100%',
-                                            height: '100%',
-                                            objectFit: 'cover',
-                                        }}
-                                    />
-                                    {!imagesLoaded[attachment.id] && (
-                                        <Box
-                                            sx={{
-                                                position: 'absolute',
-                                                top: '50%',
-                                                left: '50%',
-                                                transform: 'translate(-50%, -50%)',
-                                            }}
-                                        >
-                                            <ImageIcon sx={{ color: '#999' }} />
-                                        </Box>
-                                    )}
-                                </Box>
-                            </Link>
+                                attachment={attachment}
+                                onOpen={() => openAttachment(attachment, { download: false }).catch(() => {})}
+                            />
                         ))}
                     </Box>
                 )
@@ -526,23 +488,213 @@ const MessageItem = ({
         </>
     );
 
+    const messageMenus = (
+        <>
+            <Menu
+                anchorEl={menuAnchorEl}
+                open={Boolean(menuAnchorEl)}
+                onClose={closeMenu}
+                slotProps={chatMenuSlotProps}
+                anchorOrigin={{
+                    vertical: 'bottom',
+                    horizontal: isOwn ? 'right' : 'left',
+                }}
+                transformOrigin={{
+                    vertical: 'top',
+                    horizontal: isOwn ? 'right' : 'left',
+                }}
+            >
+                {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
+                <MenuItem onClick={handleForward}>Forward</MenuItem>
+                {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
+                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
+            </Menu>
+
+            <Menu
+                open={Boolean(contextMenuPosition)}
+                onClose={closeContextMenu}
+                slotProps={chatMenuSlotProps}
+                anchorReference="anchorPosition"
+                anchorPosition={
+                    contextMenuPosition
+                        ? { top: contextMenuPosition.mouseY, left: contextMenuPosition.mouseX }
+                        : undefined
+                }
+            >
+                {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
+                <MenuItem onClick={handleForward}>Forward</MenuItem>
+                {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
+                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
+            </Menu>
+
+            <Dialog open={moderatorEditOpen} onClose={handleCancelEdit} fullWidth maxWidth="sm">
+                <DialogTitle>Edit message</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        fullWidth
+                        multiline
+                        minRows={3}
+                        label="Message text"
+                        value={editedContent}
+                        error={Boolean(editError)}
+                        helperText={editError}
+                        onChange={(e) => {
+                            setEditedContent(e.target.value);
+                            if (editError) setEditError('');
+                        }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleCancelEdit} disabled={isSavingEdit}>
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="contained"
+                        onClick={() => {
+                            handleSaveEdit().catch(() => {});
+                        }}
+                        disabled={isSavingEdit || captionUnchanged}
+                    >
+                        Save
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+                <DialogTitle>Delete message?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        This action cannot be undone.
+                    </DialogContentText>
+                    {deleteError && (
+                        <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+                            {deleteError}
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+                        Cancel
+                    </Button>
+                    <Button
+                        color="error"
+                        onClick={() => {
+                            handleDeleteMessage().catch(() => {});
+                        }}
+                        disabled={isDeleting}
+                    >
+                        Delete
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </>
+    );
+
+    const rowHighlightSx = isHighlighted
+        ? {
+              outline: (theme) => `2px solid ${theme.palette.primary.main}`,
+              outlineOffset: 2,
+              borderRadius: 2,
+          }
+        : {};
+
+    const senderLabel = sender?.firstName || sender?.username || 'User';
+
+    if (isSingleImageOnly) {
+        const attachment = images[0];
+        return (
+            <>
+                <Box
+                    id={`webchat-msg-${message.id}`}
+                    onContextMenu={handleOpenContextMenu}
+                    sx={{
+                        display: 'flex',
+                        justifyContent: isOwn ? 'flex-end' : 'flex-start',
+                        alignItems: 'flex-end',
+                        mb: 2,
+                        ...rowHighlightSx,
+                    }}
+                >
+                    {!isOwn && (
+                        <Avatar
+                            variant="rounded"
+                            sx={{ ...avatarSx, mr: 1 }}
+                            src={sender?.profilePicture || undefined}
+                        >
+                            {(sender?.firstName?.[0] || sender?.username?.[0] || 'U').toUpperCase()}
+                        </Avatar>
+                    )}
+
+                    <Box
+                        sx={{
+                            width: 'fit-content',
+                            maxWidth: '100%',
+                            minWidth: 0,
+                        }}
+                    >
+                        {!isOwn && (
+                            <Typography
+                                sx={{
+                                    fontWeight: 700,
+                                    fontSize: '0.8125rem',
+                                    color: chatColors.primary,
+                                    mb: 0.5,
+                                    pl: 0.5,
+                                    lineHeight: 1.3,
+                                }}
+                            >
+                                {senderLabel}
+                            </Typography>
+                        )}
+                        <ChatImageAttachment
+                            attachment={attachment}
+                            isOwn={isOwn}
+                            isRead={Boolean(message.isRead)}
+                            timestamp={messageTime}
+                            onOpen={() => openAttachment(attachment, { download: false }).catch(() => {})}
+                        />
+                        {isOwn && (
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
+                                <IconButton size="small" onClick={openMenu} aria-label="Message actions">
+                                    <MoreVertIcon fontSize="small" />
+                                </IconButton>
+                            </Box>
+                        )}
+                    </Box>
+
+                    {isOwn && (
+                        <Avatar
+                            variant="rounded"
+                            sx={{ ...avatarSx, ml: 1 }}
+                            src={sender?.profilePicture || undefined}
+                        >
+                            {(sender?.firstName?.[0] || sender?.username?.[0] || 'U').toUpperCase()}
+                        </Avatar>
+                    )}
+                </Box>
+                {messageMenus}
+            </>
+        );
+    }
+
     return (
+        <>
         <Box
             id={`webchat-msg-${message.id}`}
             sx={{
                 display: 'flex',
                 justifyContent: isOwn ? 'flex-end' : 'flex-start',
+                alignItems: 'flex-end',
                 mb: 2,
-                ...(isHighlighted && {
-                    outline: (theme) => `2px solid ${theme.palette.primary.main}`,
-                    outlineOffset: 2,
-                    borderRadius: 2,
-                }),
+                ...rowHighlightSx,
             }}
         >
             {!isOwn && (
                 <Avatar
-                    sx={{ mr: 1, width: 36, height: 36 }}
+                    variant="rounded"
+                    sx={{ ...avatarSx, mr: 1 }}
                     src={sender?.profilePicture || undefined}
                 >
                     {(sender?.firstName?.[0] || sender?.username?.[0] || 'U').toUpperCase()}
@@ -551,45 +703,62 @@ const MessageItem = ({
 
             <Box
                 sx={{
-                    maxWidth: hasVisualMedia
-                        ? `min(${MEDIA_BUBBLE_MAX_WIDTH}px, 92vw)`
+                    maxWidth: hasVisualMedia && images.length === 1 ? '100%' : hasVisualMedia
+                        ? `min(${MEDIA_BUBBLE_MAX_WIDTH}px, 78%)`
                         : '70%',
-                    minWidth: hasVisualMedia ? 220 : hasAttachments ? 200 : 'auto',
-                    width: hasVisualMedia ? '100%' : undefined,
+                    minWidth: hasVisualMedia && images.length !== 1 ? 180 : hasAttachments ? 200 : 'auto',
+                    width: hasVisualMedia && images.length === 1 ? 'fit-content' : undefined,
                 }}
             >
                 {!isOwn && (
-                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1, mb: 0.5, display: 'block' }}>
-                        {sender?.firstName || sender?.username || 'User'}
+                    <Typography
+                        sx={{
+                            fontWeight: 700,
+                            fontSize: '0.8125rem',
+                            color: chatColors.primaryLight,
+                            mb: 0.5,
+                            ml: 0.5,
+                            lineHeight: 1.3,
+                        }}
+                    >
+                        {senderLabel}
                     </Typography>
                 )}
 
                 <Paper
                     onContextMenu={handleOpenContextMenu}
                     sx={{
-                        p: hasText || hasAttachments || (isOwn && isEditMode) ? 1.5 : 1,
-                        bgcolor: isOwn ? '#e3f2fd' : 'white',
-                        borderRadius: isReplyBubble ? '12px 12px 10px 10px' : 2,
-                        overflow: 'hidden',
+                        p:
+                          isForwardedImageMessage && !hasText
+                            ? 0
+                            : images.length === 1 && !hasText
+                              ? 0
+                              : images.length === 1 && hasText
+                                ? 0
+                                : hasText || hasAttachments || (isOwn && isEditMode)
+                                  ? 1.5
+                                  : 1,
+                        ...(isForwardedImageMessage &&
+                            !hasText && {
+                                pt: 1.25,
+                                pb: 0.35,
+                            }),
+                        bgcolor: isOwn ? chatColors.bubbleOutgoing : chatColors.bubbleIncoming,
+                        color: chatColors.bubbleText,
+                        borderRadius: isReplyBubble ? '14px 14px 12px 12px' : images.length === 1 ? '10px' : '14px',
+                        '& .MuiTypography-caption': { color: 'rgba(255,255,255,0.72)' },
                         '& .MuiTypography-body1': {
+                            color: chatColors.bubbleText,
                             fontFamily:
                                 'system-ui, "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
                         },
+                        '& .MuiTypography-body2': { color: 'rgba(255,255,255,0.92)' },
+                        overflow: 'hidden',
                         ...(isReplyBubble && {
                             borderLeft: '4px solid',
-                            borderLeftColor: isOwn ? '#1565c0' : 'primary.main',
+                            borderLeftColor: chatColors.primaryLight,
+                            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
                         }),
-                        ...(isReplyBubble &&
-                            !isOwn && {
-                                bgcolor: '#fff',
-                                boxShadow: (theme) =>
-                                    `0 1px 0.5px ${alpha(theme.palette.common.black, 0.13)}, 0 0 0 0.5px ${alpha(theme.palette.common.black, 0.05)}`,
-                            }),
-                        ...(isReplyBubble &&
-                            isOwn && {
-                                boxShadow: (theme) =>
-                                    `0 1px 0.5px ${alpha(theme.palette.common.black, 0.08)}`,
-                            }),
                     }}
                 >
                     {forwardedFrom && forwardedDisplayName && (
@@ -598,8 +767,11 @@ const MessageItem = ({
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 0.5,
-                                mb: 1,
+                                mb: isForwardedImageMessage ? 0.75 : 1,
                                 minHeight: 20,
+                                ...(isForwardedImageMessage && {
+                                    px: 1.25,
+                                }),
                             }}
                         >
                             <ForwardIcon sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
@@ -619,7 +791,7 @@ const MessageItem = ({
                                             background: 'none',
                                             cursor: 'pointer',
                                             font: 'inherit',
-                                            color: isOwn ? '#0d47a1' : 'primary.main',
+                                            color: chatColors.primaryLight,
                                         }}
                                     >
                                         {forwardedDisplayName}
@@ -652,16 +824,11 @@ const MessageItem = ({
                                 borderRadius: 1,
                                 overflow: 'hidden',
                                 cursor: canJumpToReply ? 'pointer' : 'default',
-                                bgcolor: isOwn
-                                    ? 'rgba(255,255,255,0.92)'
-                                    : '#e9eef5',
-                                boxShadow: (theme) =>
-                                    `inset 0 0 0 1px ${alpha(theme.palette.common.black, isOwn ? 0.06 : 0.08)}`,
+                                bgcolor: 'rgba(0, 0, 0, 0.22)',
+                                boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.08)',
                                 ...(canJumpToReply && {
                                     '&:hover': {
-                                        bgcolor: isOwn
-                                            ? 'rgba(255,255,255,1)'
-                                            : '#e2e9f3',
+                                        bgcolor: 'rgba(0, 0, 0, 0.32)',
                                     },
                                 }),
                                 '&:focus-visible': {
@@ -674,7 +841,7 @@ const MessageItem = ({
                                 sx={{
                                     width: 4,
                                     flexShrink: 0,
-                                    bgcolor: isOwn ? '#0d47a1' : 'primary.main',
+                                    bgcolor: chatColors.primaryLight,
                                     borderRadius: '2px 0 0 2px',
                                 }}
                             />
@@ -708,7 +875,7 @@ const MessageItem = ({
                                                 fontWeight: 700,
                                                 fontSize: '0.8rem',
                                                 lineHeight: 1.25,
-                                                color: isOwn ? '#0d47a1' : 'primary.dark',
+                                                color: chatColors.primaryLight,
                                                 whiteSpace: 'nowrap',
                                                 overflow: 'hidden',
                                                 textOverflow: 'ellipsis',
@@ -795,12 +962,9 @@ const MessageItem = ({
                                     </Box>
                                 ) : (
                                     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-                                        <Typography
-                                            variant="body1"
-                                            sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', flex: 1, minWidth: 0 }}
-                                        >
-                                            {message.content}
-                                        </Typography>
+                                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                                            {renderMessageText()}
+                                        </Box>
                                         <IconButton
                                             size="small"
                                             onClick={openMenu}
@@ -825,25 +989,15 @@ const MessageItem = ({
                                 <MoreVertIcon fontSize="small" />
                             </IconButton>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
-                                {!hasAttachments && hasText && (
-                                    <Typography
-                                        variant="body1"
-                                        sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                                    >
-                                        {message.content}
-                                    </Typography>
-                                )}
+                                {!hasAttachments && hasText && renderMessageText()}
                                 {hasAttachments && (
                                     <>
                                         {renderMediaAndFiles()}
-                                        {hasText && (
-                                            <Typography
-                                                variant="body1"
-                                                sx={{ mt: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                                            >
-                                                {message.content}
-                                            </Typography>
-                                        )}
+                                        {hasText &&
+                                            renderMessageText({
+                                                px: 1.5,
+                                                py: 1.25,
+                                            })}
                                     </>
                                 )}
                             </Box>
@@ -896,12 +1050,7 @@ const MessageItem = ({
                                 gap: 1,
                             }}
                         >
-                            <Typography
-                                variant="body1"
-                                sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', flex: 1, minWidth: 0 }}
-                            >
-                                {message.content}
-                            </Typography>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>{renderMessageText()}</Box>
                             <IconButton
                                 size="small"
                                 onClick={openMenu}
@@ -927,8 +1076,17 @@ const MessageItem = ({
                             display: 'flex',
                             justifyContent: 'flex-end',
                             alignItems: 'center',
-                            mt: hasText || hasAttachments ? 1 : 0,
+                            mt:
+                              isForwardedImageMessage && !hasText
+                                ? 0.25
+                                : hasText || hasAttachments
+                                  ? 1
+                                  : 0,
                             gap: 0.5,
+                            ...(isForwardedImageMessage &&
+                                !hasText && {
+                                    px: 1,
+                                }),
                         }}
                     >
                         <Typography variant="caption" color="text.secondary">
@@ -952,111 +1110,16 @@ const MessageItem = ({
 
             {isOwn && (
                 <Avatar
-                    sx={{ ml: 1, width: 36, height: 36 }}
+                    variant="rounded"
+                    sx={{ ...avatarSx, ml: 1 }}
                     src={sender?.profilePicture || undefined}
                 >
                     {(sender?.firstName?.[0] || sender?.username?.[0] || 'U').toUpperCase()}
                 </Avatar>
             )}
-
-            <Menu
-                anchorEl={menuAnchorEl}
-                open={Boolean(menuAnchorEl)}
-                onClose={closeMenu}
-                anchorOrigin={{
-                    vertical: 'bottom',
-                    horizontal: isOwn ? 'right' : 'left',
-                }}
-                transformOrigin={{
-                    vertical: 'top',
-                    horizontal: isOwn ? 'right' : 'left',
-                }}
-            >
-                {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
-                <MenuItem onClick={handleForward}>Forward</MenuItem>
-                {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
-                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
-            </Menu>
-
-            <Menu
-                open={Boolean(contextMenuPosition)}
-                onClose={closeContextMenu}
-                anchorReference="anchorPosition"
-                anchorPosition={
-                    contextMenuPosition
-                        ? { top: contextMenuPosition.mouseY, left: contextMenuPosition.mouseX }
-                        : undefined
-                }
-            >
-                {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
-                <MenuItem onClick={handleForward}>Forward</MenuItem>
-                {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
-                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
-            </Menu>
-
-            <Dialog open={moderatorEditOpen} onClose={handleCancelEdit} fullWidth maxWidth="sm">
-                <DialogTitle>Edit message</DialogTitle>
-                <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        fullWidth
-                        multiline
-                        minRows={3}
-                        label="Message text"
-                        value={editedContent}
-                        error={Boolean(editError)}
-                        helperText={editError}
-                        onChange={(e) => {
-                            setEditedContent(e.target.value);
-                            if (editError) setEditError('');
-                        }}
-                    />
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCancelEdit} disabled={isSavingEdit}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="contained"
-                        onClick={() => {
-                            handleSaveEdit().catch(() => {});
-                        }}
-                        disabled={isSavingEdit || captionUnchanged}
-                    >
-                        Save
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-                <DialogTitle>Delete message?</DialogTitle>
-                <DialogContent>
-                    <DialogContentText>
-                        This action cannot be undone.
-                    </DialogContentText>
-                    {deleteError && (
-                        <Typography variant="body2" color="error" sx={{ mt: 1 }}>
-                            {deleteError}
-                        </Typography>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
-                        Cancel
-                    </Button>
-                    <Button
-                        color="error"
-                        onClick={() => {
-                            handleDeleteMessage().catch(() => {});
-                        }}
-                        disabled={isDeleting}
-                    >
-                        Delete
-                    </Button>
-                </DialogActions>
-            </Dialog>
         </Box>
+        {messageMenus}
+        </>
     );
 };
 

@@ -1,62 +1,82 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Container,
-  Paper,
-  TextField,
-  Button,
-  Typography,
   Box,
-  Alert,
-  CircularProgress
+  Button,
+  Checkbox,
+  CircularProgress,
+  FormControlLabel,
+  Typography,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import useAuthStore from '../store/useAuthStore';
+import AuthPageLayout from '../components/auth/AuthPageLayout';
+import AuthAnimatedItem from '../components/auth/AuthAnimatedItem';
+import AuthErrorAlert from '../components/auth/AuthErrorAlert';
+import GlassTextField from '../components/auth/GlassTextField';
+import {
+  authLinkButtonSx,
+  authPrimaryButtonSx,
+  glassCheckboxLabelSx,
+  glassCheckboxSx,
+} from '../components/auth/authPageTheme';
+
+const REMEMBER_KEY = 'webchat-remember-username';
 
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuthStore();
-  
-  // Form state
+
   const [formData, setFormData] = useState({
     username: '',
-    password: ''
+    password: '',
   });
-  
-  // Error and loading state
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [errorShake, setErrorShake] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Handle input changes
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // Clear error on input change
-    setError('');
+  const showError = (message) => {
+    setError(message);
+    setErrorShake(true);
+    window.setTimeout(() => setErrorShake(false), 450);
   };
 
-  // Handle form submission
+  useEffect(() => {
+    const saved = localStorage.getItem(REMEMBER_KEY);
+    if (saved) {
+      setFormData((prev) => ({ ...prev, username: saved }));
+      setRememberMe(true);
+    }
+  }, []);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    setError('');
+    setErrorShake(false);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       setLoading(true);
       setError('');
-      
-      // Login - this stores token
+
       const loginResponse = await authService.login(formData);
-      
-      // Now get user data (token is in localStorage and will be added by interceptor)
       const userData = await authService.getCurrentUser();
-      
-      // Update store
+
+      if (rememberMe) {
+        localStorage.setItem(REMEMBER_KEY, formData.username.trim());
+      } else {
+        localStorage.removeItem(REMEMBER_KEY);
+      }
+
       login(userData, loginResponse.token);
-      
       navigate('/chat');
-      
     } catch (err) {
       setError(err.message || 'Login failed. Please try again.');
     } finally {
@@ -65,63 +85,127 @@ const Login = () => {
   };
 
   return (
-    <Container maxWidth="sm">
-      <Box sx={{ mt: 8 }}>
-        <Paper elevation={3} sx={{ p: 4 }}>
-          <Typography variant="h4" align="center" gutterBottom>
-            Login to WebChat
-          </Typography>
-          
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-          
-          <form onSubmit={handleSubmit}>
-            <TextField
-              fullWidth
-              label="Username"
-              name="username"
-              value={formData.username}
-              onChange={handleChange}
-              margin="normal"
-              required
-              disabled={loading}
+    <AuthPageLayout
+      title="Login"
+      shake={errorShake}
+      footer={
+        <>
+          Don&apos;t have an account?{' '}
+          <Button
+            component={RouterLink}
+            to="/register"
+            disableRipple
+            sx={authLinkButtonSx}
+          >
+            Register
+          </Button>
+        </>
+      }
+    >
+      <AuthErrorAlert message={error} shake={errorShake} />
+
+      <Box component="form" onSubmit={handleSubmit} noValidate>
+        <AuthAnimatedItem index={0}>
+          <GlassTextField
+            name="username"
+            placeholder="Username"
+            autoComplete="username"
+            value={formData.username}
+            onChange={handleChange}
+            required
+            disabled={loading}
+            endIcon={PersonOutlineIcon}
+            slotProps={{
+              htmlInput: {
+                'aria-label': 'Username',
+                autoCapitalize: 'none',
+                autoCorrect: 'off',
+              },
+            }}
+          />
+        </AuthAnimatedItem>
+
+        <AuthAnimatedItem index={1}>
+          <GlassTextField
+            name="password"
+            type="password"
+            placeholder="Password"
+            autoComplete="current-password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+            disabled={loading}
+            endIcon={LockOutlinedIcon}
+          />
+        </AuthAnimatedItem>
+
+        <AuthAnimatedItem index={2}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 1,
+              mt: 0.5,
+              mb: 0.5,
+              px: 0.5,
+            }}
+          >
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={loading}
+                  size="small"
+                  sx={glassCheckboxSx}
+                />
+              }
+              label="Remember me"
+              sx={glassCheckboxLabelSx}
             />
-            
-            <TextField
-              fullWidth
-              label="Password"
-              name="password"
-              type="password"
-              value={formData.password}
-              onChange={handleChange}
-              margin="normal"
-              required
-              disabled={loading}
-            />
-            
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              sx={{ mt: 3, mb: 2 }}
-              disabled={loading}
+            <Typography
+              component="button"
+              type="button"
+              variant="body2"
+              onClick={() =>
+                showError('Password reset is not available yet. Contact support.')
+              }
+              sx={{
+                border: 0,
+                bgcolor: 'transparent',
+                color: 'rgba(255, 255, 255, 0.92)',
+                cursor: 'pointer',
+                font: 'inherit',
+                p: 0,
+                transition: 'opacity 0.2s ease',
+                '&:hover': { textDecoration: 'underline', opacity: 0.9 },
+              }}
             >
-              {loading ? <CircularProgress size={24} /> : 'Login'}
-            </Button>
-            
-            <Typography variant="body2" align="center">
-              Don't have an account?{' '}
-              <Button color="primary" onClick={() => navigate('/register')}>
-                Register
-              </Button>
+              Forgot Password?
             </Typography>
-          </form>
-        </Paper>
+          </Box>
+        </AuthAnimatedItem>
+
+        <AuthAnimatedItem index={3}>
+          <Button
+            type="submit"
+            fullWidth
+            variant="contained"
+            disableElevation
+            disabled={loading}
+            sx={authPrimaryButtonSx}
+          >
+            {loading ? (
+              <CircularProgress size={24} sx={{ color: '#1a1a2e' }} />
+            ) : (
+              'Login'
+            )}
+          </Button>
+        </AuthAnimatedItem>
       </Box>
-    </Container>
+    </AuthPageLayout>
   );
 };
 

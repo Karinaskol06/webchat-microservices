@@ -11,7 +11,10 @@ import com.project.webchat.chat.dto.CreateGroupChannelRequest;
 import com.project.webchat.chat.dto.DiscoverableRoomDTO;
 import com.project.webchat.chat.dto.EditMessageRequest;
 import com.project.webchat.chat.dto.InvitePayloadDTO;
+import com.project.webchat.chat.dto.InviteMemberByUsernameRequest;
 import com.project.webchat.chat.dto.JoinInviteRequest;
+import com.project.webchat.chat.dto.RoomMemberInviteDTO;
+import com.project.webchat.chat.dto.UpdateRoomPhotoRequest;
 import com.project.webchat.chat.security.CustomUserDetails;
 import com.project.webchat.chat.service.ChatService;
 import com.project.webchat.chat.service.WebSocketService;
@@ -23,6 +26,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+
+import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -272,6 +277,47 @@ public class ChatController {
             @RequestBody @jakarta.validation.Valid AddRoomMemberRequest request) {
         ChatRoomDTO dto = chatService.addRoomMember(id, currentUser.getId(), request.getUserId());
         return ResponseEntity.ok(dto);
+    }
+
+    @PatchMapping("/rooms/{id}/photo")
+    public ResponseEntity<ChatRoomDTO> updateRoomPhoto(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestBody @jakarta.validation.Valid UpdateRoomPhotoRequest request) {
+        ChatRoomDTO dto = chatService.updateRoomPhoto(id, currentUser.getId(), request.getGroupPhoto());
+        return ResponseEntity.ok(dto);
+    }
+
+    @GetMapping("/member-invites/pending")
+    public ResponseEntity<List<RoomMemberInviteDTO>> listPendingMemberInvites(
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        return ResponseEntity.ok(chatService.listPendingRoomMemberInvites(currentUser.getId()));
+    }
+
+    @PostMapping("/rooms/{id}/member-invites")
+    public ResponseEntity<RoomMemberInviteDTO> inviteRoomMemberByUsername(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestBody @jakarta.validation.Valid InviteMemberByUsernameRequest request) {
+        RoomMemberInviteDTO dto = chatService.inviteRoomMemberByUsername(
+                id, currentUser.getId(), request.getUsername());
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
+    }
+
+    @PostMapping("/member-invites/{inviteId}/accept")
+    public ResponseEntity<ChatRoomDTO> acceptRoomMemberInvite(
+            @PathVariable String inviteId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        ChatRoomDTO dto = chatService.acceptRoomMemberInvite(inviteId, currentUser.getId());
+        return ResponseEntity.ok(dto);
+    }
+
+    @PostMapping("/member-invites/{inviteId}/decline")
+    public ResponseEntity<Void> declineRoomMemberInvite(
+            @PathVariable String inviteId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        chatService.declineRoomMemberInvite(inviteId, currentUser.getId());
+        return ResponseEntity.noContent().build();
     }
 
 }

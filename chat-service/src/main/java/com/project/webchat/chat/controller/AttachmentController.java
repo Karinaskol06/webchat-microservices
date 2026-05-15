@@ -27,6 +27,18 @@ public class AttachmentController {
     private final FileStorageService fileStorageService;
     private final ChatService chatService;
 
+    @GetMapping("/{chatId}/attachments")
+    public ResponseEntity<List<AttachmentDTO>> listChatAttachments(
+            @PathVariable String chatId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+
+        if (!chatService.isUserChatMember(chatId, currentUser.getId())) {
+            return ResponseEntity.status(403).build();
+        }
+
+        return ResponseEntity.ok(chatService.listChatAttachmentsForRoom(chatId));
+    }
+
     @PostMapping("/{chatId}/attachments")
     public ResponseEntity<List<AttachmentDTO>> uploadAttachments(
             @PathVariable String chatId,

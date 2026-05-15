@@ -11,10 +11,10 @@ import {
   CircularProgress,
   Alert,
   Button,
-  Chip,
   IconButton,
   Menu,
   MenuItem,
+  ListItemIcon,
   TextField,
   Stack,
 } from '@mui/material';
@@ -22,49 +22,47 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import useChatStore from '../../store/useChatStore';
 import chatService from '../../services/chatService';
-import { getApiErrorMessage } from '../../services/api';
 import useAuthStore from '../../store/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 import { derivePresenceState } from '../../utils/presence';
 import CreateRoomDialog from './CreateRoomDialog';
+import CreateFolderDialog from './CreateFolderDialog';
+import useChatFolderStore from '../../store/useChatFolderStore';
+import { CHAT_DRAG_TYPE } from '../../utils/chatDrag';
+import SearchIcon from '@mui/icons-material/Search';
+import CreateNewFolderOutlinedIcon from '@mui/icons-material/CreateNewFolderOutlined';
+import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
+import GroupsIcon from '@mui/icons-material/Groups';
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
+import LinkIcon from '@mui/icons-material/Link';
+import InputAdornment from '@mui/material/InputAdornment';
+import Tooltip from '@mui/material/Tooltip';
+import {
+  chatColors,
+  chatGlassFieldPanelSx,
+  chatHideScrollbarSx,
+  chatMenuPaperSx,
+  chatMenuSlotProps,
+  chatRadii,
+} from '../../theme/chatDesignTokens';
+import { chatListItemEnterSx } from '../../theme/chatAnimations';
 
-/** Accept full app URL (/join/TOKEN), other URLs with ?token=, or raw token. */
-function parseInviteToken(input) {
-  const s = String(input || '').trim();
-  if (!s) return null;
-  const slashJoin = s.match(/\/join\/([^/?#\s]+)/i);
-  if (slashJoin?.[1]) {
-    try {
-      return decodeURIComponent(slashJoin[1]);
-    } catch {
-      return slashJoin[1];
-    }
-  }
-  try {
-    const u = new URL(s);
-    const pathMatch = u.pathname.match(/\/join\/([^/]+)/i);
-    if (pathMatch?.[1]) {
-      try {
-        return decodeURIComponent(pathMatch[1]);
-      } catch {
-        return pathMatch[1];
-      }
-    }
-    const q = u.searchParams.get('token') || u.searchParams.get('invite');
-    if (q?.trim()) return q.trim();
-  } catch {
-    // not an absolute URL
-  }
-  return s;
-}
+const matchesChatFilter = (chat, filter) => {
+  const f = String(filter || 'ALL').toUpperCase();
+  if (f === 'ALL') return true;
+  const t = String(chat?.type || 'PRIVATE').toUpperCase();
+  if (f === 'PRIVATE') return t !== 'GROUP' && t !== 'CHANNEL';
+  return t === f;
+};
 
-function joinInviteErrorMessage(err) {
-  if (typeof err === 'string' && err.trim()) return err;
-  if (err && typeof err.message === 'string' && err.message.trim()) return err.message;
-  return getApiErrorMessage(err, 'Could not join with this invite.');
-}
-
-const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
+const ChatList = ({
+  onFindUsers,
+  onSelectChat,
+  onOpenRoomProfile,
+  onJoinViaLink,
+  chatFilter = 'ALL',
+  activeFolderId = null,
+}) => {
   const { user } = useAuthStore();
 
   const chats = useChatStore(useShallow((state) => state.chats));
@@ -77,15 +75,25 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
   const setLoadingChats = useChatStore((state) => state.setLoadingChats);
   const setError = useChatStore((state) => state.setError);
   const storeError = useChatStore((state) => state.error);
+  const activeChatId = useChatStore((state) => state.currentChat?.id);
 
   const [retryCount, setRetryCount] = useState(0);
+  const [listSearch, setListSearch] = useState('');
   const [presenceByChatId, setPresenceByChatId] = useState({});
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [createRoomMode, setCreateRoomMode] = useState(null);
-  const [inviteInput, setInviteInput] = useState('');
-  const [inviteBusy, setInviteBusy] = useState(false);
-  const [inviteError, setInviteError] = useState('');
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [draggingChatId, setDraggingChatId] = useState(null);
   const previousUserIdRef = useRef(null);
+
+  const folders = useChatFolderStore((s) => s.folders);
+  const createFolder = useChatFolderStore((s) => s.createFolder);
+  const getFolderIdForChat = useChatFolderStore((s) => s.getFolderIdForChat);
+
+  const activeFolder = React.useMemo(
+    () => folders.find((f) => String(f.id) === String(activeFolderId)) || null,
+    [folders, activeFolderId],
+  );
 
   useEffect(() => {
     const loadChats = async () => {
@@ -227,90 +235,71 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
     onSelectChat?.(dto);
   };
 
-  const handleJoinInvite = async () => {
-    const token = parseInviteToken(inviteInput);
-    if (!token) {
-      setInviteError('Paste an invite link or token.');
-      return;
-    }
-    setInviteBusy(true);
-    setInviteError('');
-    try {
-      const dto = await chatService.joinByInvite(token);
-      if (!dto?.id) {
-        setInviteError('Join succeeded but room data was missing.');
-        return;
-      }
-      upsertChat(dto);
-      setCurrentChat(dto);
-      onSelectChat?.(dto);
-      setInviteInput('');
-    } catch (err) {
-      setInviteError(joinInviteErrorMessage(err));
-    } finally {
-      setInviteBusy(false);
-    }
-  };
-
-  const openMenu = (event) => {
+  const openListMenu = (event) => {
     setMenuAnchor(event.currentTarget);
   };
 
-  const closeMenu = () => {
+  const closeListMenu = () => {
     setMenuAnchor(null);
   };
 
-  const sidebarFooter = (
+  const listOptionsMenu = (
     <>
-      <Box
-        sx={{
-          flexShrink: 0,
-          borderTop: 1,
-          borderColor: 'divider',
-          py: 0.25,
-          px: 0.5,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          bgcolor: 'background.paper',
-        }}
-      >
-        <IconButton
-          size="small"
-          aria-label="Chat options"
-          aria-controls={menuAnchor ? 'chat-sidebar-menu' : undefined}
-          aria-haspopup="true"
-          aria-expanded={menuAnchor ? 'true' : undefined}
-          onClick={openMenu}
-          sx={{ width: 44, height: 44 }}
-        >
-          <MoreVertIcon />
-        </IconButton>
-      </Box>
       <Menu
-        id="chat-sidebar-menu"
+        id="chat-list-options-menu"
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}
-        onClose={closeMenu}
-        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        slotProps={{ paper: { sx: { minWidth: 220 } } }}
+        onClose={closeListMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{
+          ...chatMenuSlotProps,
+          paper: { sx: { ...chatMenuPaperSx, minWidth: 220 } },
+        }}
       >
         <MenuItem
           onClick={() => {
-            closeMenu();
+            closeListMenu();
+            onJoinViaLink?.();
+          }}
+        >
+          <ListItemIcon>
+            <LinkIcon fontSize="small" />
+          </ListItemIcon>
+          Join via link
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            closeListMenu();
             setCreateRoomMode('group');
           }}
         >
+          <ListItemIcon>
+            <GroupsIcon fontSize="small" />
+          </ListItemIcon>
           Create a group chat
         </MenuItem>
         <MenuItem
           onClick={() => {
-            closeMenu();
+            closeListMenu();
             setCreateRoomMode('channel');
           }}
         >
+          <ListItemIcon>
+            <CampaignOutlinedIcon fontSize="small" />
+          </ListItemIcon>
           Create a channel
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            closeListMenu();
+            setCreateFolderOpen(true);
+          }}
+        >
+          <ListItemIcon>
+            <CreateNewFolderOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          Create folder
         </MenuItem>
       </Menu>
       <CreateRoomDialog
@@ -319,13 +308,18 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
         onClose={() => setCreateRoomMode(null)}
         onCreated={handleRoomCreated}
       />
+      <CreateFolderDialog
+        open={createFolderOpen}
+        onClose={() => setCreateFolderOpen(false)}
+        onCreate={(name) => createFolder(name)}
+      />
     </>
   );
 
   if (!user) {
     return (
       <Box p={3} textAlign="center">
-        <Typography color="text.secondary" gutterBottom>
+        <Typography sx={{ color: chatColors.glassPanelTextMuted }} gutterBottom>
           Please log in to see your chats
         </Typography>
         <Button variant="contained" color="primary" href="/login">
@@ -343,10 +337,10 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
           minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          bgcolor: 'background.paper',
+          bgcolor: 'transparent',
         }}
       >
-        <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', p: 3 }}>
+        <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', overflowX: 'hidden', p: 3, ...chatHideScrollbarSx }}>
           <Alert
             severity="error"
             action={
@@ -358,7 +352,7 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
             {storeError}
           </Alert>
         </Box>
-        {sidebarFooter}
+        {listOptionsMenu}
       </Box>
     );
   }
@@ -372,18 +366,35 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
           minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          bgcolor: 'background.paper',
+          bgcolor: 'transparent',
         }}
       >
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', p: 3 }}>
           <CircularProgress />
         </Box>
-        {sidebarFooter}
+        {listOptionsMenu}
       </Box>
     );
   }
 
-  const chatList = Array.isArray(chats) ? chats : [];
+  const searchLower = listSearch.trim().toLowerCase();
+  const chatList = (Array.isArray(chats) ? chats : [])
+    .filter((c) => {
+      if (activeFolderId) {
+        return String(getFolderIdForChat(c.id)) === String(activeFolderId);
+      }
+      return matchesChatFilter(c, chatFilter);
+    })
+    .filter((chat) => {
+      if (!searchLower) return true;
+      const chatType = String(chat.type || '').toUpperCase();
+      const isRoom = chatType === 'GROUP' || chatType === 'CHANNEL';
+      const name = isRoom
+        ? (chat.groupName || '')
+        : `${chat.otherUser?.firstName || ''} ${chat.otherUser?.lastName || ''} ${chat.otherUser?.username || ''}`;
+      const preview = String(chat.lastMessage || chat.lastMessageContent || '');
+      return `${name} ${preview}`.toLowerCase().includes(searchLower);
+    });
 
   const handleSelectChat = (chat) => {
     if (chat?.id) {
@@ -393,22 +404,34 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
     onSelectChat?.(chat);
   };
 
+  const emptyTitle = activeFolder
+    ? `No chats in “${activeFolder.name}”`
+    : "You don't have any chats yet";
+  const emptyHint = activeFolder
+    ? 'Drag chats from All chats into this folder using the sidebar, or switch views from the left rail.'
+    : 'Start a conversation, create a group or channel, or find users and public rooms.';
+
   const listSection =
     chatList.length === 0 ? (
       <Box p={3} textAlign="center">
-        <Typography variant="body1" color="text.secondary" paragraph>
-          You don&apos;t have any chats yet
+        <Typography variant="body1" sx={{ color: chatColors.glassPanelText }} paragraph>
+          {emptyTitle}
         </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-          Start a conversation, create a group or channel, or find users and public rooms.
+        <Typography variant="body2" sx={{ color: chatColors.glassPanelTextMuted }} gutterBottom>
+          {emptyHint}
         </Typography>
-        <Button variant="contained" color="primary" onClick={onFindUsers} sx={{ mt: 2 }}>
+        <Button
+          variant="text"
+          color="primary"
+          onClick={onFindUsers}
+          sx={{ mt: 1, display: { xs: 'inline-flex', md: 'none' } }}
+        >
           Find users & rooms
         </Button>
       </Box>
     ) : (
-      <List sx={{ width: '100%', bgcolor: 'background.paper', py: 0 }}>
-        {chatList.map((chat) => {
+      <List sx={{ width: '100%', bgcolor: 'transparent', py: 0 }}>
+        {chatList.map((chat, listIndex) => {
           const chatType = String(chat.type || '').toUpperCase();
           const isGroup = chatType === 'GROUP';
           const isChannel = chatType === 'CHANNEL';
@@ -433,23 +456,42 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
             : 'No messages yet';
 
           const unreadCount = chat.unreadCount || 0;
+          const isSelected = String(activeChatId) === String(chat.id);
 
           const avatarLetter = otherUserName?.[0]?.toUpperCase() || '?';
           const roomAvatarSrc = isGroupOrChannel
             ? chat.groupPhoto || undefined
             : otherUser?.profilePicture || undefined;
 
+          const isDragging = draggingChatId === String(chat.id);
+
           return (
             <ListItem
               key={chat.id}
+              draggable
+              onDragStart={(e) => {
+                const id = String(chat.id);
+                e.dataTransfer.setData(CHAT_DRAG_TYPE, id);
+                e.dataTransfer.setData('text/plain', id);
+                e.dataTransfer.effectAllowed = 'move';
+                setDraggingChatId(id);
+              }}
+              onDragEnd={() => setDraggingChatId(null)}
               onClick={() => handleSelectChat(chat)}
               sx={{
+                mx: 1,
+                mb: 0.5,
+                borderRadius: `${chatRadii.avatar}px`,
+                bgcolor: isSelected ? chatColors.surfaceMuted : 'transparent',
+                opacity: isDragging ? 0.45 : 1,
+                transform: isDragging ? 'scale(0.98)' : 'none',
+                transition: 'opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease',
+                ...chatListItemEnterSx(listIndex),
                 '&:hover': {
-                  bgcolor: 'action.hover',
+                  bgcolor: isSelected ? chatColors.surfaceMuted : 'rgba(24, 20, 28, 0.06)',
                 },
-                cursor: 'pointer',
-                borderBottom: '1px solid',
-                borderColor: 'divider',
+                cursor: 'grab',
+                '&:active': { cursor: 'grabbing' },
               }}
             >
               <ListItemAvatar
@@ -485,6 +527,12 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
                   overlap="circular"
                   sx={{
                     '& .MuiBadge-badge': {
+                      width: 12,
+                      height: 12,
+                      minWidth: 12,
+                      borderRadius: '50%',
+                      border: '2px solid',
+                      borderColor: chatColors.glassList,
                       bgcolor:
                         presenceState === 'online'
                           ? 'success.main'
@@ -502,18 +550,26 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
                 primary={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
                     {isChannel ? (
-                      <Chip
-                        size="small"
-                        label="Channel"
-                        color="primary"
-                        variant="outlined"
-                        sx={{ flexShrink: 0 }}
-                      />
+                      <Tooltip title="Channel">
+                        <CampaignOutlinedIcon
+                          sx={{ fontSize: 18, color: chatColors.primary, flexShrink: 0 }}
+                          aria-label="Channel"
+                        />
+                      </Tooltip>
                     ) : null}
                     {isGroup ? (
-                      <Chip size="small" label="Group" variant="outlined" sx={{ flexShrink: 0 }} />
+                      <Tooltip title="Group chat">
+                        <GroupsIcon
+                          sx={{ fontSize: 18, color: chatColors.glassPanelTextMuted, flexShrink: 0 }}
+                          aria-label="Group chat"
+                        />
+                      </Tooltip>
                     ) : null}
-                    <Typography variant="subtitle2" noWrap sx={{ minWidth: 0 }}>
+                    <Typography
+                      variant="subtitle2"
+                      noWrap
+                      sx={{ minWidth: 0, color: chatColors.glassPanelText, fontWeight: 600 }}
+                    >
                       {otherUserName}
                     </Typography>
                   </Box>
@@ -522,8 +578,8 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
                   <Typography
                     component="span"
                     variant="body2"
-                    color="text.secondary"
                     sx={{
+                      color: chatColors.glassPanelTextMuted,
                       display: 'block',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -553,54 +609,98 @@ const ChatList = ({ onFindUsers, onSelectChat, onOpenRoomProfile }) => {
         minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
-        bgcolor: 'background.paper',
+        bgcolor: 'transparent',
       }}
     >
-      <Box sx={{ flexShrink: 0, p: 1, borderBottom: 1, borderColor: 'divider' }}>
-        <Stack spacing={1}>
-          <Button variant="outlined" fullWidth onClick={onFindUsers}>
-            Find users & rooms
-          </Button>
-          <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
-            Join with invite link
-          </Typography>
+      <Box sx={{ flexShrink: 0, p: 1.5, borderBottom: `1px solid ${chatColors.glassPanelBorder}` }}>
+        {activeFolder ? (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
+              mb: 1,
+              px: 0.5,
+            }}
+          >
+            <FolderOutlinedIcon sx={{ fontSize: 20, color: chatColors.primary }} aria-hidden />
+            <Typography
+              variant="subtitle2"
+              fontWeight={700}
+              noWrap
+              sx={{ flex: 1, minWidth: 0, color: chatColors.glassPanelText }}
+            >
+              {activeFolder.name}
+            </Typography>
+          </Box>
+        ) : null}
+        <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
           <TextField
             size="small"
             fullWidth
-            placeholder="Paste link or token"
-            value={inviteInput}
-            disabled={inviteBusy}
-            onChange={(e) => {
-              setInviteInput(e.target.value);
-              if (inviteError) setInviteError('');
+            placeholder="Search"
+            value={listSearch}
+            onChange={(e) => setListSearch(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: chatColors.glassPanelTextMuted, fontSize: 20 }} />
+                </InputAdornment>
+              ),
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                void handleJoinInvite();
-              }
-            }}
-            inputProps={{ 'aria-label': 'Invite link or token' }}
+            sx={{ flex: 1, ...chatGlassFieldPanelSx }}
+            inputProps={{ 'aria-label': 'Search chats' }}
           />
-          {inviteError ? (
-            <Alert severity="error" onClose={() => setInviteError('')} sx={{ py: 0 }}>
-              {inviteError}
-            </Alert>
-          ) : null}
-          <Button
-            variant="contained"
-            fullWidth
-            disabled={inviteBusy || !String(inviteInput).trim()}
-            onClick={() => void handleJoinInvite()}
-          >
-            {inviteBusy ? 'Joining…' : 'Join'}
-          </Button>
-        </Stack>
+          <Tooltip title="Find users & rooms">
+            <IconButton
+              aria-label="Find users and rooms"
+              onClick={onFindUsers}
+              sx={{
+                display: { xs: 'inline-flex', md: 'none' },
+                flexShrink: 0,
+                bgcolor: chatColors.surfaceMuted,
+                borderRadius: `${chatRadii.pill}px`,
+                width: 40,
+                height: 40,
+                color: chatColors.primary,
+              }}
+            >
+              <SearchIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Chat list options">
+            <IconButton
+              aria-label="Chat list options"
+              onClick={openListMenu}
+              sx={{
+                flexShrink: 0,
+                bgcolor: chatColors.surfaceMuted,
+                borderRadius: `${chatRadii.pill}px`,
+                width: 40,
+                height: 40,
+                color: chatColors.glassPanelText,
+              }}
+            >
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{listSection}</Box>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          minWidth: 0,
+          ...chatHideScrollbarSx,
+        }}
+      >
+        {listSection}
+      </Box>
 
-      {sidebarFooter}
+      {listOptionsMenu}
     </Box>
   );
 };

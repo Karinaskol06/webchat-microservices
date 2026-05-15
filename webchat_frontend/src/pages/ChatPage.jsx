@@ -3,10 +3,11 @@ import {
   Alert,
   Button,
   Box,
-  Paper,
   Typography,
-  Divider,
 } from '@mui/material';
+import ChatShell from '../components/layout/ChatShell';
+import ChatInfoSidebar from '../components/chat/ChatInfoSidebar';
+import { chatColors } from '../theme/chatDesignTokens';
 import useChatStore from '../store/useChatStore';
 import useAuthStore from '../store/useAuthStore';
 import chatService from '../services/chatService';
@@ -19,6 +20,9 @@ import UserProfileDialog from '../components/user/UserProfileDialog';
 import ForwardChatDialog from '../components/chat/ForwardChatDialog';
 import UserSearchDialog from '../components/chat/UserSearchDialog';
 import RoomProfileDialog from '../components/chat/RoomProfileDialog';
+import ChatSettingsDialog from '../components/chat/ChatSettingsDialog';
+import ChatInMessageSearch from '../components/chat/ChatInMessageSearch';
+import { findInChatMessageMatches } from '../utils/chatMessageSearch';
 import useWebSocket from '../hooks/useWebSocket';
 import useMessages from '../hooks/useMessages';
 import { useUnreadMessageSeparator } from '../hooks/useUnreadMessageSeparator';
@@ -42,16 +46,25 @@ const ChatPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [profileDialogUser, setProfileDialogUser] = useState(null);
+  const [myProfileOpen, setMyProfileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsDialogVariant, setSettingsDialogVariant] = useState('settings');
   const [userSearchOpen, setUserSearchOpen] = useState(false);
   const [roomProfileOpen, setRoomProfileOpen] = useState(false);
   const [roomProfileId, setRoomProfileId] = useState(null);
   const [presenceStatus, setPresenceStatus] = useState(null);
   const [emojiSidebarOpen, setEmojiSidebarOpen] = useState(false);
+  const [inChatSearchOpen, setInChatSearchOpen] = useState(false);
+  const [inChatSearchQuery, setInChatSearchQuery] = useState('');
+  const [inChatSearchMatchIndex, setInChatSearchMatchIndex] = useState(-1);
   const [contactStatus, setContactStatus] = useState(null);
   const [contactActionLoading, setContactActionLoading] = useState(false);
+  const [roomMemberInvites, setRoomMemberInvites] = useState([]);
+  const [roomInviteActionLoading, setRoomInviteActionLoading] = useState(false);
   const afkTimeoutRef = useRef(null);
   const heartbeatIntervalRef = useRef(null);
   const isAfkRef = useRef(false);
+  const composerRef = useRef(null);
   
   const otherUser =
     currentChat?.otherUser ||
@@ -117,20 +130,17 @@ const ChatPage = () => {
   const { isOtherUserTyping } = useTyping(currentChat, otherUser);
 
   const {
-    newMessage,
-    setNewMessage,
     composerError,
     setComposerError,
     handleSendMessage,
     handleTyping,
-    handleKeyPress,
     selectedAttachments,
     handleSelectAttachments,
     handleRemoveAttachment,
     messagesEndRef,
     replyToMessage,
     setReplyToMessage,
-  } = useMessages(currentChat);
+  } = useMessages(currentChat, composerRef);
 
   const [messageToForward, setMessageToForward] = useState(null);
 
@@ -151,7 +161,28 @@ const ChatPage = () => {
     setProfileDialogOpen(true);
   };
 
-  useWebSocket(user, currentChat?.id, user?.id);
+  const mergeRoomMemberInvite = useCallback((invite) => {
+    if (!invite?.id || String(invite.state || '').toUpperCase() !== 'PENDING') return;
+    setRoomMemberInvites((prev) => {
+      const rest = prev.filter((item) => item.id !== invite.id);
+      return [invite, ...rest];
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setRoomMemberInvites([]);
+      return;
+    }
+    chatService
+      .listPendingRoomMemberInvites()
+      .then((list) => setRoomMemberInvites(Array.isArray(list) ? list : []))
+      .catch(() => setRoomMemberInvites([]));
+  }, [user?.id]);
+
+  useWebSocket(user, currentChat?.id, user?.id, {
+    onRoomMemberInvite: mergeRoomMemberInvite,
+  });
 
   const clearPresenceTimers = useCallback(() => {
     if (afkTimeoutRef.current) {
@@ -245,9 +276,11 @@ const ChatPage = () => {
     };
   }, [currentChat?.id, clearPresenceTimers, markActiveInChat, markAfkInChat, resetAfkDeadline]);
 
-  // Show emoji sidebar only when chat is open
+  // Close emoji sidebar when leaving the conversation (not when opening one)
   useEffect(() => {
-    setEmojiSidebarOpen(Boolean(currentChat));
+    if (!currentChat) {
+      setEmojiSidebarOpen(false);
+    }
   }, [currentChat]);
 
   // Fetch presence status for the interlocutor (private chats only)
@@ -381,11 +414,51 @@ const ChatPage = () => {
     }
   };
 
+  const handleAcceptRoomMemberInvite = async (invite) => {
+    if (!invite?.id) return;
+    try {
+      setRoomInviteActionLoading(true);
+      const dto = await chatService.acceptRoomMemberInvite(invite.id);
+      setRoomMemberInvites((prev) => prev.filter((item) => item.id !== invite.id));
+      if (dto?.id) {
+        useChatStore.getState().upsertChat(dto);
+        setCurrentChat(dto);
+      }
+    } catch {
+      /* invite may have expired */
+      setRoomMemberInvites((prev) => prev.filter((item) => item.id !== invite.id));
+    } finally {
+      setRoomInviteActionLoading(false);
+    }
+  };
+
+  const handleDeclineRoomMemberInvite = async (invite) => {
+    if (!invite?.id) return;
+    try {
+      setRoomInviteActionLoading(true);
+      await chatService.declineRoomMemberInvite(invite.id);
+      setRoomMemberInvites((prev) => prev.filter((item) => item.id !== invite.id));
+    } finally {
+      setRoomInviteActionLoading(false);
+    }
+  };
+
+  const roomInviteBannerLabel = (invite) => {
+    const inviter = invite?.invitedBy;
+    const inviterName =
+      inviter?.username ||
+      [inviter?.firstName, inviter?.lastName].filter(Boolean).join(' ') ||
+      'Someone';
+    const roomLabel = invite?.roomName || (invite?.roomType === 'CHANNEL' ? 'a channel' : 'a group');
+    return `${inviterName} invited you to join ${roomLabel}`;
+  };
+
   const handleJoinedRoom = useCallback((dto) => {
     if (!dto?.id) return;
     useChatStore.getState().upsertChat(dto);
     setCurrentChat(dto);
     setUserSearchOpen(false);
+    setSettingsOpen(false);
   }, [setCurrentChat]);
 
   const openRoomProfileById = useCallback((id) => {
@@ -414,159 +487,300 @@ const ChatPage = () => {
 
   const channelComposerLocked = channelPostingRestricted(currentChat);
 
-  // UI Rendering block
+  const inChatSearchMatches = useMemo(
+    () => findInChatMessageMatches(messages, inChatSearchQuery),
+    [messages, inChatSearchQuery],
+  );
+
+  const activeInChatSearchMatch = useMemo(() => {
+    if (inChatSearchMatchIndex < 0 || inChatSearchMatchIndex >= inChatSearchMatches.length) {
+      return null;
+    }
+    return inChatSearchMatches[inChatSearchMatchIndex];
+  }, [inChatSearchMatches, inChatSearchMatchIndex]);
+
+  useEffect(() => {
+    setInChatSearchOpen(false);
+    setInChatSearchQuery('');
+    setInChatSearchMatchIndex(-1);
+  }, [currentChat?.id]);
+
+  useEffect(() => {
+    const trimmed = inChatSearchQuery.trim();
+    if (!trimmed || inChatSearchMatches.length === 0) {
+      if (inChatSearchMatchIndex !== -1) setInChatSearchMatchIndex(-1);
+      return;
+    }
+    if (inChatSearchMatchIndex < 0 || inChatSearchMatchIndex >= inChatSearchMatches.length) {
+      setInChatSearchMatchIndex(0);
+    }
+  }, [inChatSearchQuery, inChatSearchMatches, inChatSearchMatchIndex]);
+
+  const closeInChatSearch = useCallback(() => {
+    setInChatSearchOpen(false);
+    setInChatSearchQuery('');
+    setInChatSearchMatchIndex(-1);
+  }, []);
+
+  const toggleInChatSearch = useCallback(() => {
+    setInChatSearchOpen((open) => {
+      if (open) {
+        setInChatSearchQuery('');
+        setInChatSearchMatchIndex(-1);
+      }
+      return !open;
+    });
+  }, []);
+
+  const goPrevInChatSearchMatch = useCallback(() => {
+    if (inChatSearchMatches.length === 0) return;
+    setInChatSearchMatchIndex((idx) => {
+      const safe = idx < 0 ? 0 : idx;
+      return safe <= 0 ? inChatSearchMatches.length - 1 : safe - 1;
+    });
+  }, [inChatSearchMatches.length]);
+
+  const goNextInChatSearchMatch = useCallback(() => {
+    if (inChatSearchMatches.length === 0) return;
+    setInChatSearchMatchIndex((idx) => {
+      const safe = idx < 0 ? 0 : idx;
+      return safe >= inChatSearchMatches.length - 1 ? 0 : safe + 1;
+    });
+  }, [inChatSearchMatches.length]);
+
+  const mainConversation = currentChat ? (
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <Box
+        sx={{
+          flexShrink: 0,
+          px: { xs: 1.5, sm: 2.5 },
+          py: 2,
+          borderBottom: `1px solid ${chatColors.borderSubtle}`,
+          bgcolor: chatColors.conversationBg,
+        }}
+      >
+        <ChatHeader
+          otherUser={otherUser}
+          presenceStatus={presenceStatus}
+          isTyping={isOtherUserTyping}
+          emojiSidebarOpen={emojiSidebarOpen}
+          onOpenProfile={isGroupOrChannel ? openRoomProfileFromHeader : openPartnerProfile}
+          onShowEmojiSidebar={() => setEmojiSidebarOpen(true)}
+          headerTitle={headerTitle}
+          headerSubtitle={headerSubtitle}
+          headerAvatarSrc={headerAvatarSrc}
+          headerAvatarLetter={headerAvatarLetter}
+          headerAvatarClickable={isGroupOrChannel || Boolean(otherUser)}
+          showCopyInvite={showCopyRoomInvite}
+          onCopyInvite={handleCopyRoomInvite}
+          isGroupOrChannel={isGroupOrChannel}
+          inChatSearchOpen={inChatSearchOpen}
+          onToggleInChatSearch={toggleInChatSearch}
+        />
+      </Box>
+
+      <ChatInMessageSearch
+        open={inChatSearchOpen}
+        query={inChatSearchQuery}
+        onQueryChange={(value) => {
+          setInChatSearchQuery(value);
+          setInChatSearchMatchIndex(-1);
+        }}
+        matchCount={inChatSearchMatches.length}
+        activeMatchIndex={inChatSearchMatchIndex}
+        onPrevMatch={goPrevInChatSearchMatch}
+        onNextMatch={goNextInChatSearchMatch}
+        onClose={closeInChatSearch}
+      />
+
+      {roomMemberInvites.length > 0
+        ? roomMemberInvites.map((invite) => (
+            <Alert
+              key={invite.id}
+              severity="info"
+              sx={{ mx: 2, mt: 1, borderRadius: 3 }}
+              action={
+                <>
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => void handleAcceptRoomMemberInvite(invite)}
+                    disabled={roomInviteActionLoading}
+                  >
+                    Join
+                  </Button>
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => void handleDeclineRoomMemberInvite(invite)}
+                    disabled={roomInviteActionLoading}
+                  >
+                    Decline
+                  </Button>
+                </>
+              }
+            >
+              {roomInviteBannerLabel(invite)}
+            </Alert>
+          ))
+        : null}
+
+      {contactStatus?.state === 'PENDING' &&
+        !isGroupOrChannel &&
+        Number(contactStatus?.prompt?.fromUserId) === Number(otherUser?.id) && (
+        <Alert
+          severity="info"
+          sx={{ mx: 2, mt: 1, borderRadius: 3 }}
+          action={
+            <>
+              <Button color="inherit" size="small" onClick={handleAcceptContact} disabled={contactActionLoading}>
+                Yes
+              </Button>
+              <Button color="inherit" size="small" onClick={handleDeclineContact} disabled={contactActionLoading}>
+                No
+              </Button>
+            </>
+          }
+        >
+          Add to contacts?
+        </Alert>
+      )}
+
+      <MessageList
+        messages={messages}
+        currentUserId={user?.id}
+        room={currentChat}
+        messagesEndRef={messagesEndRef}
+        onReply={setReplyToMessage}
+        onOpenForward={(msg) => setMessageToForward(msg)}
+        onOpenForwardedProfile={openForwardedProfile}
+        openSeparatorIndex={openSeparatorIndex}
+        liveBeforeMessageId={liveBeforeMessageId}
+        hideChannelReplyActions={channelComposerLocked}
+        inChatSearchQuery={inChatSearchQuery}
+        inChatSearchMatches={inChatSearchMatches}
+        activeInChatSearchMatch={activeInChatSearchMatch}
+      />
+
+      <MessageInput
+        ref={composerRef}
+        chatId={currentChat?.id}
+        onSend={handleSendMessage}
+        onTyping={handleTypingWithPresence}
+        attachments={selectedAttachments}
+        onSelectAttachments={handleSelectAttachments}
+        onRemoveAttachment={handleRemoveAttachment}
+        replyToMessage={replyToMessage}
+        onCancelReply={() => setReplyToMessage(null)}
+        emojiSidebarOpen={emojiSidebarOpen}
+        onToggleEmojiSidebar={() => setEmojiSidebarOpen((prev) => !prev)}
+        composerError={composerError}
+        onDismissComposerError={() => setComposerError('')}
+        channelReadOnly={channelComposerLocked}
+        channelReadOnlyHint="Only the channel owner, moderators, or members granted posting can send messages here."
+      />
+
+      <UserProfileDialog
+        open={profileDialogOpen && Boolean(profileDialogUser)}
+        onClose={closeProfileDialog}
+        user={profileDialogUser}
+      />
+
+      <ForwardChatDialog
+        open={Boolean(messageToForward)}
+        message={messageToForward}
+        onClose={() => setMessageToForward(null)}
+      />
+    </Box>
+  ) : (
+    <Box
+      sx={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        px: 3,
+        textAlign: 'center',
+        bgcolor: chatColors.conversationBg,
+      }}
+    >
+      <Typography variant="h5" fontWeight={700} gutterBottom sx={{ color: chatColors.textPrimary }}>
+        Welcome to WebChat
+      </Typography>
+      <Typography variant="body1" sx={{ maxWidth: 360, color: chatColors.textSecondary }}>
+        Choose a conversation from the list or find users and rooms to get started.
+      </Typography>
+    </Box>
+  );
+
   return (
     <>
-      {!currentChat ? (
-        <Box sx={{ display: 'flex', height: '100%', width: '100%', minHeight: 0 }}>
-          <Box
-            sx={{
-              width: 360,
-              maxWidth: 420,
-              borderRight: 1,
-              borderColor: 'divider',
-              height: '100%',
-              minHeight: 0,
-              display: 'flex',
-              flexDirection: 'column',
+      <ChatShell
+        hasActiveChat={Boolean(currentChat)}
+        onBackFromChat={() => setCurrentChat(null)}
+        onOpenProfile={() => setMyProfileOpen(true)}
+        onOpenSettings={() => {
+          setSettingsDialogVariant('settings');
+          setSettingsOpen(true);
+        }}
+        settingsOpen={settingsOpen}
+        onFindUsers={() => setUserSearchOpen(true)}
+        findUsersOpen={userSearchOpen}
+        onFolderViewChange={() => setCurrentChat(null)}
+        showInfoPanel={Boolean(currentChat && isGroupOrChannel)}
+        infoPanel={
+          <ChatInfoSidebar room={currentChat} onOpenRoomProfile={openRoomProfileFromHeader} />
+        }
+        listPanel={({ chatFilter, activeFolderId }) => (
+          <ChatList
+            chatFilter={chatFilter}
+            activeFolderId={activeFolderId}
+            onFindUsers={() => setUserSearchOpen(true)}
+            onJoinViaLink={() => {
+              setSettingsDialogVariant('join');
+              setSettingsOpen(true);
             }}
-          >
-            <ChatList onFindUsers={() => setUserSearchOpen(true)} onOpenRoomProfile={openRoomProfileFromChat} />
-          </Box>
-          <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <Typography variant="h6" color="text.secondary">
-              Choose a chat to start messaging
-            </Typography>
-          </Box>
-          <UserSearchDialog
-            open={userSearchOpen}
-            onClose={() => setUserSearchOpen(false)}
-            onSelectUser={handleSelectUserForNewChat}
-            onJoinedRoom={handleJoinedRoom}
-            onOpenExistingRoom={handleJoinedRoom}
-            currentUserId={user?.id}
+            onOpenRoomProfile={openRoomProfileFromChat}
           />
-        </Box>
-      ) : (
-        <Box sx={{ display: 'flex', height: '100%', width: '100%', minHeight: 0 }}>
-          <Box
-            sx={{
-              width: 360,
-              maxWidth: 420,
-              borderRight: 1,
-              borderColor: 'divider',
-              height: '100%',
-              minHeight: 0,
-              display: 'flex',
-              flexDirection: 'column',
-            }}
-          >
-            <ChatList onFindUsers={() => setUserSearchOpen(true)} onOpenRoomProfile={openRoomProfileFromChat} />
-          </Box>
-
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <Paper sx={{ p: 2, borderRadius: 0 }}>
-              <ChatHeader
-                otherUser={otherUser}
-                presenceStatus={presenceStatus}
-                isTyping={isOtherUserTyping}
-                emojiSidebarOpen={emojiSidebarOpen}
-                onOpenProfile={isGroupOrChannel ? openRoomProfileFromHeader : openPartnerProfile}
-                onShowEmojiSidebar={() => setEmojiSidebarOpen(true)}
-                headerTitle={headerTitle}
-                headerSubtitle={headerSubtitle}
-                headerAvatarSrc={headerAvatarSrc}
-                headerAvatarLetter={headerAvatarLetter}
-                headerAvatarClickable={isGroupOrChannel || Boolean(otherUser)}
-                showCopyInvite={showCopyRoomInvite}
-                onCopyInvite={handleCopyRoomInvite}
+        )}
+        mainPanel={
+          <Box sx={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0 }}>
+            <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              {mainConversation}
+            </Box>
+            {emojiSidebarOpen && currentChat ? (
+              <EmojiSidebar
+                onClose={() => setEmojiSidebarOpen(false)}
+                onEmojiClick={(emoji) => composerRef.current?.appendText(emoji)}
               />
-            </Paper>
-
-            <Divider />
-
-            {contactStatus?.state === 'PENDING' &&
-              !isGroupOrChannel &&
-              Number(contactStatus?.prompt?.fromUserId) === Number(otherUser?.id) && (
-              <Alert
-                severity="info"
-                action={
-                  <>
-                    <Button color="inherit" size="small" onClick={handleAcceptContact} disabled={contactActionLoading}>
-                      Yes
-                    </Button>
-                    <Button color="inherit" size="small" onClick={handleDeclineContact} disabled={contactActionLoading}>
-                      No
-                    </Button>
-                  </>
-                }
-              >
-                Add to contacts?
-              </Alert>
-            )}
-
-            <MessageList
-              messages={messages}
-              currentUserId={user?.id}
-              room={currentChat}
-              messagesEndRef={messagesEndRef}
-              onReply={setReplyToMessage}
-              onOpenForward={(msg) => setMessageToForward(msg)}
-              onOpenForwardedProfile={openForwardedProfile}
-              openSeparatorIndex={openSeparatorIndex}
-              liveBeforeMessageId={liveBeforeMessageId}
-              hideChannelReplyActions={channelComposerLocked}
-            />
-
-            <MessageInput
-              value={newMessage}
-              onChange={setNewMessage}
-              onSend={handleSendMessage}
-              onTyping={handleTypingWithPresence}
-              onKeyPress={handleKeyPress}
-              attachments={selectedAttachments}
-              onSelectAttachments={handleSelectAttachments}
-              onRemoveAttachment={handleRemoveAttachment}
-              replyToMessage={replyToMessage}
-              onCancelReply={() => setReplyToMessage(null)}
-              emojiSidebarOpen={emojiSidebarOpen}
-              onToggleEmojiSidebar={() => setEmojiSidebarOpen((prev) => !prev)}
-              composerError={composerError}
-              onDismissComposerError={() => setComposerError('')}
-              channelReadOnly={channelComposerLocked}
-              channelReadOnlyHint="Only the channel owner, moderators, or members granted posting can send messages here."
-            />
-
-            <UserProfileDialog
-              open={profileDialogOpen && Boolean(profileDialogUser)}
-              onClose={closeProfileDialog}
-              user={profileDialogUser}
-            />
-
-            <ForwardChatDialog
-              open={Boolean(messageToForward)}
-              message={messageToForward}
-              onClose={() => setMessageToForward(null)}
-            />
+            ) : null}
           </Box>
+        }
+      />
 
-          {emojiSidebarOpen && (
-            <EmojiSidebar
-              onClose={() => setEmojiSidebarOpen(false)}
-              onEmojiClick={(emoji) => setNewMessage((prev) => `${prev}${emoji}`)}
-            />
-          )}
+      <UserSearchDialog
+        open={userSearchOpen}
+        onClose={() => setUserSearchOpen(false)}
+        onSelectUser={handleSelectUserForNewChat}
+        onJoinedRoom={handleJoinedRoom}
+        onOpenExistingRoom={handleJoinedRoom}
+        currentUserId={user?.id}
+      />
 
-          <UserSearchDialog
-            open={userSearchOpen}
-            onClose={() => setUserSearchOpen(false)}
-            onSelectUser={handleSelectUserForNewChat}
-            onJoinedRoom={handleJoinedRoom}
-            onOpenExistingRoom={handleJoinedRoom}
-            currentUserId={user?.id}
-          />
-        </Box>
-      )}
+      <UserProfileDialog
+        open={myProfileOpen}
+        onClose={() => setMyProfileOpen(false)}
+        user={user}
+        editable
+      />
+
+      <ChatSettingsDialog
+        open={settingsOpen}
+        variant={settingsDialogVariant}
+        onClose={() => setSettingsOpen(false)}
+        onJoinedRoom={handleJoinedRoom}
+      />
 
       <RoomProfileDialog open={roomProfileOpen} roomId={roomProfileId} onClose={closeRoomProfile} />
     </>

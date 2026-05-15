@@ -1,25 +1,32 @@
 import React, { useState } from 'react';
 import {
-  Container,
-  Paper,
-  TextField,
-  Button,
-  Typography,
   Box,
-  Alert,
+  Button,
   CircularProgress,
   Stack,
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import useAuthStore from '../store/useAuthStore';
 import PhoneCountryField from '../components/common/PhoneCountryField';
 import { isValidInternationalPhone } from '../utils/internationalPhone';
+import AuthPageLayout from '../components/auth/AuthPageLayout';
+import AuthAnimatedItem from '../components/auth/AuthAnimatedItem';
+import AuthErrorAlert from '../components/auth/AuthErrorAlert';
+import GlassTextField from '../components/auth/GlassTextField';
+import {
+  authLinkButtonSx,
+  authPrimaryButtonSx,
+} from '../components/auth/authPageTheme';
 
 const Register = () => {
   const navigate = useNavigate();
   const { login } = useAuthStore();
-  
+
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -28,185 +35,213 @@ const Register = () => {
     phoneNumber: '',
     countryCode: 'UA',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
-  
+
   const [error, setError] = useState('');
+  const [errorShake, setErrorShake] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const showError = (message) => {
+    setError(message);
+    setErrorShake(true);
+    window.setTimeout(() => setErrorShake(false), 450);
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     setError('');
+    setErrorShake(false);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validation
+
     if (!formData.username || !formData.email || !formData.password) {
-      setError('Please fill in all required fields.');
+      showError('Please fill in all required fields.');
       return;
     }
-    
+
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match.');
+      showError('Passwords do not match.');
       return;
     }
-    
+
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+      showError('Password must be at least 6 characters long.');
       return;
     }
 
     const phone = (formData.phoneNumber || '').trim();
     if (!phone) {
-      setError('Phone number is required.');
+      showError('Phone number is required.');
       return;
     }
     if (!isValidInternationalPhone(phone)) {
-      setError('Wrong phone number format');
+      showError('Wrong phone number format');
       return;
     }
 
     try {
       setLoading(true);
       setError('');
+      setErrorShake(false);
       const { confirmPassword: _confirmPassword, ...registerData } = formData;
-      
+
       await authService.register(registerData);
-      
+
       const loginResponse = await authService.login({
         username: registerData.username,
-        password: registerData.password
+        password: registerData.password,
       });
 
-      login(loginResponse, loginResponse.token);
+      const userData = await authService.getCurrentUser();
+      login(userData, loginResponse.token);
       navigate('/chat');
-      
     } catch (err) {
-      setError(err.message || 'Registration failed. Please try again.');
+      showError(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container maxWidth="sm">
-      <Box sx={{ mt: 8 }}>
-        <Paper elevation={3} sx={{ p: 4 }}>
-          <Typography variant="h4" align="center" gutterBottom>
-            Registration in WebChat
-          </Typography>
-          
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-          
-          <form onSubmit={handleSubmit}>
-            <TextField
-              fullWidth
-              label="Username *"
-              name="username"
-              value={formData.username}
-              onChange={handleChange}
-              margin="normal"
-              required
-              disabled={loading}
-            />
-            
-            <TextField
-              fullWidth
-              label="Email *"
-              name="email"
-              type="email"
-              value={formData.email}
-              onChange={handleChange}
-              margin="normal"
-              required
-              disabled={loading}
-            />
-            
-            <TextField
-              fullWidth
-              label="First Name"
-              name="firstName"
-              value={formData.firstName}
-              onChange={handleChange}
-              margin="normal"
-              disabled={loading}
-            />
-            
-            <TextField
-              fullWidth
-              label="Last Name"
-              name="lastName"
-              value={formData.lastName}
-              onChange={handleChange}
-              margin="normal"
-              disabled={loading}
-            />
+    <AuthPageLayout
+      title="Register"
+      maxWidth={440}
+      shake={errorShake}
+      footer={
+        <>
+          Already have an account?{' '}
+          <Button
+            component={RouterLink}
+            to="/login"
+            disableRipple
+            sx={authLinkButtonSx}
+          >
+            Login
+          </Button>
+        </>
+      }
+    >
+      <AuthErrorAlert message={error} shake={errorShake} />
 
-            <Stack sx={{ mt: 1, mb: 0 }}>
-              <PhoneCountryField
-                phoneNumber={formData.phoneNumber}
-                countryCode={formData.countryCode}
-                onChange={({ phoneNumber, countryCode }) =>
-                  setFormData((prev) => ({ ...prev, phoneNumber, countryCode }))
-                }
-                disabled={loading}
-              />
-            </Stack>
+      <Box component="form" onSubmit={handleSubmit} noValidate>
+        <AuthAnimatedItem index={0}>
+          <GlassTextField
+            name="username"
+            placeholder="Username"
+            autoComplete="username"
+            value={formData.username}
+            onChange={handleChange}
+            required
+            disabled={loading}
+            endIcon={PersonOutlineIcon}
+          />
+        </AuthAnimatedItem>
 
-            <TextField
-              fullWidth
-              label="Password *"
-              name="password"
-              type="password"
-              value={formData.password}
-              onChange={handleChange}
-              margin="normal"
-              required
+        <AuthAnimatedItem index={1}>
+          <GlassTextField
+            name="email"
+            type="email"
+            placeholder="Email ID"
+            autoComplete="email"
+            value={formData.email}
+            onChange={handleChange}
+            required
+            disabled={loading}
+            endIcon={EmailOutlinedIcon}
+          />
+        </AuthAnimatedItem>
+
+        <AuthAnimatedItem index={2}>
+          <GlassTextField
+            name="firstName"
+            placeholder="First name"
+            autoComplete="given-name"
+            value={formData.firstName}
+            onChange={handleChange}
+            disabled={loading}
+            endIcon={BadgeOutlinedIcon}
+          />
+        </AuthAnimatedItem>
+
+        <AuthAnimatedItem index={3}>
+          <GlassTextField
+            name="lastName"
+            placeholder="Last name"
+            autoComplete="family-name"
+            value={formData.lastName}
+            onChange={handleChange}
+            disabled={loading}
+            endIcon={BadgeOutlinedIcon}
+          />
+        </AuthAnimatedItem>
+
+        <AuthAnimatedItem index={4}>
+          <Stack sx={{ mb: 1.75 }}>
+            <PhoneCountryField
+              glass
+              phoneNumber={formData.phoneNumber}
+              countryCode={formData.countryCode}
+              onChange={({ phoneNumber, countryCode }) => {
+                setFormData((prev) => ({ ...prev, phoneNumber, countryCode }));
+                setError('');
+                setErrorShake(false);
+              }}
               disabled={loading}
             />
-            
-            <TextField
-              fullWidth
-              label="Confirm password *"
-              name="confirmPassword"
-              type="password"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              margin="normal"
-              required
-              disabled={loading}
-            />
-            
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              sx={{ mt: 3, mb: 2 }}
-              disabled={loading}
-            >
-              {loading ? <CircularProgress size={24} /> : 'Register'}
-            </Button>
-            
-            <Typography variant="body2" align="center">
-              Already have an account?{' '}
-              <Button color="primary" onClick={() => navigate('/login')}>
-                Login
-              </Button>
-            </Typography>
-          </form>
-        </Paper>
+          </Stack>
+        </AuthAnimatedItem>
+
+        <AuthAnimatedItem index={5}>
+          <GlassTextField
+            name="password"
+            type="password"
+            placeholder="Password"
+            autoComplete="new-password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+            disabled={loading}
+            endIcon={LockOutlinedIcon}
+          />
+        </AuthAnimatedItem>
+
+        <AuthAnimatedItem index={6}>
+          <GlassTextField
+            name="confirmPassword"
+            type="password"
+            placeholder="Confirm password"
+            autoComplete="new-password"
+            value={formData.confirmPassword}
+            onChange={handleChange}
+            required
+            disabled={loading}
+            endIcon={LockOutlinedIcon}
+            sx={{ mb: 0.5 }}
+          />
+        </AuthAnimatedItem>
+
+        <AuthAnimatedItem index={7}>
+          <Button
+            type="submit"
+            fullWidth
+            variant="contained"
+            disableElevation
+            disabled={loading}
+            sx={authPrimaryButtonSx}
+          >
+            {loading ? (
+              <CircularProgress size={24} sx={{ color: '#1a1a2e' }} />
+            ) : (
+              'Register'
+            )}
+          </Button>
+        </AuthAnimatedItem>
       </Box>
-    </Container>
+    </AuthPageLayout>
   );
 };
 

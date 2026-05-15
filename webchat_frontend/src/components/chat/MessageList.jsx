@@ -1,7 +1,9 @@
 import React, { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Box } from '@mui/material';
+import { chatColors, chatHideScrollbarSx } from '../../theme/chatDesignTokens';
 import MessageItem from './MessageItem';
 import MessageUnreadSeparator from './MessageUnreadSeparator';
+import { ChatAreaMetricsProvider } from '../../context/ChatAreaMetricsContext';
 
 const HIGHLIGHT_MS = 2200;
 
@@ -18,6 +20,9 @@ const MessageList = ({
   openSeparatorIndex = null,
   liveBeforeMessageId = null,
   hideChannelReplyActions = false,
+  inChatSearchQuery = '',
+  inChatSearchMatches = [],
+  activeInChatSearchMatch = null,
 }) => {
   const safeMessages = Array.isArray(messages) ? messages : [];
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
@@ -30,20 +35,31 @@ const MessageList = ({
     vp.scrollTop = vp.scrollHeight;
   }, []);
 
+  const searchActive = Boolean(String(inChatSearchQuery || '').trim());
+
   useLayoutEffect(() => {
+    if (searchActive) return;
     scrollViewportToBottom();
-  }, [messages, scrollViewportToBottom]);
+  }, [messages, scrollViewportToBottom, searchActive]);
 
   useEffect(() => {
     const vp = viewportRef.current;
     const content = contentRef.current;
     if (!vp || !content) return;
     const ro = new ResizeObserver(() => {
+      if (searchActive) return;
       vp.scrollTop = vp.scrollHeight;
     });
     ro.observe(content);
     return () => ro.disconnect();
-  }, []);
+  }, [searchActive]);
+
+  useEffect(() => {
+    if (!activeInChatSearchMatch?.messageId) return;
+    const el = document.getElementById(`webchat-msg-${activeInChatSearchMatch.messageId}`);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedMessageId(activeInChatSearchMatch.messageId);
+  }, [activeInChatSearchMatch]);
 
   const handleJumpToMessage = useCallback((messageId) => {
     if (messageId == null || messageId === '') return;
@@ -63,10 +79,12 @@ const MessageList = ({
         minHeight: 0,
         overflowY: 'auto',
         p: 2,
-        bgcolor: '#f5f5f5',
+        bgcolor: chatColors.conversationBg,
+        ...chatHideScrollbarSx,
       }}
     >
-      <div ref={contentRef}>
+      <ChatAreaMetricsProvider viewportRef={viewportRef}>
+        <div ref={contentRef}>
         {safeMessages.map((message, index) => {
           const mid = messageRowId(message);
           const showOpen = openSeparatorIndex === index;
@@ -88,14 +106,23 @@ const MessageList = ({
                 onOpenForward={onOpenForward}
                 onOpenForwardedProfile={onOpenForwardedProfile}
                 onJumpToMessage={handleJumpToMessage}
-                isHighlighted={String(highlightedMessageId) === String(message.id ?? message._id)}
+                isHighlighted={
+                  String(highlightedMessageId) === String(message.id ?? message._id) ||
+                  (activeInChatSearchMatch != null &&
+                    String(activeInChatSearchMatch.messageId) ===
+                      String(message.id ?? message._id))
+                }
                 hideReplyActions={hideChannelReplyActions}
+                inChatSearchQuery={inChatSearchQuery}
+                inChatSearchMatches={inChatSearchMatches}
+                activeInChatSearchMatch={activeInChatSearchMatch}
               />
             </Fragment>
           );
         })}
         <div ref={messagesEndRef} />
       </div>
+      </ChatAreaMetricsProvider>
     </Box>
   );
 };

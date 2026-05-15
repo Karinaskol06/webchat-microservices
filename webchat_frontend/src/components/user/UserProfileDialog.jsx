@@ -259,7 +259,7 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
               <Box
                 sx={{
                   height: 168,
-                  borderRadius: 2,
+                  borderRadius: 0.5,
                   overflow: "hidden",
                   position: "relative",
                   bgcolor: "grey.400",

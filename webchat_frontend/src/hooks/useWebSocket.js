@@ -24,7 +24,7 @@ const getLastMessagePreview = (message) => {
   return typeof text === 'string' ? text : String(text);
 };
 
-const useWebSocket = (user, currentChatId, currentUserId) => {
+const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}) => {
   const markReadTimeoutRef = useRef(null);
   /** serial id list so subscriptions track chat list membership */
   const chats = useChatStore((s) => s.chats);
@@ -200,6 +200,8 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
     return () => unsubscribe();
   }, [user, currentChatId]);
 
+  const onRoomMemberInvite = userEventHandlers.onRoomMemberInvite;
+
   useEffect(() => {
     if (!user) return;
     const unsubscribe = subscribeToUserChatEvents({
@@ -209,9 +211,10 @@ const useWebSocket = (user, currentChatId, currentUserId) => {
       onChatUpdated: (chat) => {
         useChatStore.getState().upsertChat(chat);
       },
+      onRoomMemberInvite,
     });
     return () => unsubscribe();
-  }, [user]);
+  }, [user, onRoomMemberInvite]);
 
   return null;
 };

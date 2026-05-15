@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" role="img" aria-label="Waypoint">
+  <rect width="48" height="48" rx="12" fill="#0F766E"/>
+  <path fill="#fff" d="M13 10.5h22c3.31 0 6 2.69 6 6v7.25c0 3.31-2.69 6-6 6H22.1l-2.65 3.95c-.55.82-1.75.1-1.6-.85L18.6 29.8H13c-3.31 0-6-2.69-6-6v-7.25c0-3.31 2.69-6 6-6Z"/>
+  <path fill="#fff" fill-opacity="0.2" d="M17.5 15.25h13a2.25 2.25 0 0 1 0 4.5h-13a2.25 2.25 0 0 1 0-4.5Z"/>
+  <path fill="#fff" d="M21.35 29.4 24 42.75 26.65 29.4a2.2 2.2 0 0 0-2.2-2.2h-1.1a2.2 2.2 0 0 0-2 1.35Z"/>
+  <path fill="#EF4444" d="M26.1 33.85 33.75 36.5 26.1 39.15V33.85Z"/>
+  <path stroke="#EF4444" stroke-width="1.35" stroke-linecap="round" d="M26.1 33.85v5.3"/>
+</svg>

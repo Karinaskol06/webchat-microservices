@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { Alert, Box, Chip, IconButton, Paper, TextField, Tooltip, Typography } from '@mui/material';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { Alert, Box, Chip, IconButton, TextField, Tooltip, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
@@ -8,32 +8,82 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import CloseIcon from '@mui/icons-material/Close';
 import { parseQuotedSnippetFromMessage } from '../../utils/quotedMessagePreview';
 import { QuotedKindIcon } from './QuotedKindIcon';
+import { chatColors, chatRadii } from '../../theme/chatDesignTokens';
 
-const MessageInput = ({
-  value,
-  onChange,
-  onSend,
-  onTyping,
-  onKeyPress,
-  inputRef,
-  attachments = [],
-  onSelectAttachments,
-  onRemoveAttachment,
-  replyToMessage,
-  onCancelReply,
-  emojiSidebarOpen,
-  onToggleEmojiSidebar,
-  composerError,
-  onDismissComposerError,
-  channelReadOnly = false,
-  channelReadOnlyHint = 'Only the channel owner or admins can post in this channel.',
-}) => {
+const TYPING_NOTIFY_MS = 400;
+
+const MessageInput = forwardRef(function MessageInput(
+  {
+    chatId,
+    onSend,
+    onTyping,
+    inputRef,
+    attachments = [],
+    onSelectAttachments,
+    onRemoveAttachment,
+    replyToMessage,
+    onCancelReply,
+    emojiSidebarOpen,
+    onToggleEmojiSidebar,
+    composerError,
+    onDismissComposerError,
+    channelReadOnly = false,
+    channelReadOnlyHint = 'Only the channel owner or admins can post in this channel.',
+  },
+  ref,
+) {
   const fileInputRef = useRef(null);
+  const [draft, setDraft] = useState('');
+  const lastTypingNotifyRef = useRef(0);
+
+  useEffect(() => {
+    setDraft('');
+    lastTypingNotifyRef.current = 0;
+  }, [chatId]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getDraft: () => draft,
+      setDraft: (text) => setDraft(text ?? ''),
+      appendText: (text) => {
+        if (!text) return;
+        setDraft((prev) => `${prev}${text}`);
+      },
+      clear: () => setDraft(''),
+    }),
+    [draft],
+  );
+
+  const notifyTyping = () => {
+    const now = Date.now();
+    if (now - lastTypingNotifyRef.current < TYPING_NOTIFY_MS) return;
+    lastTypingNotifyRef.current = now;
+    onTyping?.();
+  };
 
   const handleChange = (e) => {
     onDismissComposerError?.();
-    onChange?.(e.target.value);
-    onTyping?.();
+    setDraft(e.target.value);
+    notifyTyping();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleSend = () => {
+    if (channelReadOnly) return;
+    const text = draft;
+    const hasText = Boolean(text.trim());
+    const hasAttachments = attachments.length > 0;
+    if (!hasText && !hasAttachments) return;
+
+    setDraft('');
+    onSend?.(text);
   };
 
   const handleOpenFilePicker = () => {
@@ -46,7 +96,7 @@ const MessageInput = ({
     e.target.value = '';
   };
 
-  const hasText = Boolean(value?.trim());
+  const hasText = Boolean(draft.trim());
   const canSend = !channelReadOnly && (hasText || attachments.length > 0);
 
   const replyAuthor =
@@ -57,7 +107,15 @@ const MessageInput = ({
   const quotedComposer = replyToMessage ? parseQuotedSnippetFromMessage(replyToMessage) : null;
 
   return (
-    <Paper sx={{ p: 2, borderRadius: 0 }}>
+    <Box
+      sx={{
+        flexShrink: 0,
+        px: { xs: 1.5, sm: 2.5 },
+        py: 2,
+        borderTop: `1px solid ${chatColors.borderSubtle}`,
+        bgcolor: chatColors.conversationBg,
+      }}
+    >
       {composerError ? (
         <Alert severity="error" onClose={onDismissComposerError} sx={{ mb: 1.5 }}>
           {composerError}
@@ -151,11 +209,32 @@ const MessageInput = ({
         </Box>
       )}
       {channelReadOnly ? (
-        <Typography variant="body2" color="text.secondary" sx={{ py: 0.5 }}>
+        <Typography variant="body2" sx={{ py: 0.5, color: chatColors.textSecondary }}>
           {channelReadOnlyHint}
         </Typography>
       ) : (
-        <Box display="flex" alignItems="center">
+        <Box
+          display="flex"
+          alignItems="flex-end"
+          sx={{
+            bgcolor: chatColors.composerInputBg,
+            borderRadius: `${chatRadii.pill}px`,
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            px: 0.5,
+            py: 0.5,
+            transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+            '&:focus-within': {
+              borderColor: 'rgba(255, 255, 255, 0.22)',
+              boxShadow: '0 0 0 2px rgba(155, 135, 255, 0.2)',
+            },
+            '& .MuiIconButton-root': { color: 'rgba(255,255,255,0.85)' },
+            '& .MuiInputBase-input': { color: '#fff' },
+            '& .MuiInputBase-input::placeholder': {
+              color: 'rgba(255,255,255,0.5)',
+              opacity: 1,
+            },
+          }}
+        >
           <input
             ref={fileInputRef}
             type="file"
@@ -164,12 +243,12 @@ const MessageInput = ({
             onChange={handleFileSelection}
             accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,image/*,video/*"
           />
-          <IconButton onClick={handleOpenFilePicker}>
+          <IconButton onClick={handleOpenFilePicker} aria-label="Attach file" size="small">
             <AttachFileIcon />
           </IconButton>
 
           <Tooltip title={emojiSidebarOpen ? 'Hide emoji sidebar' : 'Show emoji sidebar'}>
-            <IconButton onClick={onToggleEmojiSidebar}>
+            <IconButton onClick={onToggleEmojiSidebar} aria-label="Toggle emoji picker" size="small">
               {emojiSidebarOpen ? <ChevronLeftIcon /> : <EmojiEmotionsOutlinedIcon />}
             </IconButton>
           </Tooltip>
@@ -178,12 +257,15 @@ const MessageInput = ({
             fullWidth
             multiline
             maxRows={4}
-            placeholder="Write a message..."
-            value={value}
+            placeholder="Your message"
+            value={draft}
             onChange={handleChange}
-            onKeyPress={onKeyPress}
+            onKeyDown={handleKeyDown}
+            variant="standard"
+            InputProps={{ disableUnderline: true }}
             sx={{
-              mx: 1,
+              mx: 0.5,
+              '& .MuiInputBase-root': { fontSize: '0.9375rem' },
               '& .MuiInputBase-input': {
                 fontFamily:
                   'inherit, system-ui, "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
@@ -192,14 +274,24 @@ const MessageInput = ({
             inputRef={inputRef}
           />
 
-          <IconButton color="primary" onClick={onSend} disabled={!canSend}>
-            <SendIcon />
+          <IconButton
+            color="primary"
+            onClick={handleSend}
+            disabled={!canSend}
+            aria-label="Send message"
+            size="small"
+            sx={{
+              bgcolor: canSend ? chatColors.primary : 'transparent',
+              color: canSend ? '#fff' : 'action.disabled',
+              '&:hover': { bgcolor: canSend ? chatColors.primaryDark : undefined },
+            }}
+          >
+            <SendIcon fontSize="small" />
           </IconButton>
         </Box>
       )}
-    </Paper>
+    </Box>
   );
-};
+});
 
 export default MessageInput;
-

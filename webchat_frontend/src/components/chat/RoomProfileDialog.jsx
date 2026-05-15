@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Avatar,
@@ -27,11 +27,13 @@ import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import LockIcon from '@mui/icons-material/Lock';
 import PublicIcon from '@mui/icons-material/Public';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
 import { alpha, useTheme } from '@mui/material/styles';
 import chatService from '../../services/chatService';
 import { getApiErrorMessage } from '../../services/api';
 import useChatStore from '../../store/useChatStore';
 import useAuthStore from '../../store/useAuthStore';
+import { fileToRoomPhotoDataUrl } from '../../utils/roomPhoto';
 
 const displayName = (u) => {
   if (!u) return 'Unknown';
@@ -104,7 +106,10 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
-  const [addMemberId, setAddMemberId] = useState('');
+  const [inviteUsername, setInviteUsername] = useState('');
+  const [inviteSentMessage, setInviteSentMessage] = useState('');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoInputRef = useRef(null);
   const [manageAnchor, setManageAnchor] = useState(null);
   const [manageMember, setManageMember] = useState(null);
 
@@ -176,22 +181,40 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
     }
   };
 
-  const handleAddMember = async () => {
-    const uid = Number(String(addMemberId || '').trim());
-    if (!room?.id || !Number.isFinite(uid) || uid <= 0) {
-      setActionError('Enter a valid numeric user id.');
+  const handleInviteMember = async () => {
+    const username = String(inviteUsername || '').trim().replace(/^@/, '');
+    if (!room?.id || !username) {
+      setActionError('Enter a username.');
       return;
     }
     setActionBusy(true);
     setActionError('');
     try {
-      await chatService.addRoomMember(room.id, uid);
-      setAddMemberId('');
-      await refreshRoom();
+      await chatService.inviteRoomMemberByUsername(room.id, username);
+      setInviteUsername('');
+      setInviteSentMessage(`Invite sent to @${username}. They must accept before joining.`);
     } catch (e) {
-      setActionError(getApiErrorMessage(e, 'Could not add member'));
+      setInviteSentMessage('');
+      setActionError(getApiErrorMessage(e, 'Could not send invite'));
     } finally {
       setActionBusy(false);
+    }
+  };
+
+  const handlePhotoPick = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !room?.id) return;
+    setPhotoUploading(true);
+    setActionError('');
+    try {
+      const dataUrl = await fileToRoomPhotoDataUrl(file);
+      await chatService.updateRoomPhoto(room.id, dataUrl);
+      await refreshRoom();
+    } catch (e) {
+      setActionError(getApiErrorMessage(e, 'Could not update photo'));
+    } finally {
+      setPhotoUploading(false);
     }
   };
 
@@ -277,21 +300,51 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
               }}
             >
               <Stack direction="row" spacing={2} alignItems="flex-start">
-                <Avatar
-                  src={room.groupPhoto || undefined}
-                  alt=""
-                  sx={{
-                    width: 88,
-                    height: 88,
-                    fontSize: '2rem',
-                    fontWeight: 700,
-                    boxShadow: 2,
-                    border: '2px solid',
-                    borderColor: 'background.paper',
-                  }}
-                >
-                  {!room.groupPhoto ? letter : null}
-                </Avatar>
+                <Box sx={{ position: 'relative', flexShrink: 0 }}>
+                  <Avatar
+                    src={room.groupPhoto || undefined}
+                    alt=""
+                    sx={{
+                      width: 88,
+                      height: 88,
+                      fontSize: '2rem',
+                      fontWeight: 700,
+                      boxShadow: 2,
+                      border: '2px solid',
+                      borderColor: 'background.paper',
+                      opacity: photoUploading ? 0.6 : 1,
+                    }}
+                  >
+                    {!room.groupPhoto ? letter : null}
+                  </Avatar>
+                  {canModerateRoom ? (
+                    <>
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => void handlePhotoPick(e)}
+                      />
+                      <IconButton
+                        size="small"
+                        aria-label="Change room photo"
+                        disabled={photoUploading || actionBusy}
+                        onClick={() => photoInputRef.current?.click()}
+                        sx={{
+                          position: 'absolute',
+                          right: -4,
+                          bottom: -4,
+                          bgcolor: 'background.paper',
+                          boxShadow: 1,
+                          '&:hover': { bgcolor: 'background.paper' },
+                        }}
+                      >
+                        <PhotoCameraOutlinedIcon fontSize="small" />
+                      </IconButton>
+                    </>
+                  ) : null}
+                </Box>
                 <Box sx={{ minWidth: 0, flex: 1, pt: 0.5 }}>
                   <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.2, letterSpacing: -0.02 }}>
                     {title}
@@ -435,19 +488,30 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
             {canModerateRoom ? (
               <Box sx={{ px: 3, mt: 2 }}>
                 <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.08 }}>
-                  Add member by user id
+                  Invite member by username
                 </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                  They receive a request and join only after accepting.
+                </Typography>
+                {inviteSentMessage ? (
+                  <Alert severity="success" sx={{ mt: 1 }} onClose={() => setInviteSentMessage('')}>
+                    {inviteSentMessage}
+                  </Alert>
+                ) : null}
                 <Stack direction="row" spacing={1} sx={{ mt: 1 }} alignItems="flex-start">
                   <TextField
                     size="small"
                     fullWidth
-                    label="User id"
-                    value={addMemberId}
-                    onChange={(e) => setAddMemberId(e.target.value)}
+                    placeholder="@jane_doe"
+                    value={inviteUsername}
+                    onChange={(e) => {
+                      setInviteUsername(e.target.value);
+                      setInviteSentMessage('');
+                    }}
                     disabled={actionBusy}
                   />
-                  <Button variant="contained" onClick={() => void handleAddMember()} disabled={actionBusy}>
-                    Add
+                  <Button variant="contained" onClick={() => void handleInviteMember()} disabled={actionBusy}>
+                    Invite
                   </Button>
                 </Stack>
               </Box>

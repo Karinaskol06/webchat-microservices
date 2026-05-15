@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import './App.css';
 import Navbar from './components/layout/Navbar';
 import Login from './pages/Login';
@@ -33,6 +33,50 @@ const ProtectedRoute = ({ children }) => {
 
   return children;
 };
+
+function AppRoutes() {
+  const location = useLocation();
+  const { isAuthenticated } = useAuthStore();
+  const isAuthScreen =
+    location.pathname === '/login' || location.pathname === '/register';
+  const hideNavbar =
+    isAuthScreen || (isAuthenticated && location.pathname.startsWith('/chat'));
+
+  return (
+    <Box sx={{ minHeight: '100vh', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {!hideNavbar && <Navbar />}
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflow: isAuthScreen ? 'hidden' : undefined,
+        }}
+      >
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <ChatPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/join/:token"
+            element={
+              <ProtectedRoute>
+                <JoinInvitePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/" element={<Navigate to="/chat" />} />
+        </Routes>
+      </Box>
+    </Box>
+  );
+}
 
 function App() {
   const { setUser, isAuthenticated, user } = useAuthStore();
@@ -96,32 +140,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Box sx={{ minHeight: '100vh', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <Navbar />
-        <Box sx={{ flex: 1, minHeight: 0 }}>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route 
-              path="/chat" 
-              element={
-                <ProtectedRoute>
-                  <ChatPage />
-                </ProtectedRoute>
-              } 
-            />
-            <Route
-              path="/join/:token"
-              element={
-                <ProtectedRoute>
-                  <JoinInvitePage />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/" element={<Navigate to="/chat" />} />
-          </Routes>
-        </Box>
-      </Box>
+      <AppRoutes />
     </BrowserRouter>
   );
 }

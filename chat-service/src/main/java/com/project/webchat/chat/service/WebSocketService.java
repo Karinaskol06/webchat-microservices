@@ -36,6 +36,7 @@ public class WebSocketService {
     private static final String QUEUE_FRIEND_REQUESTS_NEW = "/queue/friends/requests/new";
     private static final String QUEUE_FRIEND_REQUESTS_UPDATED = "/queue/friends/requests/updated";
     private static final String QUEUE_FRIEND_ACCEPTED = "/queue/friends/accepted";
+    private static final String QUEUE_ROOM_MEMBER_INVITES_NEW = "/queue/rooms/member-invites/new";
 
     // ========== MESSAGING EVENTS ==========
     public void sendMessageToChat(String chatId, ChatMessageDTO message) {
@@ -118,6 +119,11 @@ public class WebSocketService {
                 requesterId, newFriend.getId());
     }
     */
+
+    public void notifyRoomMemberInvite(Long inviteeUserId, RoomMemberInviteDTO invite) {
+        sendToUserQueue(inviteeUserId, QUEUE_ROOM_MEMBER_INVITES_NEW, invite);
+        log.info("Room member invite {} sent to user {}", invite.getId(), inviteeUserId);
+    }
 
     // ========== TYPING & PRESENCE ==========
     public void sendTypingMessage(String chatId, Long userId, boolean isTyping) {

@@ -9,6 +9,7 @@ import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.BootstrapMessageRecordRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
+import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.shared.dto.UserDTO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +32,8 @@ class ChatServiceBootstrapTest {
     private ChatMessageRepository chatMessageRepository;
     @Mock
     private ChatRoomRepository chatRoomRepository;
+    @Mock
+    private RoomMemberInviteRepository roomMemberInviteRepository;
     @Mock
     private AttachmentRepository attachmentRepository;
     @Mock

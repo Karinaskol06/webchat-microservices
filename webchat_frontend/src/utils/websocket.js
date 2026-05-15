@@ -278,7 +278,7 @@ export const disconnectWebSocket = () => {
   }
 };
 
-const attachUserEventSubscriptions = ({ onChatCreated, onChatUpdated } = {}) => {
+const attachUserEventSubscriptions = ({ onChatCreated, onChatUpdated, onRoomMemberInvite } = {}) => {
   if (!isStompConnected()) return [];
   const subscriptions = [];
   if (onChatCreated) {
@@ -303,11 +303,22 @@ const attachUserEventSubscriptions = ({ onChatCreated, onChatUpdated } = {}) => 
       })
     );
   }
+  if (onRoomMemberInvite) {
+    subscriptions.push(
+      stompClient.subscribe(`/user/queue/rooms/member-invites/new`, (frame) => {
+        try {
+          onRoomMemberInvite(JSON.parse(frame.body));
+        } catch (error) {
+          console.error("Failed to parse room member invite event:", error);
+        }
+      })
+    );
+  }
   return subscriptions;
 };
 
-export const subscribeToUserChatEvents = ({ onChatCreated, onChatUpdated } = {}) => {
-  const handlers = { onChatCreated, onChatUpdated };
+export const subscribeToUserChatEvents = ({ onChatCreated, onChatUpdated, onRoomMemberInvite } = {}) => {
+  const handlers = { onChatCreated, onChatUpdated, onRoomMemberInvite };
   pendingUserEventHandlers.push(handlers);
   const subscriptions = attachUserEventSubscriptions(handlers);
   userEventSubscriptions.push(...subscriptions);

@@ -9,6 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 @Document(collection = "chat_rooms")
@@ -70,7 +71,12 @@ public class ChatRoom {
     }
 
     public boolean isMember(Long userId) {
-        return memberIds.contains(userId);
+        if (userId == null || memberIds == null || memberIds.isEmpty()) {
+            return false;
+        }
+        return memberIds.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(id -> id.longValue() == userId.longValue());
     }
 
 }

@@ -7,7 +7,7 @@ import { getAttachmentUploadErrorMessage } from '../utils/attachmentUploadErrors
 import { WEBCHAT_MESSAGES_MARKED_READ } from '../constants/chatEvents';
 import { canPostInChannel } from '../utils/channelPermissions';
 
-const useMessages = (currentChat) => {
+const useMessages = (currentChat, composerRef) => {
   const { messages, setMessages } = useChatStore(
     useShallow((state) => ({
       messages: state.messages,
@@ -18,7 +18,6 @@ const useMessages = (currentChat) => {
   const setChats = useChatStore((state) => state.setChats);
   const upsertChat = useChatStore((state) => state.upsertChat);
 
-  const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false); // eslint-disable-line no-unused-vars
   const [selectedAttachments, setSelectedAttachments] = useState([]);
   const [isSending, setIsSending] = useState(false);
@@ -121,15 +120,15 @@ const useMessages = (currentChat) => {
     };
   }, [currentChat?.id]);
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (messageText) => {
     if (!currentChat || isSending) return;
 
     if (!canPostInChannel(currentChat)) return;
 
-    const trimmedMessage = newMessage.trim();
+    const trimmedMessage = String(messageText ?? '').trim();
     const hasText = trimmedMessage.length > 0;
     const hasAttachments = selectedAttachments.length > 0;
-    if (!trimmedMessage && selectedAttachments.length === 0) return;
+    if (!hasText && selectedAttachments.length === 0) return;
 
     if (!currentChat.id && hasAttachments) {
       setComposerError(
@@ -140,10 +139,9 @@ const useMessages = (currentChat) => {
 
     setComposerError('');
 
-    const previousText = newMessage;
+    const previousText = String(messageText ?? '');
     const previousAttachments = [...selectedAttachments];
     const previousReply = replyToMessage;
-    setNewMessage('');
     setSelectedAttachments([]);
     setReplyToMessage(null);
 
@@ -199,7 +197,7 @@ const useMessages = (currentChat) => {
         sendTypingEvent({ chatId: currentChat.id, typing: false });
       }
     } catch (error) {
-      setNewMessage(previousText);
+      composerRef?.current?.setDraft(previousText);
       setSelectedAttachments(previousAttachments);
       setReplyToMessage(previousReply);
       console.error('Failed to send message:', error);
@@ -252,22 +250,12 @@ const useMessages = (currentChat) => {
     }
   }, []);
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
   return {
     messages,
-    newMessage,
-    setNewMessage,
     composerError,
     setComposerError,
     handleSendMessage,
     handleTyping,
-    handleKeyPress,
     selectedAttachments,
     handleSelectAttachments,
     handleRemoveAttachment,

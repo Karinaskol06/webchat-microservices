@@ -8,6 +8,7 @@ import {
   Typography,
 } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { chatColors, chatHideScrollbarSx } from '../../theme/chatDesignTokens';
 
 /**
  * Curated emoji list by category — rendered natively so ZWJ / skin tones / flags
@@ -143,8 +144,8 @@ const EmojiSidebar = ({ onClose, onEmojiClick }) => {
       sx={{
         width: 300,
         borderLeft: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
+        borderColor: chatColors.borderSubtle,
+        bgcolor: chatColors.conversationBg,
         display: 'flex',
         flexDirection: 'column',
         minHeight: 0,
@@ -159,14 +160,16 @@ const EmojiSidebar = ({ onClose, onEmojiClick }) => {
           flexShrink: 0,
         }}
       >
-        <Typography variant="subtitle2">Emojis</Typography>
+        <Typography variant="subtitle2" sx={{ color: chatColors.textPrimary }}>
+          Emojis
+        </Typography>
         <Tooltip title="Hide emoji sidebar">
-          <IconButton size="small" onClick={onClose}>
+          <IconButton size="small" onClick={onClose} sx={{ color: chatColors.textPrimary }}>
             <ChevronRightIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>
-      <Divider />
+      <Divider sx={{ borderColor: chatColors.borderSubtle }} />
       <Box
         sx={{
           pt: 2,
@@ -180,15 +183,11 @@ const EmojiSidebar = ({ onClose, onEmojiClick }) => {
           overflowX: 'auto',
           overflowY: 'hidden',
           flexShrink: 0,
+          bgcolor: chatColors.conversationBg,
           borderBottom: 1,
-          borderColor: 'divider',
+          borderColor: chatColors.borderSubtle,
           WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'thin',
-          '&::-webkit-scrollbar': { height: 6 },
-          '&::-webkit-scrollbar-thumb': {
-            borderRadius: 3,
-            bgcolor: 'action.selected',
-          },
+          ...chatHideScrollbarSx,
         }}
       >
         {EMOJI_CATEGORIES.map((cat) => (

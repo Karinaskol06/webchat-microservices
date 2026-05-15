@@ -1,4 +1,4 @@
-import api from "./api";
+import api, { getApiErrorMessage } from "./api";
 
 const chatService = {
   // create a new chat with the specified user
@@ -83,6 +83,60 @@ const chatService = {
         { userId },
       );
       return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  updateRoomPhoto: async (roomId, groupPhoto) => {
+    try {
+      const response = await api.patch(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/photo`,
+        { groupPhoto },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  inviteRoomMemberByUsername: async (roomId, username) => {
+    try {
+      const response = await api.post(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/member-invites`,
+        { username: String(username || '').trim().replace(/^@/, '') },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  listPendingRoomMemberInvites: async () => {
+    try {
+      const response = await api.get('/api/chat/member-invites/pending');
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  acceptRoomMemberInvite: async (inviteId) => {
+    try {
+      const response = await api.post(
+        `/api/chat/member-invites/${encodeURIComponent(inviteId)}/accept`,
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  declineRoomMemberInvite: async (inviteId) => {
+    try {
+      await api.post(
+        `/api/chat/member-invites/${encodeURIComponent(inviteId)}/decline`,
+      );
     } catch (error) {
       throw error.response?.data || error.message;
     }
@@ -233,6 +287,17 @@ const chatService = {
         headers: error.response?.headers
       });
       throw error;
+    }
+  },
+
+  getChatAttachments: async (chatId) => {
+    try {
+      const response = await api.get(
+        `/api/chat/${encodeURIComponent(chatId)}/attachments`,
+      );
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      throw getApiErrorMessage(error, 'Failed to load attachments');
     }
   },
 
