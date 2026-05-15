@@ -12,13 +12,14 @@ COPY notification-service/pom.xml notification-service/
 COPY user-service/pom.xml user-service/
 
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -pl api-gateway dependency:go-offline -DskipTests \
-    || mvn -B -pl api-gateway dependency:resolve -DskipTests
+    mvn -B -pl shared-module,api-gateway -am dependency:go-offline -DskipTests \
+    || mvn -B -pl shared-module,api-gateway -am dependency:resolve -DskipTests
 
+COPY shared-module/src shared-module/src
 COPY api-gateway/src api-gateway/src
 
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -pl api-gateway package -DskipTests
+    mvn -B -pl shared-module,api-gateway -am package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
