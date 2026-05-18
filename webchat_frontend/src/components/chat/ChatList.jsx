@@ -14,7 +14,6 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  ListItemIcon,
   TextField,
   Stack,
 } from '@mui/material';
@@ -34,18 +33,9 @@ import CreateNewFolderOutlinedIcon from '@mui/icons-material/CreateNewFolderOutl
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import GroupsIcon from '@mui/icons-material/Groups';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
-import LinkIcon from '@mui/icons-material/Link';
 import InputAdornment from '@mui/material/InputAdornment';
 import Tooltip from '@mui/material/Tooltip';
-import {
-  chatColors,
-  chatGlassFieldPanelSx,
-  chatHideScrollbarSx,
-  chatMenuPaperSx,
-  chatMenuSlotProps,
-  chatRadii,
-} from '../../theme/chatDesignTokens';
-import { chatListItemEnterSx } from '../../theme/chatAnimations';
+import { chatColors, chatGlassFieldPanelSx, chatRadii } from '../../theme/chatDesignTokens';
 
 const matchesChatFilter = (chat, filter) => {
   const f = String(filter || 'ALL').toUpperCase();
@@ -91,7 +81,7 @@ const ChatList = ({
   const getFolderIdForChat = useChatFolderStore((s) => s.getFolderIdForChat);
 
   const activeFolder = React.useMemo(
-    () => folders.find((f) => String(f.id) === String(activeFolderId)) || null,
+    () => folders.find((f) => f.id === activeFolderId) || null,
     [folders, activeFolderId],
   );
 
@@ -252,10 +242,7 @@ const ChatList = ({
         onClose={closeListMenu}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{
-          ...chatMenuSlotProps,
-          paper: { sx: { ...chatMenuPaperSx, minWidth: 220 } },
-        }}
+        slotProps={{ paper: { sx: { minWidth: 220 } } }}
       >
         <MenuItem
           onClick={() => {
@@ -263,9 +250,6 @@ const ChatList = ({
             onJoinViaLink?.();
           }}
         >
-          <ListItemIcon>
-            <LinkIcon fontSize="small" />
-          </ListItemIcon>
           Join via link
         </MenuItem>
         <MenuItem
@@ -274,9 +258,6 @@ const ChatList = ({
             setCreateRoomMode('group');
           }}
         >
-          <ListItemIcon>
-            <GroupsIcon fontSize="small" />
-          </ListItemIcon>
           Create a group chat
         </MenuItem>
         <MenuItem
@@ -285,9 +266,6 @@ const ChatList = ({
             setCreateRoomMode('channel');
           }}
         >
-          <ListItemIcon>
-            <CampaignOutlinedIcon fontSize="small" />
-          </ListItemIcon>
           Create a channel
         </MenuItem>
         <MenuItem
@@ -296,9 +274,7 @@ const ChatList = ({
             setCreateFolderOpen(true);
           }}
         >
-          <ListItemIcon>
-            <CreateNewFolderOutlinedIcon fontSize="small" />
-          </ListItemIcon>
+          <CreateNewFolderOutlinedIcon fontSize="small" sx={{ mr: 1.5, color: chatColors.glassPanelTextMuted }} />
           Create folder
         </MenuItem>
       </Menu>
@@ -338,9 +314,10 @@ const ChatList = ({
           display: 'flex',
           flexDirection: 'column',
           bgcolor: 'transparent',
+          color: chatColors.glassPanelText,
         }}
       >
-        <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', overflowX: 'hidden', p: 3, ...chatHideScrollbarSx }}>
+        <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', overflowX: 'hidden', p: 3 }}>
           <Alert
             severity="error"
             action={
@@ -367,10 +344,11 @@ const ChatList = ({
           display: 'flex',
           flexDirection: 'column',
           bgcolor: 'transparent',
+          color: chatColors.glassPanelText,
         }}
       >
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', p: 3 }}>
-          <CircularProgress />
+          <CircularProgress color="primary" />
         </Box>
         {listOptionsMenu}
       </Box>
@@ -381,7 +359,7 @@ const ChatList = ({
   const chatList = (Array.isArray(chats) ? chats : [])
     .filter((c) => {
       if (activeFolderId) {
-        return String(getFolderIdForChat(c.id)) === String(activeFolderId);
+        return getFolderIdForChat(c.id) === activeFolderId;
       }
       return matchesChatFilter(c, chatFilter);
     })
@@ -397,10 +375,10 @@ const ChatList = ({
     });
 
   const handleSelectChat = (chat) => {
+    setCurrentChat(chat);
     if (chat?.id) {
       resetUnreadCount(chat.id);
     }
-    setCurrentChat(chat);
     onSelectChat?.(chat);
   };
 
@@ -414,10 +392,10 @@ const ChatList = ({
   const listSection =
     chatList.length === 0 ? (
       <Box p={3} textAlign="center">
-        <Typography variant="body1" sx={{ color: chatColors.glassPanelText }} paragraph>
+        <Typography variant="body1" paragraph sx={{ color: chatColors.glassPanelTextMuted }}>
           {emptyTitle}
         </Typography>
-        <Typography variant="body2" sx={{ color: chatColors.glassPanelTextMuted }} gutterBottom>
+        <Typography variant="body2" gutterBottom sx={{ color: chatColors.glassPanelTextMuted }}>
           {emptyHint}
         </Typography>
         <Button
@@ -431,7 +409,7 @@ const ChatList = ({
       </Box>
     ) : (
       <List sx={{ width: '100%', bgcolor: 'transparent', py: 0 }}>
-        {chatList.map((chat, listIndex) => {
+        {chatList.map((chat) => {
           const chatType = String(chat.type || '').toUpperCase();
           const isGroup = chatType === 'GROUP';
           const isChannel = chatType === 'CHANNEL';
@@ -481,14 +459,14 @@ const ChatList = ({
               sx={{
                 mx: 1,
                 mb: 0.5,
+                pr: 0.5,
                 borderRadius: `${chatRadii.avatar}px`,
                 bgcolor: isSelected ? chatColors.surfaceMuted : 'transparent',
                 opacity: isDragging ? 0.45 : 1,
                 transform: isDragging ? 'scale(0.98)' : 'none',
-                transition: 'opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease',
-                ...chatListItemEnterSx(listIndex),
+                transition: 'opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease',
                 '&:hover': {
-                  bgcolor: isSelected ? chatColors.surfaceMuted : 'rgba(24, 20, 28, 0.06)',
+                  bgcolor: isSelected ? chatColors.surfaceMuted : 'rgba(123, 97, 255, 0.06)',
                 },
                 cursor: 'grab',
                 '&:active': { cursor: 'grabbing' },
@@ -532,7 +510,7 @@ const ChatList = ({
                       minWidth: 12,
                       borderRadius: '50%',
                       border: '2px solid',
-                      borderColor: chatColors.glassList,
+                      borderColor: 'background.paper',
                       bgcolor:
                         presenceState === 'online'
                           ? 'success.main'
@@ -565,11 +543,7 @@ const ChatList = ({
                         />
                       </Tooltip>
                     ) : null}
-                    <Typography
-                      variant="subtitle2"
-                      noWrap
-                      sx={{ minWidth: 0, color: chatColors.glassPanelText, fontWeight: 600 }}
-                    >
+                    <Typography variant="subtitle2" noWrap sx={{ minWidth: 0, color: chatColors.glassPanelText }}>
                       {otherUserName}
                     </Typography>
                   </Box>
@@ -579,12 +553,12 @@ const ChatList = ({
                     component="span"
                     variant="body2"
                     sx={{
-                      color: chatColors.glassPanelTextMuted,
                       display: 'block',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
                       maxWidth: '200px',
+                      color: chatColors.glassPanelTextMuted,
                     }}
                   >
                     {lastMessagePreview}
@@ -593,7 +567,29 @@ const ChatList = ({
               />
 
               {unreadCount > 0 ? (
-                <Badge badgeContent={unreadCount} color="primary" sx={{ ml: 1 }} />
+                <Box
+                  component="span"
+                  aria-label={`${unreadCount} unread`}
+                  sx={{
+                    flexShrink: 0,
+                    ml: 0.75,
+                    mr: 1.25,
+                    minWidth: 22,
+                    height: 22,
+                    px: 0.75,
+                    borderRadius: 11,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    bgcolor: chatColors.unreadBadge,
+                    color: '#fff',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    lineHeight: 1,
+                  }}
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Box>
               ) : null}
             </ListItem>
           );
@@ -610,6 +606,7 @@ const ChatList = ({
         display: 'flex',
         flexDirection: 'column',
         bgcolor: 'transparent',
+        color: chatColors.glassPanelText,
       }}
     >
       <Box sx={{ flexShrink: 0, p: 1.5, borderBottom: `1px solid ${chatColors.glassPanelBorder}` }}>
@@ -648,7 +645,15 @@ const ChatList = ({
                 </InputAdornment>
               ),
             }}
-            sx={{ flex: 1, ...chatGlassFieldPanelSx }}
+            sx={{
+              flex: 1,
+              ...chatGlassFieldPanelSx,
+              '& .MuiOutlinedInput-root': {
+                borderRadius: `${chatRadii.pill}px`,
+                bgcolor: chatColors.surfaceMuted,
+                '& fieldset': { border: 'none' },
+              },
+            }}
             inputProps={{ 'aria-label': 'Search chats' }}
           />
           <Tooltip title="Find users & rooms">
@@ -687,16 +692,7 @@ const ChatList = ({
         </Box>
       </Box>
 
-      <Box
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          minWidth: 0,
-          ...chatHideScrollbarSx,
-        }}
-      >
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
         {listSection}
       </Box>
 

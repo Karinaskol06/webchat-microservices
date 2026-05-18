@@ -59,4 +59,7 @@ public class ChatMessage {
     @Builder.Default
     private LocalDateTime readAt = null;
 
+    @Builder.Default
+    private List<MessageReaction> reactions = new ArrayList<>();
+
 }

@@ -222,19 +222,6 @@ const chatService = {
     }
   },
 
-  bootstrapMessage: async ({ recipientUserId, content, clientRequestKey }) => {
-    try {
-      const response = await api.post('/api/chat/bootstrap-message', {
-        recipientUserId,
-        content,
-        clientRequestKey
-      });
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
-  },
-
   //fetch all chats for the current user
   getUserChats: async (page = 0, size = 20) => {
     try {
@@ -359,6 +346,23 @@ const chatService = {
     try {
       const response = await api.put(`/api/chat/messages/${messageId}`, { content });
       return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  toggleMessageReaction: async (chatId, messageId, emoji) => {
+    try {
+      const cid = chatId != null ? String(chatId).trim() : '';
+      const mid = messageId != null ? String(messageId).trim() : '';
+      if (!cid || !mid) {
+        throw new Error('Chat and message id are required');
+      }
+      const response = await api.post(
+        `/api/chat/${encodeURIComponent(cid)}/messages/${encodeURIComponent(mid)}/reactions`,
+        { emoji },
+      );
+      return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       throw error.response?.data || error.message;
     }

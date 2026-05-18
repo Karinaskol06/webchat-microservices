@@ -13,21 +13,26 @@ const MessageList = ({
   messages,
   currentUserId,
   room = null,
+  chatId = null,
   messagesEndRef,
   onReply,
   onOpenForward,
   onOpenForwardedProfile,
   openSeparatorIndex = null,
   liveBeforeMessageId = null,
+  scrollToMessageId = null,
   hideChannelReplyActions = false,
   inChatSearchQuery = '',
   inChatSearchMatches = [],
   activeInChatSearchMatch = null,
+  onOpenEmojiSidebarForReaction,
 }) => {
   const safeMessages = Array.isArray(messages) ? messages : [];
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const viewportRef = useRef(null);
   const contentRef = useRef(null);
+  const scrolledToUnreadRef = useRef(false);
+  const scrollVisitKeyRef = useRef('');
 
   const scrollViewportToBottom = useCallback(() => {
     const vp = viewportRef.current;
@@ -37,10 +42,35 @@ const MessageList = ({
 
   const searchActive = Boolean(String(inChatSearchQuery || '').trim());
 
+  useEffect(() => {
+    const key = `${chatId ?? ''}:${scrollToMessageId ?? ''}`;
+    if (scrollVisitKeyRef.current !== key) {
+      scrollVisitKeyRef.current = key;
+      scrolledToUnreadRef.current = false;
+    }
+  }, [chatId, scrollToMessageId]);
+
   useLayoutEffect(() => {
     if (searchActive) return;
-    scrollViewportToBottom();
-  }, [messages, scrollViewportToBottom, searchActive]);
+
+    const unreadTargetId =
+      scrollToMessageId != null && scrollToMessageId !== ''
+        ? String(scrollToMessageId)
+        : null;
+
+    if (unreadTargetId && !scrolledToUnreadRef.current) {
+      const el = document.getElementById(`webchat-msg-${unreadTargetId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'auto', block: 'start' });
+        scrolledToUnreadRef.current = true;
+        return;
+      }
+    }
+
+    if (!unreadTargetId) {
+      scrollViewportToBottom();
+    }
+  }, [messages, scrollToMessageId, searchActive, scrollViewportToBottom]);
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -48,11 +78,12 @@ const MessageList = ({
     if (!vp || !content) return;
     const ro = new ResizeObserver(() => {
       if (searchActive) return;
+      if (scrollToMessageId && !scrolledToUnreadRef.current) return;
       vp.scrollTop = vp.scrollHeight;
     });
     ro.observe(content);
     return () => ro.disconnect();
-  }, [searchActive]);
+  }, [searchActive, scrollToMessageId]);
 
   useEffect(() => {
     if (!activeInChatSearchMatch?.messageId) return;
@@ -116,6 +147,7 @@ const MessageList = ({
                 inChatSearchQuery={inChatSearchQuery}
                 inChatSearchMatches={inChatSearchMatches}
                 activeInChatSearchMatch={activeInChatSearchMatch}
+                onOpenEmojiSidebarForReaction={onOpenEmojiSidebarForReaction}
               />
             </Fragment>
           );
@@ -128,4 +160,3 @@ const MessageList = ({
 };
 
 export default MessageList;
-

@@ -136,7 +136,7 @@ const EMOJI_CATEGORIES = [
 const EMOJI_FONT =
   'system-ui, "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
 
-const EmojiSidebar = ({ onClose, onEmojiClick }) => {
+const EmojiSidebar = ({ onClose, onEmojiClick, highlighted = false, reactionMode = false }) => {
   const [activeLabel, setActiveLabel] = useState(EMOJI_CATEGORIES[0]?.label ?? '');
 
   return (
@@ -144,11 +144,13 @@ const EmojiSidebar = ({ onClose, onEmojiClick }) => {
       sx={{
         width: 300,
         borderLeft: 1,
-        borderColor: chatColors.borderSubtle,
+        borderColor: highlighted ? chatColors.primaryLight : chatColors.borderSubtle,
         bgcolor: chatColors.conversationBg,
         display: 'flex',
         flexDirection: 'column',
         minHeight: 0,
+        boxShadow: highlighted ? `-4px 0 0 0 ${chatColors.primary}` : 'none',
+        transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
       }}
     >
       <Box
@@ -161,7 +163,7 @@ const EmojiSidebar = ({ onClose, onEmojiClick }) => {
         }}
       >
         <Typography variant="subtitle2" sx={{ color: chatColors.textPrimary }}>
-          Emojis
+          {reactionMode ? 'Pick a reaction' : 'Emojis'}
         </Typography>
         <Tooltip title="Hide emoji sidebar">
           <IconButton size="small" onClick={onClose} sx={{ color: chatColors.textPrimary }}>

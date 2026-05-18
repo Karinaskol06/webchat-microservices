@@ -52,6 +52,7 @@ webchat_frontend/test-results/
 # Uploads (avatars, chat)
 uploads/
 storage/
+docs/
 
 # Security-sensitive files
 secrets/

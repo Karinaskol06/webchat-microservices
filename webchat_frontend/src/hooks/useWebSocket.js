@@ -188,6 +188,13 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
           event.messageType,
         );
       },
+      onMessageReactionUpdated: (event) => {
+        if (event.messageId == null || event.messageId === '') return;
+        useChatStore.getState().updateMessageReactions(
+          event.messageId,
+          event.reactions ?? [],
+        );
+      },
       onAttachment: (event) => {
         if (event.type === 'DELETED' && event.attachmentId && event.messageId) {
           useChatStore.getState().removeAttachment(event.messageId, event.attachmentId);

@@ -5,9 +5,9 @@ export const CHAT_BG_IMAGE = '/login-bg.png';
 export const chatColors = {
   navBg: 'transparent',
   /** Nav + chat list typography on glass panels. */
-  glassPanelText: '#18141c',
-  glassPanelTextMuted: 'rgba(24, 20, 28, 0.62)',
-  glassPanelBorder: 'rgba(24, 20, 28, 0.12)',
+  glassPanelText: '#10081a',
+  glassPanelTextMuted: 'rgba(16, 8, 26, 0.62)',
+  glassPanelBorder: 'rgba(16, 8, 26, 0.12)',
   navIcon: 'rgba(24, 20, 28, 0.65)',
   navIconActive: '#18141c',
   navActiveBg: 'rgba(24, 20, 28, 0.1)',
@@ -38,7 +38,7 @@ export const chatColors = {
   bubbleText: '#FFFFFF',
   accentOrange: '#FF8A4C',
   accentBlue: '#4C8DFF',
-  unreadBadge: '#FF8A4C',
+  unreadBadge: '#7B61FF',
 };
 
 export const chatRadii = {
@@ -134,14 +134,14 @@ export const chatShellBgLayerSx = {
 export const chatGlassFieldPanelSx = {
   '& .MuiOutlinedInput-root': {
     borderRadius: `${chatRadii.pill}px`,
-    bgcolor: 'rgba(24, 20, 28, 0.06)',
+    bgcolor: 'rgba(16, 8, 26, 0.06)',
     color: chatColors.glassPanelText,
     transition: 'background-color 0.2s ease, box-shadow 0.2s ease',
     '& fieldset': {
       borderColor: chatColors.glassPanelBorder,
       transition: 'border-color 0.2s ease',
     },
-    '&:hover fieldset': { borderColor: 'rgba(24, 20, 28, 0.22)' },
+    '&:hover fieldset': { borderColor: 'rgba(16, 8, 26, 0.22)' },
     '&.Mui-focused': {
       boxShadow: '0 0 0 3px rgba(123, 97, 255, 0.18)',
     },

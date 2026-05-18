@@ -50,8 +50,11 @@ public class AuthService {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(username, password));
 
+            // get UserDetails for authentication
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
             String token = jwtService.generateToken(userDetails);
+
+            // cast to CustomUserDetails to get additional fields
             CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
 
             return LoginResponseDTO.builder()

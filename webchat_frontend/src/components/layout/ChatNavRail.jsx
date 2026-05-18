@@ -177,9 +177,15 @@ const ChatNavRail = ({
                 >
                   <Badge
                     badgeContent={badge > 0 ? (badge > 9 ? '9+' : badge) : 0}
-                    color="warning"
                     overlap="circular"
                     invisible={!badge}
+                    sx={{
+                      '& .MuiBadge-badge': {
+                        bgcolor: chatColors.unreadBadge,
+                        color: chatColors.textOnPrimary,
+                        fontWeight: 700,
+                      },
+                    }}
                   >
                     <Icon fontSize="small" />
                   </Badge>

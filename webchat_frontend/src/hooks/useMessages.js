@@ -25,8 +25,6 @@ const useMessages = (currentChat, composerRef) => {
   const [replyToMessage, setReplyToMessage] = useState(null);
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
-  const bootstrapRequestKeyRef = useRef(null);
-
   // Load messages when chat changes
   useEffect(() => {
     setReplyToMessage(null);
@@ -148,6 +146,7 @@ const useMessages = (currentChat, composerRef) => {
     try {
       setIsSending(true);
       let attachmentIds = [];
+      let activeChatId = currentChat.id;
 
       if (hasAttachments) {
         console.log('Uploading attachments:', selectedAttachments.length);
@@ -157,29 +156,27 @@ const useMessages = (currentChat, composerRef) => {
       }
 
       if (!currentChat.id) {
-        if (!bootstrapRequestKeyRef.current) {
-          bootstrapRequestKeyRef.current =
-            globalThis.crypto?.randomUUID?.() ||
-            `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const otherUserId = currentChat.otherUser?.id;
+        if (!otherUserId) {
+          throw new Error('Recipient is required to start a chat');
         }
-        const bootstrap = await chatService.bootstrapMessage({
-          recipientUserId: currentChat.otherUser?.id,
-          content: trimmedMessage,
-          clientRequestKey: bootstrapRequestKeyRef.current
+
+        const createdChat = await chatService.createPrivateChat({ otherUserId });
+        activeChatId = createdChat.id;
+        setCurrentChat(createdChat);
+        upsertChat(createdChat);
+        setChats(await chatService.getUserChats());
+
+        const sent = sendChatMessage({
+          chatId: activeChatId,
+          content: hasText ? trimmedMessage : null,
+          attachmentIds,
+          type: hasAttachments ? 'MIXED' : 'TEXT',
+          replyToMessageId: replyToMessage?.id || null
         });
-
-        const latestChats = await chatService.getUserChats();
-        setChats(latestChats);
-
-        const createdChat = latestChats.find((chat) => chat.id === bootstrap.chatId);
-        if (createdChat) {
-          setCurrentChat(createdChat);
-          upsertChat(createdChat);
+        if (!sent) {
+          throw new Error('WebSocket is not connected');
         }
-        if (bootstrap?.message) {
-          setMessages([bootstrap.message]);
-        }
-        bootstrapRequestKeyRef.current = null;
       } else {
         const sent = sendChatMessage({
           chatId: currentChat.id,
@@ -193,8 +190,8 @@ const useMessages = (currentChat, composerRef) => {
         }
       }
 
-      if (currentChat.id) {
-        sendTypingEvent({ chatId: currentChat.id, typing: false });
+      if (activeChatId) {
+        sendTypingEvent({ chatId: activeChatId, typing: false });
       }
     } catch (error) {
       composerRef?.current?.setDraft(previousText);

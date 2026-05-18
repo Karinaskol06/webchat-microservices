@@ -54,6 +54,7 @@ const ChatPage = () => {
   const [roomProfileId, setRoomProfileId] = useState(null);
   const [presenceStatus, setPresenceStatus] = useState(null);
   const [emojiSidebarOpen, setEmojiSidebarOpen] = useState(false);
+  const [reactionTargetMessageId, setReactionTargetMessageId] = useState(null);
   const [inChatSearchOpen, setInChatSearchOpen] = useState(false);
   const [inChatSearchQuery, setInChatSearchQuery] = useState('');
   const [inChatSearchMatchIndex, setInChatSearchMatchIndex] = useState(-1);
@@ -91,12 +92,13 @@ const ChatPage = () => {
   }, [isGroupOrChannel, chatTypeUpper, currentChat?.visibility, currentChat?.memberCount]);
 
   const headerAvatarSrc = isGroupOrChannel ? currentChat?.groupPhoto : undefined;
-  const { openSeparatorIndex, liveBeforeMessageId } = useUnreadMessageSeparator({
-    userId: user?.id,
-    chatId: currentChat?.id,
-    chatUnreadCount: currentChat?.unreadCount,
-    messages,
-  });
+  const { openSeparatorIndex, liveBeforeMessageId, scrollToMessageId } =
+    useUnreadMessageSeparator({
+      userId: user?.id,
+      chatId: currentChat?.id,
+      chatUnreadCount: currentChat?.unreadCount,
+      messages,
+    });
 
   const headerAvatarLetter = useMemo(() => {
     if (!isGroupOrChannel) return undefined;
@@ -280,8 +282,39 @@ const ChatPage = () => {
   useEffect(() => {
     if (!currentChat) {
       setEmojiSidebarOpen(false);
+      setReactionTargetMessageId(null);
     }
   }, [currentChat]);
+
+  const handleOpenEmojiSidebarForReaction = useCallback((messageId) => {
+    setReactionTargetMessageId(messageId != null ? String(messageId) : null);
+    setEmojiSidebarOpen(true);
+  }, []);
+
+  const handleEmojiSidebarPick = useCallback(
+    async (emoji) => {
+      if (reactionTargetMessageId && currentChat?.id) {
+        try {
+          const reactions = await chatService.toggleMessageReaction(
+            currentChat.id,
+            reactionTargetMessageId,
+            emoji,
+          );
+          useChatStore.getState().updateMessageReactions(reactionTargetMessageId, reactions);
+        } catch {
+          // MessageItem shows errors for quick bar; sidebar picks fail silently here
+        }
+        return;
+      }
+      composerRef.current?.appendText(emoji);
+    },
+    [reactionTargetMessageId, currentChat?.id],
+  );
+
+  const handleCloseEmojiSidebar = useCallback(() => {
+    setEmojiSidebarOpen(false);
+    setReactionTargetMessageId(null);
+  }, []);
 
   // Fetch presence status for the interlocutor (private chats only)
   useEffect(() => {
@@ -650,16 +683,19 @@ const ChatPage = () => {
         messages={messages}
         currentUserId={user?.id}
         room={currentChat}
+        chatId={currentChat?.id}
         messagesEndRef={messagesEndRef}
         onReply={setReplyToMessage}
         onOpenForward={(msg) => setMessageToForward(msg)}
         onOpenForwardedProfile={openForwardedProfile}
         openSeparatorIndex={openSeparatorIndex}
         liveBeforeMessageId={liveBeforeMessageId}
+        scrollToMessageId={scrollToMessageId}
         hideChannelReplyActions={channelComposerLocked}
         inChatSearchQuery={inChatSearchQuery}
         inChatSearchMatches={inChatSearchMatches}
         activeInChatSearchMatch={activeInChatSearchMatch}
+        onOpenEmojiSidebarForReaction={handleOpenEmojiSidebarForReaction}
       />
 
       <MessageInput
@@ -751,8 +787,10 @@ const ChatPage = () => {
             </Box>
             {emojiSidebarOpen && currentChat ? (
               <EmojiSidebar
-                onClose={() => setEmojiSidebarOpen(false)}
-                onEmojiClick={(emoji) => composerRef.current?.appendText(emoji)}
+                highlighted={Boolean(reactionTargetMessageId)}
+                reactionMode={Boolean(reactionTargetMessageId)}
+                onClose={handleCloseEmojiSidebar}
+                onEmojiClick={handleEmojiSidebarPick}
               />
             ) : null}
           </Box>

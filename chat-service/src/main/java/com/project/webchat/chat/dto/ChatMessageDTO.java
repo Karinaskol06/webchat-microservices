@@ -37,6 +37,7 @@ public class ChatMessageDTO {
 
     private UserInfoDTO sender;
     private List<AttachmentDTO> attachments;
+    private List<MessageReactionDTO> reactions;
 
     public static ChatMessageDTO toDTO(ChatMessage chatMessage, UserInfoDTO sender) {
         return ChatMessageDTO.builder()

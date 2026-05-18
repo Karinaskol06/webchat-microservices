@@ -9,9 +9,33 @@ import {
   persistReadEdgeFromMessages,
 } from '../utils/readCursorStorage';
 
+const messageTimestampMs = (m) => {
+  const ms = new Date(m?.timestamp).getTime();
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const findFirstUnreadIndex = (messages, edgeTimestampMs, unreadCount) => {
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+
+  if (edgeTimestampMs != null) {
+    const idx = messages.findIndex((m) => {
+      const ms = messageTimestampMs(m);
+      return ms != null && ms > edgeTimestampMs;
+    });
+    return idx >= 0 ? idx : null;
+  }
+
+  if (unreadCount > 0) {
+    return Math.max(0, messages.length - unreadCount);
+  }
+
+  return null;
+};
+
 /**
- * Unread line on first open (from stored read edge or unreadCount) and a "New" line
- * when an incoming WS message arrives while this chat is focused.
+ * Shows an "Unread messages" line once per chat visit when there are missed messages.
+ * Persists read edge on mark-as-read; revisiting the same chat does not show the line again
+ * unless new messages arrived after the stored edge.
  */
 export function useUnreadMessageSeparator({
   userId,
@@ -23,44 +47,57 @@ export function useUnreadMessageSeparator({
   const [liveBeforeMessageId, setLiveBeforeMessageId] = useState(null);
   const visitKeyRef = useRef('');
   const computedOpenForVisitRef = useRef(false);
-
+  const visitUnreadCountRef = useRef(0);
   useEffect(() => {
     const key = `${userId ?? ''}:${chatId ?? ''}`;
     if (visitKeyRef.current !== key) {
       visitKeyRef.current = key;
       computedOpenForVisitRef.current = false;
+
+      if (chatId) {
+        const state = useChatStore.getState();
+        const fromList = state.chats.find((c) => String(c.id) === String(chatId));
+        const raw =
+          fromList?.unreadCount ??
+          (String(state.currentChat?.id) === String(chatId)
+            ? state.currentChat?.unreadCount
+            : 0) ??
+          chatUnreadCount ??
+          0;
+        visitUnreadCountRef.current = Math.max(0, Number(raw) || 0);
+      } else {
+        visitUnreadCountRef.current = 0;
+      }
+
       queueMicrotask(() => {
         setOpenSeparatorIndex(null);
         setLiveBeforeMessageId(null);
       });
     }
-  }, [userId, chatId]);
+  }, [userId, chatId, chatUnreadCount]);
 
   useEffect(() => {
     if (!userId || !chatId) return;
     if (!Array.isArray(messages) || messages.length === 0) {
-      computedOpenForVisitRef.current = false;
       return;
     }
     if (computedOpenForVisitRef.current) return;
     computedOpenForVisitRef.current = true;
 
     const edge = getLastReadEdge(userId, chatId);
-    let idx = null;
-    if (edge?.timestamp) {
-      const edgeMs = new Date(edge.timestamp).getTime();
-      idx = messages.findIndex((m) => {
-        const ms = new Date(m.timestamp).getTime();
-        return Number.isFinite(ms) && ms > edgeMs;
-      });
-      if (idx < 0) idx = null;
-    } else if (Number(chatUnreadCount) > 0) {
-      idx = Math.max(0, messages.length - Number(chatUnreadCount));
-    }
+    const edgeMs = edge?.timestamp ? new Date(edge.timestamp).getTime() : null;
+    const safeEdgeMs = Number.isFinite(edgeMs) ? edgeMs : null;
+
+    const idx = findFirstUnreadIndex(
+      messages,
+      safeEdgeMs,
+      visitUnreadCountRef.current,
+    );
+
     queueMicrotask(() => {
       setOpenSeparatorIndex(idx);
     });
-  }, [userId, chatId, messages, chatUnreadCount]);
+  }, [userId, chatId, messages]);
 
   useEffect(() => {
     if (!chatId) return undefined;
@@ -85,7 +122,7 @@ export function useUnreadMessageSeparator({
       if (!userId || !chatId) return;
       const msgs = useChatStore.getState().messages;
       persistReadEdgeFromMessages(userId, chatId, msgs);
-      setOpenSeparatorIndex(null);
+      // Keep the unread separator visible for this visit; edge prevents it on the next open.
       setLiveBeforeMessageId(null);
     },
     [userId, chatId],
@@ -97,8 +134,14 @@ export function useUnreadMessageSeparator({
       window.removeEventListener(WEBCHAT_MESSAGES_MARKED_READ, handleMarkedRead);
   }, [handleMarkedRead]);
 
+  const scrollToMessageId =
+    openSeparatorIndex != null && openSeparatorIndex >= 0
+      ? messages[openSeparatorIndex]?.id ?? messages[openSeparatorIndex]?._id ?? null
+      : null;
+
   return {
     openSeparatorIndex,
     liveBeforeMessageId,
+    scrollToMessageId,
   };
 }

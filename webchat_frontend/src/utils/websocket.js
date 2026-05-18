@@ -199,6 +199,19 @@ const attachChatSubscriptions = (subscription) => {
     );
   }
 
+  if (handlers.onMessageReactionUpdated) {
+    subs.push(
+      stompClient.subscribe(`/topic/chat/${chatId}/reactions`, (frame) => {
+        try {
+          const event = JSON.parse(frame.body);
+          handlers.onMessageReactionUpdated(event);
+        } catch (error) {
+          console.error('Failed to parse reaction event:', error);
+        }
+      }),
+    );
+  }
+
   // subscription to attachments
   if (handlers.onAttachment) {
     subs.push(

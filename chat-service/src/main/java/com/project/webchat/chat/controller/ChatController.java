@@ -2,14 +2,14 @@ package com.project.webchat.chat.controller;
 
 import com.project.webchat.chat.dto.AddRoomMemberRequest;
 import com.project.webchat.chat.dto.AdminMutationRequest;
-import com.project.webchat.chat.dto.BootstrapMessageRequest;
-import com.project.webchat.chat.dto.BootstrapMessageResponse;
 import com.project.webchat.chat.dto.ChatMessageDTO;
 import com.project.webchat.chat.dto.ChatRoomDTO;
 import com.project.webchat.chat.dto.CreateChatRequest;
 import com.project.webchat.chat.dto.CreateGroupChannelRequest;
 import com.project.webchat.chat.dto.DiscoverableRoomDTO;
 import com.project.webchat.chat.dto.EditMessageRequest;
+import com.project.webchat.chat.dto.MessageReactionDTO;
+import com.project.webchat.chat.dto.ToggleReactionRequest;
 import com.project.webchat.chat.dto.InvitePayloadDTO;
 import com.project.webchat.chat.dto.InviteMemberByUsernameRequest;
 import com.project.webchat.chat.dto.JoinInviteRequest;
@@ -59,14 +59,6 @@ public class ChatController {
         webSocketService.notifyChatCreated(currentUser.getId(), chat);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(chat);
-    }
-
-    @PostMapping("/bootstrap-message")
-    public ResponseEntity<BootstrapMessageResponse> bootstrapMessage(
-            @AuthenticationPrincipal CustomUserDetails currentUser,
-            @RequestBody @jakarta.validation.Valid BootstrapMessageRequest request) {
-        BootstrapMessageResponse response = chatService.bootstrapFirstMessage(currentUser.getId(), request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     //get all chats for the authenticated user
@@ -166,6 +158,26 @@ public class ChatController {
         log.info("User {} is editing message {}", currentUser.getId(), messageId);
         ChatMessageDTO updatedMessage = chatService.editMessage(messageId, currentUser.getId(), request.getContent());
         return ResponseEntity.ok(updatedMessage);
+    }
+
+    @PostMapping("/{chatId}/messages/{messageId}/reactions")
+    public ResponseEntity<List<MessageReactionDTO>> toggleMessageReaction(
+            @PathVariable String chatId,
+            @PathVariable String messageId,
+            @RequestBody @jakarta.validation.Valid ToggleReactionRequest request,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+
+        if (currentUser == null || currentUser.getId() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        if (!chatService.isUserChatMember(chatId, currentUser.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        log.debug("User {} toggling reaction on message {} in chat {}", currentUser.getId(), messageId, chatId);
+        List<MessageReactionDTO> reactions = chatService.toggleMessageReaction(
+                chatId, messageId, currentUser.getId(), request.getEmoji());
+        return ResponseEntity.ok(reactions);
     }
 
     //leave a chat

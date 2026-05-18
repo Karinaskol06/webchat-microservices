@@ -1,9 +1,12 @@
 import axios from "axios";
 
-const API_GATEWAY = "http://localhost:8089";
+// Dev: relative base URL uses Vite proxy (/api → gateway). Prod: explicit gateway URL.
+const API_BASE_URL = import.meta.env.DEV
+  ? ''
+  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8089').replace(/\/$/, '');
 
 const api = axios.create({
-  baseURL: API_GATEWAY,
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },

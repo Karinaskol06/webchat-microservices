@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Typography } from '@mui/material';
+import { chatColors } from '../../theme/chatDesignTokens';
 
 const MessageUnreadSeparator = ({ label = 'Unread messages' }) => (
   <Box
@@ -13,11 +14,11 @@ const MessageUnreadSeparator = ({ label = 'Unread messages' }) => (
       px: 0.5,
     }}
   >
-    <Box sx={{ flex: 1, height: 1, bgcolor: 'divider' }} />
+    <Box sx={{ flex: 1, height: 1, bgcolor: chatColors.borderSubtle }} />
     <Typography
       variant="caption"
       sx={{
-        color: 'text.secondary',
+        color: chatColors.primaryLight,
         fontWeight: 600,
         letterSpacing: 0.04,
         textTransform: 'uppercase',
@@ -26,7 +27,7 @@ const MessageUnreadSeparator = ({ label = 'Unread messages' }) => (
     >
       {label}
     </Typography>
-    <Box sx={{ flex: 1, height: 1, bgcolor: 'divider' }} />
+    <Box sx={{ flex: 1, height: 1, bgcolor: chatColors.borderSubtle }} />
   </Box>
 );
 

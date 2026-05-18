@@ -8,6 +8,7 @@ import {
     DialogContent,
     DialogContentText,
     DialogTitle,
+    Divider,
     IconButton,
     Link,
     Menu,
@@ -27,6 +28,8 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ForwardIcon from '@mui/icons-material/Forward';
 import ChatImageAttachment, { ChatImageGridCell } from './ChatImageAttachment';
+import MessageReactionQuickBar from './MessageReactionQuickBar';
+import MessageReactionsRow from './MessageReactionsRow';
 import HighlightedMessageText from './HighlightedMessageText';
 import { parseQuotedSnippet } from '../../utils/quotedMessagePreview';
 import { chatColors, chatMenuSlotProps } from '../../theme/chatDesignTokens';
@@ -34,6 +37,7 @@ import { QuotedKindIcon } from './QuotedKindIcon';
 import chatService from '../../services/chatService';
 import useChatStore from '../../store/useChatStore';
 import { canModerateOthersMessages } from '../../utils/channelPermissions';
+import { countUserReactions, MAX_REACTIONS_PER_USER } from '../../utils/messageReactions';
 
 /** Larger previews; landscape uses bubble width, portrait shrinks to stay on-screen. */
 const MEDIA_BUBBLE_MAX_WIDTH = 560;
@@ -67,6 +71,7 @@ const MessageItem = ({
     inChatSearchQuery = '',
     inChatSearchMatches = [],
     activeInChatSearchMatch = null,
+    onOpenEmojiSidebarForReaction,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [menuAnchorEl, setMenuAnchorEl] = useState(null);
@@ -79,6 +84,8 @@ const MessageItem = ({
     const [deleteError, setDeleteError] = useState('');
     const [contextMenuPosition, setContextMenuPosition] = useState(null);
     const [moderatorEditOpen, setModeratorEditOpen] = useState(false);
+    const [isTogglingReaction, setIsTogglingReaction] = useState(false);
+    const [reactionError, setReactionError] = useState('');
 
     const sender = message.sender || { id: message.senderId };
     const isOwn = Number(sender?.id) === Number(currentUserId);
@@ -252,11 +259,75 @@ const MessageItem = ({
 
     const handleOpenContextMenu = (event) => {
         event.preventDefault();
+        setReactionError('');
         setContextMenuPosition({
             mouseX: event.clientX + 2,
             mouseY: event.clientY - 6,
         });
     };
+
+    const userReactionCount = countUserReactions(message.reactions, currentUserId);
+    const reactionLimitReached = userReactionCount >= MAX_REACTIONS_PER_USER;
+
+    const resolveChatId = () => {
+        const fromRoom = room?.id ?? room?._id;
+        const fromMessage = message.chatId ?? message.chat_id;
+        return fromRoom ?? fromMessage ?? null;
+    };
+
+    const handleToggleReaction = async (emoji) => {
+        const chatId = resolveChatId();
+        if (!message.id || !chatId || isTogglingReaction) return;
+        setReactionError('');
+        setIsTogglingReaction(true);
+        try {
+            const reactions = await chatService.toggleMessageReaction(chatId, message.id, emoji);
+            useChatStore.getState().updateMessageReactions(message.id, reactions);
+            closeMenu();
+            closeContextMenu();
+        } catch (error) {
+            const responseMessage =
+                error?.error ||
+                error?.message ||
+                (typeof error === 'string' ? error : '');
+            setReactionError(
+                responseMessage || 'Unable to update reaction. Please try again.',
+            );
+        } finally {
+            setIsTogglingReaction(false);
+        }
+    };
+
+    const handleOpenFullReactionPicker = () => {
+        onOpenEmojiSidebarForReaction?.(message.id);
+        closeMenu();
+        closeContextMenu();
+    };
+
+    const reactionMenuHeader = (
+        <Box>
+            <MessageReactionQuickBar
+                disabled={isTogglingReaction}
+                onPickEmoji={handleToggleReaction}
+                onOpenFullPicker={handleOpenFullReactionPicker}
+            />
+            {reactionError ? (
+                <Typography variant="caption" color="error" sx={{ px: 1.5, pb: 0.5, display: 'block' }}>
+                    {reactionError}
+                </Typography>
+            ) : null}
+            {reactionLimitReached && !reactionError ? (
+                <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ px: 1.5, pb: 0.5, display: 'block' }}
+                >
+                    Maximum {MAX_REACTIONS_PER_USER} reactions per message
+                </Typography>
+            ) : null}
+            <Divider sx={{ borderColor: chatColors.borderSubtle }} />
+        </Box>
+    );
 
     const handleStartEdit = () => {
         if (!canEditThis) return;
@@ -495,6 +566,7 @@ const MessageItem = ({
                 open={Boolean(menuAnchorEl)}
                 onClose={closeMenu}
                 slotProps={chatMenuSlotProps}
+                disableAutoFocusItem
                 anchorOrigin={{
                     vertical: 'bottom',
                     horizontal: isOwn ? 'right' : 'left',
@@ -504,6 +576,7 @@ const MessageItem = ({
                     horizontal: isOwn ? 'right' : 'left',
                 }}
             >
+                {reactionMenuHeader}
                 {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
                 <MenuItem onClick={handleForward}>Forward</MenuItem>
                 {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
@@ -514,6 +587,7 @@ const MessageItem = ({
                 open={Boolean(contextMenuPosition)}
                 onClose={closeContextMenu}
                 slotProps={chatMenuSlotProps}
+                disableAutoFocusItem
                 anchorReference="anchorPosition"
                 anchorPosition={
                     contextMenuPosition
@@ -521,6 +595,7 @@ const MessageItem = ({
                         : undefined
                 }
             >
+                {reactionMenuHeader}
                 {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
                 <MenuItem onClick={handleForward}>Forward</MenuItem>
                 {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
@@ -654,6 +729,11 @@ const MessageItem = ({
                             isRead={Boolean(message.isRead)}
                             timestamp={messageTime}
                             onOpen={() => openAttachment(attachment, { download: false }).catch(() => {})}
+                        />
+                        <MessageReactionsRow
+                            reactions={message.reactions}
+                            currentUserId={currentUserId}
+                            onToggleReaction={handleToggleReaction}
                         />
                         {isOwn && (
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
@@ -1069,6 +1149,12 @@ const MessageItem = ({
                             </IconButton>
                         </Box>
                     )}
+
+                    <MessageReactionsRow
+                        reactions={message.reactions}
+                        currentUserId={currentUserId}
+                        onToggleReaction={handleToggleReaction}
+                    />
 
                     {/* Chat and status */}
                     <Box

@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Box,
   Collapse,
-  Divider,
   IconButton,
   Tooltip,
   Typography,
@@ -61,8 +60,22 @@ const ChatFolderRailSection = ({ activeFolderId, onSelectFolder }) => {
   };
 
   return (
-    <>
-      <Divider sx={{ width: '80%', borderColor: chatColors.glassPanelBorder, my: 0.5 }} />
+    <Box
+      sx={{
+        width: '88%',
+        mx: 'auto',
+        my: 0.75,
+        flex: 1,
+        minHeight: 0,
+        maxHeight: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        borderTop: `1px solid ${chatColors.glassPanelBorder}`,
+        borderBottom: `1px solid ${chatColors.glassPanelBorder}`,
+        pt: 0.5,
+        pb: 0.5,
+      }}
+    >
       <Box
         sx={{
           width: '100%',
@@ -158,7 +171,10 @@ const ChatFolderRailSection = ({ activeFolderId, onSelectFolder }) => {
                   }
                   placement="right"
                 >
-                  <IconButton
+                  <Box
+                    component="div"
+                    role="button"
+                    tabIndex={0}
                     aria-label={folder.name}
                     aria-current={active ? 'true' : undefined}
                     aria-expanded={!folder.collapsed}
@@ -167,38 +183,111 @@ const ChatFolderRailSection = ({ activeFolderId, onSelectFolder }) => {
                       e.preventDefault();
                       toggleFolderCollapsed(folder.id);
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelectFolder?.(folder.id);
+                      }
+                    }}
                     onDragOver={(e) => handleDragOver(e, folder.id)}
                     onDragLeave={() => handleDragLeave(folder.id)}
                     onDrop={(e) => handleDrop(e, folder.id)}
                     sx={{
-                      width: 48,
-                      height: 40,
+                      width: '100%',
+                      maxWidth: 64,
                       mx: 'auto',
                       flexShrink: 0,
-                      color: active ? chatColors.navIconActive : chatColors.navIcon,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 0.25,
+                      py: 0.25,
+                      borderRadius: 2,
+                      cursor: 'pointer',
+                      outline: isDropTarget ? '2px dashed rgba(123, 97, 255, 0.85)' : 'none',
+                      outlineOffset: 1,
                       bgcolor: isDropTarget
-                        ? 'rgba(123, 97, 255, 0.45)'
+                        ? 'rgba(123, 97, 255, 0.18)'
                         : active
                           ? chatColors.navActiveBg
                           : 'transparent',
-                      outline: isDropTarget ? '2px dashed rgba(255,255,255,0.65)' : 'none',
-                      outlineOffset: 2,
-                      borderRadius: 2,
                       transition: 'background-color 0.15s ease, outline 0.15s ease',
                       '&:hover': {
-                        bgcolor: active ? chatColors.navActiveBg : 'rgba(24, 20, 28, 0.06)',
+                        bgcolor: isDropTarget
+                          ? 'rgba(123, 97, 255, 0.22)'
+                          : active
+                            ? chatColors.navActiveBg
+                            : 'rgba(16, 8, 26, 0.06)',
                       },
                     }}
                   >
-                    <FolderIcon fontSize="small" />
-                  </IconButton>
+                    <Box
+                      sx={{
+                        position: 'relative',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 40,
+                        height: 32,
+                        color: active || isDropTarget ? chatColors.primary : chatColors.navIcon,
+                        transition: 'color 0.15s ease',
+                      }}
+                    >
+                      <FolderIcon fontSize="small" />
+                      {unread > 0 ? (
+                        <Box
+                          component="span"
+                          aria-hidden
+                          sx={{
+                            position: 'absolute',
+                            top: 2,
+                            right: 2,
+                            width: 7,
+                            height: 7,
+                            borderRadius: '50%',
+                            bgcolor: chatColors.unreadBadge,
+                            border: '1.5px solid',
+                            borderColor: chatColors.glassList,
+                          }}
+                        />
+                      ) : null}
+                    </Box>
+                    <Typography
+                      component="span"
+                      variant="caption"
+                      title={folder.name}
+                      sx={{
+                        width: '100%',
+                        px: 0.25,
+                        fontSize: '0.625rem',
+                        lineHeight: 1.2,
+                        textAlign: 'center',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        color: isDropTarget
+                          ? chatColors.primary
+                          : active
+                            ? chatColors.glassPanelText
+                            : chatColors.glassPanelTextMuted,
+                        fontWeight: isDropTarget || active ? 700 : 500,
+                        letterSpacing: isDropTarget ? '0.02em' : 0,
+                        textDecoration: isDropTarget ? 'underline' : 'none',
+                        textDecorationColor: chatColors.primary,
+                        textUnderlineOffset: 2,
+                        transition: 'color 0.15s ease, font-weight 0.15s ease',
+                      }}
+                    >
+                      {folder.name}
+                    </Typography>
+                  </Box>
                 </Tooltip>
               );
             })}
           </Box>
         </Collapse>
       </Box>
-    </>
+    </Box>
   );
 };
 

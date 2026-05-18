@@ -26,6 +26,7 @@ public class WebSocketService {
     private static final String TOPIC_CHAT_PRESENCE = "/topic/chat/%s/presence";
     private static final String TOPIC_CHAT_DELETED = "/topic/chat/%s/deleted";
     private static final String TOPIC_CHAT_EDITED = "/topic/chat/%s/edited";
+    private static final String TOPIC_CHAT_REACTIONS = "/topic/chat/%s/reactions";
     private static final String TOPIC_CHAT_ATTACHMENT = "/topic/chat/%s/attachment";
 
     // User queues for personal messages
@@ -57,6 +58,19 @@ public class WebSocketService {
                 messageId, chatId, newContent, editedByUserId, editedAt, newMessageType);
         sendToChatTopic(TOPIC_CHAT_EDITED, chatId, event);
         log.info("Message {} edited in chat {} by user {}", messageId, chatId, editedByUserId);
+    }
+
+    public void notifyMessageReactionUpdated(String messageId, String chatId, List<MessageReactionDTO> reactions) {
+        List<MessageReactionDTO> broadcastPayload = reactions.stream()
+                .map(r -> MessageReactionDTO.builder()
+                        .emoji(r.getEmoji())
+                        .count(r.getCount())
+                        .userIds(r.getUserIds())
+                        .build())
+                .toList();
+        MessageReactionUpdatedEvent event = new MessageReactionUpdatedEvent(messageId, chatId, broadcastPayload);
+        sendToChatTopic(TOPIC_CHAT_REACTIONS, chatId, event);
+        log.debug("Reactions updated on message {} in chat {}", messageId, chatId);
     }
 
     public void notifyAttachmentAdded(String chatId, String messageId, AttachmentDTO attachment) {

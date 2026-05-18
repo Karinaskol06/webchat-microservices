@@ -329,7 +329,15 @@ const useChatStore = create((set, get) => ({
               : msg
       )
     }));
-  }
+  },
+
+  updateMessageReactions: (messageId, reactions) => {
+    set((state) => ({
+      messages: state.messages.map((msg) =>
+        String(msg.id) === String(messageId) ? { ...msg, reactions: reactions ?? [] } : msg,
+      ),
+    }));
+  },
 }));
 
 export default useChatStore;
