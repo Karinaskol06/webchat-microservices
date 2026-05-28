@@ -8,7 +8,6 @@ import {
   ListItemButton,
   ListItemAvatar,
   ListItemText,
-  Avatar,
   Typography,
   Box,
 } from '@mui/material';
@@ -17,6 +16,7 @@ import useChatStore from '../../store/useChatStore';
 import { sendForwardMessage } from '../../utils/websocket';
 import { parseQuotedSnippetFromMessage } from '../../utils/quotedMessagePreview';
 import { QuotedKindIcon } from './QuotedKindIcon';
+import UserAvatar from '../user/UserAvatar';
 
 const chatLabel = (chat) => {
   const isGroup = String(chat?.type || '').toUpperCase() === 'GROUP';
@@ -114,13 +114,16 @@ const ForwardChatDialog = ({ open, message, onClose }) => {
           <List dense disablePadding sx={{ maxHeight: 360, overflow: 'auto' }}>
             {selectableChats.map((chat) => {
               const label = chatLabel(chat);
-              const letter = label?.[0]?.toUpperCase() || '?';
               const isGroup = String(chat.type || '').toUpperCase() === 'GROUP';
-              const avatarSrc = !isGroup ? chat.otherUser?.profilePicture : undefined;
+              const letter = label?.[0]?.toUpperCase() || '?';
               return (
                 <ListItemButton key={chat.id} onClick={() => handleSelectChat(chat)}>
                   <ListItemAvatar>
-                    <Avatar src={avatarSrc}>{letter}</Avatar>
+                    {isGroup ? (
+                      <UserAvatar src={chat.groupPhoto} letter={letter} />
+                    ) : (
+                      <UserAvatar user={chat.otherUser} />
+                    )}
                   </ListItemAvatar>
                   <ListItemText primary={label} secondary={isGroup ? 'Group' : chat.otherUser?.username} />
                 </ListItemButton>

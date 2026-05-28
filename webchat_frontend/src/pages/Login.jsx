@@ -108,7 +108,7 @@ const Login = () => {
         <AuthAnimatedItem index={0}>
           <GlassTextField
             name="username"
-            placeholder="Username"
+            placeholder="Username or email"
             autoComplete="username"
             value={formData.username}
             onChange={handleChange}
@@ -117,7 +117,7 @@ const Login = () => {
             endIcon={PersonOutlineIcon}
             slotProps={{
               htmlInput: {
-                'aria-label': 'Username',
+                'aria-label': 'Username or email',
                 autoCapitalize: 'none',
                 autoCorrect: 'off',
               },

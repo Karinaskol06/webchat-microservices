@@ -34,7 +34,7 @@ public class AuthService {
     private static final String INCORRECT_PASSWORD_MESSAGE = "Incorrect password";
 
     public LoginResponseDTO login(LoginRequestDTO loginRequestDTO) {
-        String username = loginRequestDTO.getUsername();
+        String loginIdentifier = loginRequestDTO.getUsername();
         String password = loginRequestDTO.getPassword();
 
         if (password == null || password.length() < PASSWORD_MIN_LENGTH) {
@@ -42,10 +42,7 @@ public class AuthService {
         }
 
         try {
-            Boolean exists = userServiceClient.existsByUsername(username).getBody();
-            if (!Boolean.TRUE.equals(exists)) {
-                throw new IllegalArgumentException(USER_DOES_NOT_EXIST_MESSAGE);
-            }
+            String username = resolveUsernameForLogin(loginIdentifier);
 
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(username, password));
@@ -66,7 +63,7 @@ public class AuthService {
                     .build();
 
         } catch (BadCredentialsException e) {
-            log.warn("Failed login attempt for user: {}", username);
+            log.warn("Failed login attempt for identifier: {}", loginIdentifier);
             throw new BadCredentialsException(INCORRECT_PASSWORD_MESSAGE, e);
         } catch (ResponseStatusException e) {
             log.error("User service error during login: {}", e.getStatusCode(), e);
@@ -75,6 +72,26 @@ public class AuthService {
             log.error("Feign error during login: {}", e.getMessage());
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Authentication service temporarily unavailable", e);
+        }
+    }
+
+    private String resolveUsernameForLogin(String loginIdentifier) {
+        if (loginIdentifier == null || loginIdentifier.isBlank()) {
+            throw new IllegalArgumentException(USER_DOES_NOT_EXIST_MESSAGE);
+        }
+        try {
+            ResponseEntity<String> response =
+                    userServiceClient.resolveLoginIdentifier(loginIdentifier.trim());
+            String username = response.getBody();
+            if (!response.getStatusCode().is2xxSuccessful() || username == null || username.isBlank()) {
+                throw new IllegalArgumentException(USER_DOES_NOT_EXIST_MESSAGE);
+            }
+            return username.trim();
+        } catch (ResponseStatusException e) {
+            if (HttpStatus.NOT_FOUND.equals(e.getStatusCode())) {
+                throw new IllegalArgumentException(USER_DOES_NOT_EXIST_MESSAGE);
+            }
+            throw e;
         }
     }
 

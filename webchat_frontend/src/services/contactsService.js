@@ -1,6 +1,20 @@
 import api from "./api";
 
 const contactsService = {
+  listContacts: async (currentUserId) => {
+    const response = await api.get("/api/users/contacts", {
+      headers: currentUserId ? { "X-User-Id": currentUserId } : undefined,
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  },
+
+  listIncomingRequests: async (currentUserId) => {
+    const response = await api.get("/api/users/contacts/requests/incoming", {
+      headers: currentUserId ? { "X-User-Id": currentUserId } : undefined,
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  },
+
   getStatus: async (otherUserId, currentUserId) => {
     const response = await api.get(`/api/users/contacts/status/${otherUserId}`, {
       headers: currentUserId ? { "X-User-Id": currentUserId } : undefined,

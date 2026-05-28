@@ -38,4 +38,6 @@ public interface ChatRoomRepository extends MongoRepository<ChatRoom, String> {
     @Query("{ 'memberIds': ?0, 'type': { $in: [?1, ?2] }, 'groupName': { $regex: ?3, $options: 'i' } }")
     Page<ChatRoom> findMemberGroupChannelsByName(Long memberId, ChatType groupType, ChatType channelType,
                                                String nameRegex, Pageable pageable);
+
+    Optional<ChatRoom> findByTypeAndCreatedBy(ChatType type, Long createdBy);
 }

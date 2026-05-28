@@ -14,7 +14,9 @@ import com.project.webchat.chat.dto.InvitePayloadDTO;
 import com.project.webchat.chat.dto.InviteMemberByUsernameRequest;
 import com.project.webchat.chat.dto.JoinInviteRequest;
 import com.project.webchat.chat.dto.RoomMemberInviteDTO;
+import com.project.webchat.chat.dto.SendRichMessageRequest;
 import com.project.webchat.chat.dto.UpdateRoomPhotoRequest;
+import com.project.webchat.chat.dto.UpdateRoomProfileRequest;
 import com.project.webchat.chat.security.CustomUserDetails;
 import com.project.webchat.chat.service.ChatService;
 import com.project.webchat.chat.service.WebSocketService;
@@ -59,6 +61,30 @@ public class ChatController {
         webSocketService.notifyChatCreated(currentUser.getId(), chat);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(chat);
+    }
+
+  @GetMapping("/personal-space")
+    public ResponseEntity<ChatRoomDTO> getPersonalSpace(
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        return ResponseEntity.ok(chatService.getOrCreatePersonalSpace(currentUser.getId()));
+    }
+
+    @PostMapping("/{chatId}/rich-messages")
+    public ResponseEntity<ChatMessageDTO> sendRichMessage(
+            @PathVariable String chatId,
+            @RequestBody @jakarta.validation.Valid SendRichMessageRequest request,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+
+        if (!chatService.isUserChatMember(chatId, currentUser.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        ChatMessageDTO dto = chatService.sendRichMessage(
+                currentUser.getId(),
+                chatId,
+                request.getType(),
+                request.getContent(),
+                request.getReplyToMessageId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
     //get all chats for the authenticated user
@@ -191,6 +217,15 @@ public class ChatController {
         return ResponseEntity.ok().build();
     }
 
+    @DeleteMapping("/rooms/{id}")
+    public ResponseEntity<Void> deleteRoom(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        log.info("User {} is deleting room {}", currentUser.getId(), id);
+        chatService.deleteRoom(id, currentUser.getId());
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/rooms/group")
     public ResponseEntity<ChatRoomDTO> createGroupRoom(
             @AuthenticationPrincipal CustomUserDetails currentUser,
@@ -297,6 +332,15 @@ public class ChatController {
             @AuthenticationPrincipal CustomUserDetails currentUser,
             @RequestBody @jakarta.validation.Valid UpdateRoomPhotoRequest request) {
         ChatRoomDTO dto = chatService.updateRoomPhoto(id, currentUser.getId(), request.getGroupPhoto());
+        return ResponseEntity.ok(dto);
+    }
+
+    @PatchMapping("/rooms/{id}")
+    public ResponseEntity<ChatRoomDTO> updateRoomProfile(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestBody @jakarta.validation.Valid UpdateRoomProfileRequest request) {
+        ChatRoomDTO dto = chatService.updateRoomProfile(id, currentUser.getId(), request);
         return ResponseEntity.ok(dto);
     }
 

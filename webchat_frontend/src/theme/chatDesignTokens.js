@@ -95,6 +95,11 @@ export const chatGlassListSx = {
   background: chatColors.glassList,
 };
 
+/** Group/channel side panels — same glass as chat list (side menu). */
+export const chatGlassRoomSideSx = {
+  ...chatGlassListSx,
+};
+
 /** Solid conversation column. */
 export const chatConversationPanelSx = {
   borderRadius: `${chatRadii.panel}px`,

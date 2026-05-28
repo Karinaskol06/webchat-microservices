@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-    Avatar,
     Box,
     Button,
     Dialog,
@@ -38,6 +37,9 @@ import chatService from '../../services/chatService';
 import useChatStore from '../../store/useChatStore';
 import { canModerateOthersMessages } from '../../utils/channelPermissions';
 import { countUserReactions, MAX_REACTIONS_PER_USER } from '../../utils/messageReactions';
+import RichMessageContent from '../personalSpace/RichMessageContent';
+import { isRichMessageType } from '../../utils/personalSpace';
+import UserAvatar from '../user/UserAvatar';
 
 /** Larger previews; landscape uses bubble width, portrait shrinks to stay on-screen. */
 const MEDIA_BUBBLE_MAX_WIDTH = 560;
@@ -72,6 +74,7 @@ const MessageItem = ({
     inChatSearchMatches = [],
     activeInChatSearchMatch = null,
     onOpenEmojiSidebarForReaction,
+    isPersonalSpace = false,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [menuAnchorEl, setMenuAnchorEl] = useState(null);
@@ -93,10 +96,12 @@ const MessageItem = ({
     const messageTypeUpper = String(
         message.messageType || message.message_type || 'TEXT',
     ).toUpperCase();
+    const isRichMessage = isRichMessageType(messageTypeUpper);
     const canEditMessageType =
         messageTypeUpper === 'TEXT' ||
         messageTypeUpper === 'MIXED' ||
-        messageTypeUpper === 'ATTACHMENT';
+        messageTypeUpper === 'ATTACHMENT' ||
+        isRichMessage;
     const canEditThis = (isOwn || canModerateOthers) && canEditMessageType;
     const canDeleteThis = isOwn || canModerateOthers;
     const attachments = Array.isArray(message.attachments) ? message.attachments : [];
@@ -677,6 +682,136 @@ const MessageItem = ({
 
     const senderLabel = sender?.firstName || sender?.username || 'User';
 
+    const handleRichUpdate = async (content) => {
+        try {
+            const updated = await chatService.editMessage(message.id, content);
+            useChatStore.getState().updateMessageContent(
+                message.id,
+                updated.content ?? content,
+                updated.editedAt,
+                updated.messageType,
+            );
+        } catch (error) {
+            console.error('Failed to update rich message', error);
+        }
+    };
+
+    if (isRichMessage) {
+        if (isPersonalSpace && messageTypeUpper === 'STICKY_NOTE') {
+            return null;
+        }
+
+        return (
+            <>
+                <Box
+                    id={`webchat-msg-${message.id}`}
+                    onContextMenu={handleOpenContextMenu}
+                    sx={{
+                        display: 'flex',
+                        justifyContent: isOwn ? 'flex-end' : 'flex-start',
+                        alignItems: 'flex-end',
+                        mb: 2,
+                        width: '100%',
+                        ...rowHighlightSx,
+                    }}
+                >
+                    {!isOwn && (
+                        <UserAvatar
+                            user={sender}
+                            variant="rounded"
+                            sx={{ ...avatarSx, mr: 1 }}
+                        />
+                    )}
+
+                    <Box
+                        sx={{
+                            maxWidth: '92%',
+                            minWidth: 0,
+                            position: 'relative',
+                        }}
+                    >
+                        {!isOwn && (
+                            <Typography
+                                sx={{
+                                    fontWeight: 700,
+                                    fontSize: '0.8125rem',
+                                    color: chatColors.primary,
+                                    mb: 0.5,
+                                    pl: 0.5,
+                                }}
+                            >
+                                {senderLabel}
+                            </Typography>
+                        )}
+
+                        {forwardedFrom && (
+                            <Box
+                                sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 0.5,
+                                    mb: 0.75,
+                                    cursor: forwardedDisplayName ? 'pointer' : 'default',
+                                }}
+                                onClick={() => forwardedFrom && onOpenForwardedProfile?.(forwardedFrom)}
+                            >
+                                <ForwardIcon sx={{ fontSize: 14, opacity: 0.7 }} />
+                                <Typography variant="caption" color="text.secondary">
+                                    Forwarded from {forwardedDisplayName}
+                                </Typography>
+                            </Box>
+                        )}
+
+                        <RichMessageContent
+                            message={message}
+                            editable={canEditThis}
+                            onUpdate={handleRichUpdate}
+                            onDelete={canDeleteThis ? () => handleDeleteMessage().catch(() => {}) : undefined}
+                        />
+
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: isOwn ? 'flex-end' : 'flex-start',
+                                gap: 0.5,
+                                mt: 0.75,
+                            }}
+                        >
+                            <Typography variant="caption" color="text.secondary">
+                                {messageTime}
+                            </Typography>
+                            {isOwn && (
+                                <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.25 }}>
+                                    {message.isRead ? (
+                                        <DoneAllIcon sx={{ fontSize: 14, color: chatColors.primaryLight }} />
+                                    ) : (
+                                        <DoneIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                                    )}
+                                </Box>
+                            )}
+                            <IconButton
+                                size="small"
+                                aria-label="Message actions"
+                                onClick={openMenu}
+                                sx={{ ml: 0.25 }}
+                            >
+                                <MoreVertIcon fontSize="small" />
+                            </IconButton>
+                        </Box>
+
+                        <MessageReactionsRow
+                            reactions={message.reactions}
+                            currentUserId={currentUserId}
+                            onToggleReaction={handleToggleReaction}
+                        />
+                    </Box>
+                </Box>
+                {messageMenus}
+            </>
+        );
+    }
+
     if (isSingleImageOnly) {
         const attachment = images[0];
         return (
@@ -693,13 +828,11 @@ const MessageItem = ({
                     }}
                 >
                     {!isOwn && (
-                        <Avatar
+                        <UserAvatar
+                            user={sender}
                             variant="rounded"
                             sx={{ ...avatarSx, mr: 1 }}
-                            src={sender?.profilePicture || undefined}
-                        >
-                            {(sender?.firstName?.[0] || sender?.username?.[0] || 'U').toUpperCase()}
-                        </Avatar>
+                        />
                     )}
 
                     <Box
@@ -745,13 +878,11 @@ const MessageItem = ({
                     </Box>
 
                     {isOwn && (
-                        <Avatar
+                        <UserAvatar
+                            user={sender}
                             variant="rounded"
                             sx={{ ...avatarSx, ml: 1 }}
-                            src={sender?.profilePicture || undefined}
-                        >
-                            {(sender?.firstName?.[0] || sender?.username?.[0] || 'U').toUpperCase()}
-                        </Avatar>
+                        />
                     )}
                 </Box>
                 {messageMenus}
@@ -772,13 +903,11 @@ const MessageItem = ({
             }}
         >
             {!isOwn && (
-                <Avatar
+                <UserAvatar
+                    user={sender}
                     variant="rounded"
                     sx={{ ...avatarSx, mr: 1 }}
-                    src={sender?.profilePicture || undefined}
-                >
-                    {(sender?.firstName?.[0] || sender?.username?.[0] || 'U').toUpperCase()}
-                </Avatar>
+                />
             )}
 
             <Box
@@ -1195,13 +1324,11 @@ const MessageItem = ({
             </Box>
 
             {isOwn && (
-                <Avatar
+                <UserAvatar
+                    user={sender}
                     variant="rounded"
                     sx={{ ...avatarSx, ml: 1 }}
-                    src={sender?.profilePicture || undefined}
-                >
-                    {(sender?.firstName?.[0] || sender?.username?.[0] || 'U').toUpperCase()}
-                </Avatar>
+                />
             )}
         </Box>
         {messageMenus}

@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   List,
+  ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -18,16 +21,35 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CloseIcon from '@mui/icons-material/Close';
 import LinkIcon from '@mui/icons-material/Link';
+import ContactsOutlinedIcon from '@mui/icons-material/ContactsOutlined';
+import PersonAddAlt1OutlinedIcon from '@mui/icons-material/PersonAddAlt1Outlined';
 import chatService from '../../services/chatService';
+import contactsService from '../../services/contactsService';
 import { joinInviteErrorMessage, parseInviteToken } from '../../utils/inviteLink';
+import { getApiErrorMessage } from '../../services/api';
+import UserAvatar from '../user/UserAvatar';
 
 const VIEW_MENU = 'menu';
 const VIEW_INVITE = 'invite';
+const VIEW_CONTACTS = 'contacts';
+
+const displayName = (user) => {
+  if (!user) return 'Unknown user';
+  const full = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+  return full || user.username || `User ${user.id}`;
+};
+
+const sortContacts = (users) =>
+  [...users].sort((a, b) =>
+    displayName(a).localeCompare(displayName(b), undefined, { sensitivity: 'base' }),
+  );
 
 const ChatSettingsDialog = ({
   open,
   onClose,
   onJoinedRoom,
+  onOpenContact,
+  currentUserId,
   /** `join` opens the invite form directly (e.g. from chat list menu). */
   variant = 'settings',
 }) => {
@@ -36,6 +58,29 @@ const ChatSettingsDialog = ({
   const [inviteInput, setInviteInput] = useState('');
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState('');
+  const [contactsBusy, setContactsBusy] = useState(false);
+  const [contactsError, setContactsError] = useState('');
+  const [contacts, setContacts] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [requestBusyId, setRequestBusyId] = useState(null);
+
+  const menuItems = useMemo(
+    () => [
+      {
+        key: VIEW_CONTACTS,
+        icon: ContactsOutlinedIcon,
+        primary: 'Contacts',
+        secondary: 'Open chats with saved contacts and review pending requests',
+      },
+      {
+        key: VIEW_INVITE,
+        icon: LinkIcon,
+        primary: 'Join via link',
+        secondary: 'Paste a group or channel invite',
+      },
+    ],
+    [],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -43,10 +88,47 @@ const ChatSettingsDialog = ({
       setInviteInput('');
       setInviteError('');
       setInviteBusy(false);
+      setContacts([]);
+      setPendingRequests([]);
+      setContactsError('');
+      setContactsBusy(false);
+      setRequestBusyId(null);
       return;
     }
     setView(joinOnly ? VIEW_INVITE : VIEW_MENU);
   }, [open, joinOnly]);
+
+  useEffect(() => {
+    if (!open || view !== VIEW_CONTACTS) return;
+    let cancelled = false;
+    const loadContactsData = async () => {
+      if (!currentUserId) {
+        setContacts([]);
+        setPendingRequests([]);
+        return;
+      }
+      setContactsBusy(true);
+      setContactsError('');
+      try {
+        const [contactList, incomingRequests] = await Promise.all([
+          contactsService.listContacts(currentUserId),
+          contactsService.listIncomingRequests(currentUserId),
+        ]);
+        if (cancelled) return;
+        setContacts(sortContacts(contactList));
+        setPendingRequests(Array.isArray(incomingRequests) ? incomingRequests : []);
+      } catch (error) {
+        if (cancelled) return;
+        setContactsError(getApiErrorMessage(error, 'Failed to load contacts.'));
+      } finally {
+        if (!cancelled) setContactsBusy(false);
+      }
+    };
+    void loadContactsData();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, view, currentUserId]);
 
   const handleClose = () => {
     onClose?.();
@@ -75,13 +157,56 @@ const ChatSettingsDialog = ({
     }
   };
 
+  const handleOpenContact = (contact) => {
+    if (!contact?.id) return;
+    onOpenContact?.({
+      ...contact,
+      avatar: contact.avatar ?? contact.profilePicture ?? null,
+    });
+    handleClose();
+  };
+
+  const handleAcceptRequest = async (request) => {
+    if (!request?.id || !currentUserId) return;
+    setRequestBusyId(request.id);
+    setContactsError('');
+    try {
+      await contactsService.acceptRequest(request.id, currentUserId);
+      setPendingRequests((prev) => prev.filter((item) => item.id !== request.id));
+      if (request.fromUser?.id) {
+        setContacts((prev) => {
+          const withoutDuplicate = prev.filter((item) => Number(item.id) !== Number(request.fromUser.id));
+          return sortContacts([...withoutDuplicate, request.fromUser]);
+        });
+      }
+    } catch (error) {
+      setContactsError(getApiErrorMessage(error, 'Could not accept the contact request.'));
+    } finally {
+      setRequestBusyId(null);
+    }
+  };
+
+  const handleDeclineRequest = async (request) => {
+    if (!request?.id || !currentUserId) return;
+    setRequestBusyId(request.id);
+    setContactsError('');
+    try {
+      await contactsService.declineRequest(request.id, currentUserId);
+      setPendingRequests((prev) => prev.filter((item) => item.id !== request.id));
+    } catch (error) {
+      setContactsError(getApiErrorMessage(error, 'Could not decline the contact request.'));
+    } finally {
+      setRequestBusyId(null);
+    }
+  };
+
   return (
-    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="xs">
+    <Dialog open={open} onClose={handleClose} fullWidth maxWidth={view === VIEW_CONTACTS ? 'sm' : 'xs'}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: 1 }}>
-        {view === VIEW_INVITE ? (
+        {view !== VIEW_MENU ? (
           <IconButton
             aria-label={joinOnly ? 'Close' : 'Back to settings'}
-            onClick={() => (joinOnly ? handleClose() : setView(VIEW_MENU))}
+            onClick={() => (joinOnly && view === VIEW_INVITE ? handleClose() : setView(VIEW_MENU))}
             edge="start"
             size="small"
           >
@@ -89,7 +214,7 @@ const ChatSettingsDialog = ({
           </IconButton>
         ) : null}
         <Typography component="span" variant="h6" sx={{ flex: 1 }}>
-          {view === VIEW_INVITE ? 'Join via link' : 'Settings'}
+          {view === VIEW_INVITE ? 'Join via link' : view === VIEW_CONTACTS ? 'Contacts' : 'Settings'}
         </Typography>
         <IconButton aria-label="Close settings" onClick={handleClose} size="small">
           <CloseIcon />
@@ -99,17 +224,16 @@ const ChatSettingsDialog = ({
       <DialogContent dividers sx={{ pt: view === VIEW_MENU ? 0 : 2 }}>
         {view === VIEW_MENU ? (
           <List disablePadding>
-            <ListItemButton onClick={() => setView(VIEW_INVITE)}>
-              <ListItemIcon sx={{ minWidth: 40 }}>
-                <LinkIcon color="primary" />
-              </ListItemIcon>
-              <ListItemText
-                primary="Join via link"
-                secondary="Paste a group or channel invite"
-              />
-            </ListItemButton>
+            {menuItems.map(({ key, icon: Icon, primary, secondary }) => (
+              <ListItemButton key={key} onClick={() => setView(key)}>
+                <ListItemIcon sx={{ minWidth: 40 }}>
+                  <Icon color="primary" />
+                </ListItemIcon>
+                <ListItemText primary={primary} secondary={secondary} />
+              </ListItemButton>
+            ))}
           </List>
-        ) : (
+        ) : view === VIEW_INVITE ? (
           <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary">
               Paste an invite link or token from a group or channel admin.
@@ -152,6 +276,125 @@ const ChatSettingsDialog = ({
                 {inviteBusy ? 'Joining…' : 'Join'}
               </Button>
             </Box>
+          </Stack>
+        ) : (
+          <Stack spacing={2}>
+            <Typography variant="body2" color="text.secondary">
+              Open chats with people already in your contacts or manage incoming contact requests.
+            </Typography>
+            {contactsError ? (
+              <Alert severity="error" onClose={() => setContactsError('')}>
+                {contactsError}
+              </Alert>
+            ) : null}
+            {contactsBusy ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress size={28} />
+              </Box>
+            ) : (
+              <Stack spacing={2}>
+                <Box>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                    <ContactsOutlinedIcon color="primary" fontSize="small" />
+                    <Typography variant="subtitle2" fontWeight={700}>
+                      Contacts
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {contacts.length}
+                    </Typography>
+                  </Stack>
+                  {contacts.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      No contacts yet.
+                    </Typography>
+                  ) : (
+                    <List disablePadding sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                      {contacts.map((contact, index) => (
+                        <React.Fragment key={contact.id}>
+                          <ListItem disablePadding>
+                            <ListItemButton onClick={() => handleOpenContact(contact)}>
+                              <ListItemIcon sx={{ minWidth: 52 }}>
+                                <UserAvatar user={contact} />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={displayName(contact)}
+                                secondary={contact.username ? `@${contact.username}` : null}
+                              />
+                            </ListItemButton>
+                          </ListItem>
+                          {index < contacts.length - 1 ? <Divider component="li" /> : null}
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  )}
+                </Box>
+
+                <Box>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                    <PersonAddAlt1OutlinedIcon color="primary" fontSize="small" />
+                    <Typography variant="subtitle2" fontWeight={700}>
+                      Pending requests
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {pendingRequests.length}
+                    </Typography>
+                  </Stack>
+                  {pendingRequests.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      No pending contact requests.
+                    </Typography>
+                  ) : (
+                    <Stack spacing={1.25}>
+                      {pendingRequests.map((request) => {
+                        const requestUser = request.fromUser;
+                        const busy = requestBusyId === request.id;
+                        return (
+                          <Box
+                            key={request.id}
+                            sx={{
+                              p: 1.5,
+                              borderRadius: 2,
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              bgcolor: 'background.paper',
+                            }}
+                          >
+                            <Stack direction="row" spacing={1.5} alignItems="center">
+                              <UserAvatar user={requestUser} />
+                              <Box sx={{ minWidth: 0, flex: 1 }}>
+                                <Typography variant="body2" fontWeight={700} noWrap>
+                                  {displayName(requestUser)}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" noWrap display="block">
+                                  {requestUser?.username ? `@${requestUser.username}` : 'Incoming contact request'}
+                                </Typography>
+                              </Box>
+                            </Stack>
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1.25 }}>
+                              <Button
+                                size="small"
+                                onClick={() => void handleDeclineRequest(request)}
+                                disabled={busy}
+                              >
+                                Decline
+                              </Button>
+                              <Button
+                                size="small"
+                                variant="contained"
+                                onClick={() => void handleAcceptRequest(request)}
+                                disabled={busy}
+                              >
+                                {busy ? 'Saving…' : 'Accept'}
+                              </Button>
+                            </Box>
+                          </Box>
+                        );
+                      })}
+                    </Stack>
+                  )}
+                </Box>
+              </Stack>
+            )}
           </Stack>
         )}
       </DialogContent>

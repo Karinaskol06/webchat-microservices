@@ -76,6 +76,21 @@ const useChatStore = create((set, get) => ({
     });
   },
 
+  removeChat: (chatId) => {
+    const key = chatId != null ? String(chatId) : '';
+    if (!key) return;
+    set((state) => {
+      const next = {
+        chats: state.chats.filter((c) => String(c?.id) !== key),
+      };
+      if (state.currentChat && String(state.currentChat.id) === key) {
+        next.currentChat = null;
+        next.messages = [];
+      }
+      return next;
+    });
+  },
+
   /** Merge sender / profile fields onto otherUser when it matches senderId */
   mergeChatSenderIntoOtherUser: (chatId, sender) => {
     if (!chatId || !sender?.id) return;

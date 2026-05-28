@@ -4,6 +4,7 @@ import chatService from '../services/chatService';
 import { useShallow } from 'zustand/react/shallow';
 import { sendChatMessage, sendTypingEvent } from '../utils/websocket';
 import { getAttachmentUploadErrorMessage } from '../utils/attachmentUploadErrors';
+import { validateAttachmentFiles } from '../utils/attachmentConstraints';
 import { WEBCHAT_MESSAGES_MARKED_READ } from '../constants/chatEvents';
 import { canPostInChannel } from '../utils/channelPermissions';
 
@@ -135,11 +136,19 @@ const useMessages = (currentChat, composerRef) => {
       return;
     }
 
-    setComposerError('');
-
     const previousText = String(messageText ?? '');
     const previousAttachments = [...selectedAttachments];
     const previousReply = replyToMessage;
+
+    if (hasAttachments) {
+      const validation = validateAttachmentFiles(previousAttachments);
+      if (!validation.ok) {
+        setComposerError(validation.message);
+        return;
+      }
+    }
+
+    setComposerError('');
     setSelectedAttachments([]);
     setReplyToMessage(null);
 
@@ -149,8 +158,7 @@ const useMessages = (currentChat, composerRef) => {
       let activeChatId = currentChat.id;
 
       if (hasAttachments) {
-        console.log('Uploading attachments:', selectedAttachments.length);
-        const uploaded = await chatService.uploadAttachments(currentChat.id, selectedAttachments);
+        const uploaded = await chatService.uploadAttachments(currentChat.id, previousAttachments);
         attachmentIds = uploaded.map((attachment) => attachment.id).filter(Boolean);
         console.log('Attachments uploaded, IDs:', attachmentIds);
       }
@@ -232,7 +240,14 @@ const useMessages = (currentChat, composerRef) => {
   const handleSelectAttachments = (files) => {
     if (!files || files.length === 0) return;
     if (!canPostInChannel(currentChat)) return;
+
     const nextFiles = Array.from(files);
+    const validation = validateAttachmentFiles(nextFiles);
+    if (!validation.ok) {
+      setComposerError(validation.message);
+      return;
+    }
+
     setComposerError('');
     setSelectedAttachments((prev) => [...prev, ...nextFiles]);
   };

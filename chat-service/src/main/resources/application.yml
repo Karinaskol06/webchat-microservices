@@ -10,6 +10,13 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
       enabled: true
+      # Parse multipart only in the controller so JWT / gateway auth runs on the initial request.
+      resolve-lazily: true
+
+  security:
+    filter:
+      # Only the initial servlet request — avoid a second security pass on ERROR dispatch (multipart).
+      dispatcher-types: request
 
   data:
     mongodb:
@@ -40,6 +47,9 @@ websocket:
 jwt:
   secret: ${JWT_SECRET:defaultSecretKeyForLocalDev}
   expiration: 86400000
+
+gateway:
+  internal-auth-token: ${GATEWAY_INTERNAL_AUTH_TOKEN:local-gateway-token}
 
 eureka:
   client:

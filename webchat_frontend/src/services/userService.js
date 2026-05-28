@@ -33,25 +33,25 @@ const userService = {
   uploadAvatar: async (file) => {
     const formData = new FormData();
     formData.append("file", file);
-    await api.post("/api/users/profile/avatar", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const response = await api.post("/api/users/profile/avatar", formData);
+    return response.data;
   },
 
   removeAvatar: async () => {
-    await api.delete("/api/users/profile/avatar");
+    const response = await api.delete("/api/users/profile/avatar");
+    return response.data;
   },
 
   uploadBackground: async (file) => {
     const formData = new FormData();
     formData.append("file", file);
-    await api.post("/api/users/profile/background", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const response = await api.post("/api/users/profile/background", formData);
+    return response.data;
   },
 
   removeBackground: async () => {
-    await api.delete("/api/users/profile/background");
+    const response = await api.delete("/api/users/profile/background");
+    return response.data;
   },
 };
 

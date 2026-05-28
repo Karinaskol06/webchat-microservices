@@ -91,6 +91,48 @@ public class UserServiceTest {
     }
 
     @Test
+    void resolveUsernameForLogin_byUsername() {
+        registerSampleUser();
+
+        assertThat(userService.resolveUsernameForLogin("karinaskol"))
+                .contains("karinaskol");
+        assertThat(userService.resolveUsernameForLogin("  karinaskol  "))
+                .contains("karinaskol");
+    }
+
+    @Test
+    void resolveUsernameForLogin_byEmail() {
+        registerSampleUser();
+
+        assertThat(userService.resolveUsernameForLogin("karinaskol@gmail.com"))
+                .contains("karinaskol");
+        assertThat(userService.resolveUsernameForLogin("Karinaskol@Gmail.com"))
+                .contains("karinaskol");
+    }
+
+    @Test
+    void resolveUsernameForLogin_unknownIdentifier() {
+        assertThat(userService.resolveUsernameForLogin("nobody"))
+                .isEmpty();
+        assertThat(userService.resolveUsernameForLogin("missing@example.com"))
+                .isEmpty();
+        assertThat(userService.resolveUsernameForLogin(""))
+                .isEmpty();
+    }
+
+    private void registerSampleUser() {
+        userService.registerUser(RegisterRequestDTO.builder()
+                .username("karinaskol")
+                .email("karinaskol@gmail.com")
+                .password("11111")
+                .phoneNumber("+48572579928")
+                .countryCode("PL")
+                .firstName("Karina")
+                .lastName("Skoliboh")
+                .build());
+    }
+
+    @Test
     void testValidateCredentials() {
         RegisterRequestDTO regRequest = RegisterRequestDTO.builder()
                 .username("karinaskol")

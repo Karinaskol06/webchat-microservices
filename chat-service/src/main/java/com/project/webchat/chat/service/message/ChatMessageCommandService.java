@@ -20,6 +20,7 @@ import com.project.webchat.chat.service.support.ChatMessageMapper;
 import com.project.webchat.chat.service.support.ChatMessagePreviewHelper;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
+import com.project.webchat.chat.service.support.PersonalSpacePayloadValidator;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.shared.dto.UserInfoDTO;
 import com.project.webchat.shared.events.v1.MessageCreatedEventV1;
@@ -58,6 +59,46 @@ public class ChatMessageCommandService {
     private final ChatMessagePreviewHelper previewHelper;
     private final ChatRoomPermissionService roomPermissionService;
     private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final PersonalSpacePayloadValidator personalSpacePayloadValidator;
+
+    @Transactional
+    public ChatMessageDTO sendRichMessage(Long senderId, String chatId, MessageType type,
+                                          String content, String replyToMessageId) {
+        if (!PersonalSpacePayloadValidator.isRichMessageType(type)) {
+            throw new IllegalArgumentException("Unsupported rich message type.");
+        }
+        String normalized = content == null ? "" : content.trim();
+        personalSpacePayloadValidator.validate(type, normalized);
+
+        if (!isUserChatMember(chatId, senderId)) {
+            throw new IllegalArgumentException("User is not a member of this chat.");
+        }
+        ChatRoom room = chatRoomRepository.findById(chatId)
+                .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+        roomPermissionService.assertCanPostMessage(room, senderId);
+
+        UserInfoDTO senderInfo = chatUserInfoService.getUserInfo(senderId);
+        ChatMessage chatMessage = ChatMessage.builder()
+                .chatId(chatId)
+                .messageType(type)
+                .content(normalized)
+                .replyToMessageId(chatMessageMapper.normalizeReplyToMessageId(replyToMessageId))
+                .senderId(senderId)
+                .senderName(senderInfo.getDisplayName())
+                .timestamp(LocalDateTime.now())
+                .isRead(false)
+                .build();
+        ChatMessage saved = chatMessageRepository.save(chatMessage);
+        String preview = previewHelper.getPreviewText(normalized, List.of(), type);
+        publishMessageCreatedV1(saved, preview);
+        updateChatLastActivity(chatId, preview);
+        chatRoomRepository.findById(chatId).ifPresent(roomEnrichmentService::notifyRoomMembersChatUpdated);
+        redisService.updatePresence(senderId, chatId);
+        ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(saved, senderInfo);
+        webSocketService.sendMessageToChat(chatId, messageDTO);
+        webSocketService.notifyUserJoinedChat(chatId, senderId);
+        return messageDTO;
+    }
 
     @Transactional
     public ChatMessageDTO sendMessage(Long senderId, SendMessageRequest sendMessageRequest) {
@@ -116,19 +157,21 @@ public class ChatMessageCommandService {
         String rawContent = source.getContent();
         boolean hasText = rawContent != null && !rawContent.isBlank();
         boolean hasAttachments = !sourceAttachments.isEmpty();
-        if (!hasText && !hasAttachments) {
+        MessageType sourceType = source.getMessageType() != null ? source.getMessageType() : MessageType.TEXT;
+        boolean isRich = PersonalSpacePayloadValidator.isRichMessageType(sourceType);
+        if (!hasText && !hasAttachments && !isRich) {
             throw new IllegalArgumentException("Nothing to forward.");
         }
 
         MessageType type;
-        if (hasText && hasAttachments) {
+        if (isRich) {
+            type = sourceType;
+        } else if (hasText && hasAttachments) {
             type = MessageType.MIXED;
         } else if (hasText) {
             type = MessageType.TEXT;
         } else {
-            type = source.getMessageType() != null && source.getMessageType() != MessageType.TEXT
-                    ? source.getMessageType()
-                    : MessageType.ATTACHMENT;
+            type = sourceType != MessageType.TEXT ? sourceType : MessageType.ATTACHMENT;
         }
 
         UserInfoDTO senderInfo = chatUserInfoService.getUserInfo(senderId);
@@ -152,9 +195,11 @@ public class ChatMessageCommandService {
                     targetChatId, senderId);
             newAttachments.add(clone);
         }
-        updateChatLastActivity(targetChatId, previewHelper.getPreviewText(saved.getContent(), newAttachments));
+        updateChatLastActivity(targetChatId,
+                previewHelper.getPreviewText(saved.getContent(), newAttachments, saved.getMessageType()));
         chatRoomRepository.findById(targetChatId).ifPresent(roomEnrichmentService::notifyRoomMembersChatUpdated);
-        publishMessageCreatedV1(saved, previewHelper.getPreviewText(saved.getContent(), newAttachments));
+        publishMessageCreatedV1(saved,
+                previewHelper.getPreviewText(saved.getContent(), newAttachments, saved.getMessageType()));
 
         redisService.updatePresence(senderId, targetChatId);
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(saved, senderInfo);
@@ -317,7 +362,11 @@ public class ChatMessageCommandService {
         }
 
         MessageType messageType = message.getMessageType() != null ? message.getMessageType() : MessageType.TEXT;
-        if (messageType != MessageType.TEXT && messageType != MessageType.MIXED && messageType != MessageType.ATTACHMENT) {
+        boolean isRich = PersonalSpacePayloadValidator.isRichMessageType(messageType);
+        if (!isRich
+                && messageType != MessageType.TEXT
+                && messageType != MessageType.MIXED
+                && messageType != MessageType.ATTACHMENT) {
             throw new IllegalArgumentException("This message cannot be edited");
         }
 
@@ -326,7 +375,11 @@ public class ChatMessageCommandService {
         String normalizedContent = newContent == null ? "" : newContent.trim();
         MessageType resultingType;
 
-        if (normalizedContent.isBlank()) {
+        if (isRich) {
+            personalSpacePayloadValidator.validate(messageType, normalizedContent);
+            message.setContent(normalizedContent);
+            resultingType = messageType;
+        } else if (normalizedContent.isBlank()) {
             if (!hasAttachments) {
                 throw new IllegalArgumentException("Message content cannot be blank");
             }

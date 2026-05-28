@@ -162,126 +162,133 @@ const ChatFolderRailSection = ({ activeFolderId, onSelectFolder }) => {
               const FolderIcon = folder.collapsed ? FolderOutlinedIcon : FolderOpenOutlinedIcon;
 
               return (
-                <Tooltip
+                <Box
                   key={folder.id}
-                  title={
-                    unread > 0
-                      ? `${folder.name} (${unread} unread)`
-                      : folder.name
-                  }
-                  placement="right"
+                  sx={{
+                    position: 'relative',
+                    width: '100%',
+                    maxWidth: 64,
+                    mx: 'auto',
+                    flexShrink: 0,
+                  }}
                 >
-                  <Box
-                    component="div"
-                    role="button"
-                    tabIndex={0}
-                    aria-label={folder.name}
-                    aria-current={active ? 'true' : undefined}
-                    aria-expanded={!folder.collapsed}
-                    onClick={() => onSelectFolder?.(folder.id)}
-                    onDoubleClick={(e) => {
-                      e.preventDefault();
-                      toggleFolderCollapsed(folder.id);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onSelectFolder?.(folder.id);
-                      }
-                    }}
-                    onDragOver={(e) => handleDragOver(e, folder.id)}
-                    onDragLeave={() => handleDragLeave(folder.id)}
-                    onDrop={(e) => handleDrop(e, folder.id)}
-                    sx={{
-                      width: '100%',
-                      maxWidth: 64,
-                      mx: 'auto',
-                      flexShrink: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 0.25,
-                      py: 0.25,
-                      borderRadius: 2,
-                      cursor: 'pointer',
-                      outline: isDropTarget ? '2px dashed rgba(123, 97, 255, 0.85)' : 'none',
-                      outlineOffset: 1,
-                      bgcolor: isDropTarget
-                        ? 'rgba(123, 97, 255, 0.18)'
-                        : active
-                          ? chatColors.navActiveBg
-                          : 'transparent',
-                      transition: 'background-color 0.15s ease, outline 0.15s ease',
-                      '&:hover': {
-                        bgcolor: isDropTarget
-                          ? 'rgba(123, 97, 255, 0.22)'
-                          : active
-                            ? chatColors.navActiveBg
-                            : 'rgba(16, 8, 26, 0.06)',
-                      },
-                    }}
+                  <Tooltip
+                    title={
+                      unread > 0
+                        ? `${folder.name} (${unread} unread)`
+                        : folder.name
+                    }
+                    placement="right"
                   >
                     <Box
-                      sx={{
-                        position: 'relative',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 40,
-                        height: 32,
-                        color: active || isDropTarget ? chatColors.primary : chatColors.navIcon,
-                        transition: 'color 0.15s ease',
+                      component="div"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={folder.name}
+                      aria-current={active ? 'true' : undefined}
+                      aria-expanded={!folder.collapsed}
+                      onClick={() => onSelectFolder?.(folder.id)}
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        toggleFolderCollapsed(folder.id);
                       }}
-                    >
-                      <FolderIcon fontSize="small" />
-                      {unread > 0 ? (
-                        <Box
-                          component="span"
-                          aria-hidden
-                          sx={{
-                            position: 'absolute',
-                            top: 2,
-                            right: 2,
-                            width: 7,
-                            height: 7,
-                            borderRadius: '50%',
-                            bgcolor: chatColors.unreadBadge,
-                            border: '1.5px solid',
-                            borderColor: chatColors.glassList,
-                          }}
-                        />
-                      ) : null}
-                    </Box>
-                    <Typography
-                      component="span"
-                      variant="caption"
-                      title={folder.name}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectFolder?.(folder.id);
+                        }
+                      }}
+                      onDragOver={(e) => handleDragOver(e, folder.id)}
+                      onDragLeave={() => handleDragLeave(folder.id)}
+                      onDrop={(e) => handleDrop(e, folder.id)}
                       sx={{
                         width: '100%',
-                        px: 0.25,
-                        fontSize: '0.625rem',
-                        lineHeight: 1.2,
-                        textAlign: 'center',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        color: isDropTarget
-                          ? chatColors.primary
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 0.25,
+                        py: 0.25,
+                        borderRadius: 2,
+                        cursor: 'pointer',
+                        outline: isDropTarget ? '2px dashed rgba(123, 97, 255, 0.85)' : 'none',
+                        outlineOffset: 1,
+                        bgcolor: isDropTarget
+                          ? 'rgba(123, 97, 255, 0.18)'
                           : active
-                            ? chatColors.glassPanelText
-                            : chatColors.glassPanelTextMuted,
-                        fontWeight: isDropTarget || active ? 700 : 500,
-                        letterSpacing: isDropTarget ? '0.02em' : 0,
-                        textDecoration: isDropTarget ? 'underline' : 'none',
-                        textDecorationColor: chatColors.primary,
-                        textUnderlineOffset: 2,
-                        transition: 'color 0.15s ease, font-weight 0.15s ease',
+                            ? chatColors.navActiveBg
+                            : 'transparent',
+                        transition: 'background-color 0.15s ease, outline 0.15s ease',
+                        '&:hover': {
+                          bgcolor: isDropTarget
+                            ? 'rgba(123, 97, 255, 0.22)'
+                            : active
+                              ? chatColors.navActiveBg
+                              : 'rgba(16, 8, 26, 0.06)',
+                        },
                       }}
                     >
-                      {folder.name}
-                    </Typography>
-                  </Box>
-                </Tooltip>
+                      <Box
+                        sx={{
+                          position: 'relative',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 40,
+                          height: 32,
+                          color: active || isDropTarget ? chatColors.primary : chatColors.navIcon,
+                          transition: 'color 0.15s ease',
+                        }}
+                      >
+                        <FolderIcon fontSize="small" />
+                        {unread > 0 ? (
+                          <Box
+                            component="span"
+                            aria-hidden
+                            sx={{
+                              position: 'absolute',
+                              top: 2,
+                              right: 2,
+                              width: 7,
+                              height: 7,
+                              borderRadius: '50%',
+                              bgcolor: chatColors.unreadBadge,
+                              border: '1.5px solid',
+                              borderColor: chatColors.glassList,
+                            }}
+                          />
+                        ) : null}
+                      </Box>
+                      <Typography
+                        component="span"
+                        variant="caption"
+                        title={folder.name}
+                        sx={{
+                          width: '100%',
+                          px: 0.25,
+                          fontSize: '0.625rem',
+                          lineHeight: 1.2,
+                          textAlign: 'center',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          color: isDropTarget
+                            ? chatColors.primary
+                            : active
+                              ? chatColors.glassPanelText
+                              : chatColors.glassPanelTextMuted,
+                          fontWeight: isDropTarget || active ? 700 : 500,
+                          letterSpacing: isDropTarget ? '0.02em' : 0,
+                          textDecoration: isDropTarget ? 'underline' : 'none',
+                          textDecorationColor: chatColors.primary,
+                          textUnderlineOffset: 2,
+                          transition: 'color 0.15s ease, font-weight 0.15s ease',
+                        }}
+                      >
+                        {folder.name}
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                </Box>
               );
             })}
           </Box>

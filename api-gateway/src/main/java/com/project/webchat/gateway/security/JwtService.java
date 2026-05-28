@@ -22,7 +22,18 @@ public class JwtService {
 
     public Long extractUserId(String token) {
         Claims claims = extractAllClaims(token);
-        return claims.get("userId", Long.class);
+        Object raw = claims.get("userId");
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(raw.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     public String extractEmail(String token) {

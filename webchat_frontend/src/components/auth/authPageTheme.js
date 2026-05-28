@@ -121,6 +121,41 @@ export const authPrimaryButtonSx = withReducedMotion({
   },
 });
 
+/** Country-code Autocomplete panel on login / register (glass mode). */
+export const glassCountryDropdownPaperSx = {
+  mt: 0.75,
+  borderRadius: '16px',
+  border: '1px solid rgba(255, 255, 255, 0.42)',
+  background: 'rgba(255, 255, 255, 0.08)',
+  backdropFilter: 'blur(40px) saturate(1.2)',
+  WebkitBackdropFilter: 'blur(40px) saturate(1.2)',
+  boxShadow: '0 16px 48px rgba(26, 20, 60, 0.45)',
+  overflow: 'hidden',
+  backgroundImage: 'none',
+  ...authHideScrollbarSx,
+};
+
+export const glassCountryDropdownListboxSx = {
+  maxHeight: 280,
+  py: 0.5,
+  ...authHideScrollbarSx,
+};
+
+export const glassCountryDropdownOptionSx = {
+  color: 'rgba(255, 255, 255, 0.95)',
+  fontSize: '0.875rem',
+  minHeight: 40,
+  '&[aria-selected="true"]': {
+    bgcolor: 'rgba(255, 255, 255, 0.2) !important',
+  },
+  '&.Mui-focused': {
+    bgcolor: 'rgba(255, 255, 255, 0.12) !important',
+  },
+  '&:active': {
+    bgcolor: 'rgba(255, 255, 255, 0.16) !important',
+  },
+};
+
 export const glassFieldSx = {
   '& .MuiOutlinedInput-root': {
     borderRadius: '999px',

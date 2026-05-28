@@ -15,6 +15,7 @@ import com.project.webchat.chat.entity.MessageType;
 import com.project.webchat.chat.service.message.ChatMessageCommandService;
 import com.project.webchat.chat.service.message.MessageReactionService;
 import com.project.webchat.chat.service.room.ChatRoomManagementService;
+import com.project.webchat.chat.service.room.PersonalSpaceService;
 import com.project.webchat.chat.service.room.PrivateChatService;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,18 @@ public class ChatService {
     private final MessageReactionService messageReactionService;
     private final ChatRoomManagementService chatRoomManagementService;
     private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final PersonalSpaceService personalSpaceService;
+
+    @Transactional
+    public ChatRoomDTO getOrCreatePersonalSpace(Long userId) {
+        return personalSpaceService.getOrCreatePersonalSpace(userId);
+    }
+
+    @Transactional
+    public ChatMessageDTO sendRichMessage(Long senderId, String chatId, MessageType type,
+                                          String content, String replyToMessageId) {
+        return chatMessageCommandService.sendRichMessage(senderId, chatId, type, content, replyToMessageId);
+    }
 
     @Transactional
     public ChatRoomDTO createChat(Long userId1, Long userId2) {
@@ -102,6 +115,11 @@ public class ChatService {
     }
 
     @Transactional
+    public void deleteRoom(String roomId, Long userId) {
+        chatRoomManagementService.deleteRoom(roomId, userId);
+    }
+
+    @Transactional
     public ChatRoomDTO createGroupRoom(Long creatorId, CreateGroupChannelRequest request) {
         return chatRoomManagementService.createGroupRoom(creatorId, request);
     }
@@ -155,6 +173,12 @@ public class ChatService {
     @Transactional
     public ChatRoomDTO updateRoomPhoto(String roomId, Long actorId, String groupPhotoRaw) {
         return chatRoomManagementService.updateRoomPhoto(roomId, actorId, groupPhotoRaw);
+    }
+
+    @Transactional
+    public ChatRoomDTO updateRoomProfile(String roomId, Long actorId,
+                                         com.project.webchat.chat.dto.UpdateRoomProfileRequest request) {
+        return chatRoomManagementService.updateRoomProfile(roomId, actorId, request);
     }
 
     public List<RoomMemberInviteDTO> listPendingRoomMemberInvites(Long inviteeUserId) {

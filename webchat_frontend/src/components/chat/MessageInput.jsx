@@ -3,12 +3,15 @@ import { Alert, Box, Chip, IconButton, TextField, Tooltip, Typography } from '@m
 import { alpha } from '@mui/material/styles';
 import SendIcon from '@mui/icons-material/Send';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
 import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined';
+import PersonalSpacePinMenu from '../personalSpace/PersonalSpacePinMenu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import CloseIcon from '@mui/icons-material/Close';
 import { parseQuotedSnippetFromMessage } from '../../utils/quotedMessagePreview';
 import { QuotedKindIcon } from './QuotedKindIcon';
 import { chatColors, chatRadii } from '../../theme/chatDesignTokens';
+import { ATTACHMENT_ACCEPT } from '../../utils/attachmentConstraints';
 
 const TYPING_NOTIFY_MS = 400;
 
@@ -29,10 +32,14 @@ const MessageInput = forwardRef(function MessageInput(
     onDismissComposerError,
     channelReadOnly = false,
     channelReadOnlyHint = 'Only the channel owner or admins can post in this channel.',
+    onInsertRichMessage,
+    richMessageSending = false,
   },
   ref,
 ) {
   const fileInputRef = useRef(null);
+  const pinButtonRef = useRef(null);
+  const [pinMenuOpen, setPinMenuOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const lastTypingNotifyRef = useRef(0);
 
@@ -241,11 +248,34 @@ const MessageInput = forwardRef(function MessageInput(
             multiple
             hidden
             onChange={handleFileSelection}
-            accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.txt,image/*,video/*"
+            accept={ATTACHMENT_ACCEPT}
           />
           <IconButton onClick={handleOpenFilePicker} aria-label="Attach file" size="small">
             <AttachFileIcon />
           </IconButton>
+
+          <Tooltip title="Insert to-do, sticky note, or reminder">
+            <span>
+              <IconButton
+                ref={pinButtonRef}
+                aria-label="Insert workspace block"
+                size="small"
+                disabled={channelReadOnly || richMessageSending || !onInsertRichMessage}
+                onClick={() => setPinMenuOpen(true)}
+              >
+                <PushPinOutlinedIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <PersonalSpacePinMenu
+            anchorEl={pinButtonRef.current}
+            open={pinMenuOpen}
+            onClose={() => setPinMenuOpen(false)}
+            onSelect={(type) => {
+              setPinMenuOpen(false);
+              onInsertRichMessage?.(type);
+            }}
+          />
 
           <Tooltip title={emojiSidebarOpen ? 'Hide emoji sidebar' : 'Show emoji sidebar'}>
             <IconButton onClick={onToggleEmojiSidebar} aria-label="Toggle emoji picker" size="small">

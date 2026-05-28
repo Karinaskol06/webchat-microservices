@@ -7,6 +7,7 @@ import com.project.webchat.shared.dto.UserSearchResultDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.CredentialsDTO;
 import com.project.webchat.shared.dto.UserCredentialsResponse;
+import com.project.webchat.user.dto.IncomingContactRequestDTO;
 import com.project.webchat.user.dto.UserSearchPageResponse;
 import com.project.webchat.user.entity.FriendRequest;
 import com.project.webchat.user.service.ContactService;
@@ -90,6 +91,13 @@ public class UserServiceController {
         return ResponseEntity.ok(exists);
     }
 
+    @GetMapping("/resolve-login/{loginIdentifier}")
+    public ResponseEntity<String> resolveLoginIdentifier(@PathVariable String loginIdentifier) {
+        return userService.resolveUsernameForLogin(loginIdentifier)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @GetMapping("/search")
     public ResponseEntity<UserSearchPageResponse> searchUsers(
             @RequestParam("query") String query,
@@ -165,10 +173,16 @@ public class UserServiceController {
         return ResponseEntity.status(HttpStatus.CREATED).body(request);
     }
 
-    @GetMapping("/contacts/requests/incoming")
-    public ResponseEntity<java.util.List<FriendRequest>> getIncomingRequests(
+    @GetMapping("/contacts")
+    public ResponseEntity<java.util.List<UserDTO>> getContacts(
             @RequestHeader("X-User-Id") Long currentUserId) {
-        return ResponseEntity.ok(contactService.getIncomingPendingRequests(currentUserId));
+        return ResponseEntity.ok(contactService.getContacts(currentUserId));
+    }
+
+    @GetMapping("/contacts/requests/incoming")
+    public ResponseEntity<java.util.List<IncomingContactRequestDTO>> getIncomingRequests(
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        return ResponseEntity.ok(contactService.getIncomingPendingRequestViews(currentUserId));
     }
 
     @PostMapping("/contacts/requests/{id}/accept")

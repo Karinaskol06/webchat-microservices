@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  Avatar,
   Box,
   Button,
   CircularProgress,
@@ -22,6 +21,7 @@ import { getApiErrorMessage } from "../../services/api";
 import useAuthStore from "../../store/useAuthStore";
 import PhoneCountryField from "../common/PhoneCountryField";
 import { isValidInternationalPhone } from "../../utils/internationalPhone";
+import UserAvatar from "./UserAvatar";
 
 const toInputDate = (value) => (value ? new Date(value) : null);
 const toIsoDate = (value) => (value ? value.toISOString().slice(0, 10) : null);
@@ -112,7 +112,7 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
     return () => {
       cancelled = true;
     };
-  }, [open, user]);
+  }, [open, user?.id]);
 
   const displayName = useMemo(() => {
     if (!profile) return "";
@@ -123,21 +123,34 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
     setProfile((prev) => ({ ...prev, [name]: value }));
   };
 
-  const refreshCurrentProfile = async (showMessage) => {
-    const updated = await userService.getCurrentProfile();
-    setUser(updated);
+  const applyUpdatedProfile = (updated, showMessage, changedImageKind = null) => {
+    if (!updated) return;
+    const versionedProfilePicture =
+      changedImageKind === "avatar" && updated.profilePicture
+        ? appendVersion(updated.profilePicture)
+        : updated.profilePicture || null;
+    const versionedBackgroundPicture =
+      changedImageKind === "background"
+        ? appendVersion(updated.backgroundPicture || `/api/users/${updated.id}/background`)
+        : updated.backgroundPicture || null;
+    const decorated = {
+      ...updated,
+      profilePicture: versionedProfilePicture,
+      backgroundPicture: versionedBackgroundPicture,
+    };
+    setUser(decorated);
     setProfile((prev) => ({
       ...(prev || {}),
-      ...updated,
-      birthday: toInputDate(updated.birthday),
+      ...decorated,
+      birthday: toInputDate(decorated.birthday),
     }));
     setInitialProfile({
-      firstName: updated.firstName || "",
-      lastName: updated.lastName || "",
-      description: updated.description || "",
-      birthday: toIsoDate(toInputDate(updated.birthday)),
-      phoneNumber: updated.phoneNumber || "",
-      countryCode: (updated.countryCode || "").toUpperCase(),
+      firstName: decorated.firstName || "",
+      lastName: decorated.lastName || "",
+      description: decorated.description || "",
+      birthday: toIsoDate(toInputDate(decorated.birthday)),
+      phoneNumber: decorated.phoneNumber || "",
+      countryCode: (decorated.countryCode || "").toUpperCase(),
     });
     if (showMessage) {
       setSnackbar(showMessage);
@@ -199,21 +212,13 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
     setError("");
     setIsSaving(true);
     try {
+      let updated = null;
       if (kind === "avatar") {
-        await userService.uploadAvatar(file);
+        updated = await userService.uploadAvatar(file);
       } else {
-        await userService.uploadBackground(file);
+        updated = await userService.uploadBackground(file);
       }
-      await refreshCurrentProfile("Image updated");
-      setProfile((prev) => ({
-        ...(prev || {}),
-        profilePicture:
-          kind === "avatar" ? appendVersion(prev?.profilePicture || `/api/users/${user?.id}/avatar`) : prev?.profilePicture,
-        backgroundPicture:
-          kind === "background"
-            ? appendVersion(prev?.backgroundPicture || `/api/users/${user?.id}/background`)
-            : prev?.backgroundPicture,
-      }));
+      applyUpdatedProfile(updated, "Image updated", kind);
     } catch (uploadError) {
       setError(getApiErrorMessage(uploadError, "Failed to upload image"));
     } finally {
@@ -225,12 +230,13 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
     setError("");
     setIsSaving(true);
     try {
+      let updated = null;
       if (kind === "avatar") {
-        await userService.removeAvatar();
+        updated = await userService.removeAvatar();
       } else {
-        await userService.removeBackground();
+        updated = await userService.removeBackground();
       }
-      await refreshCurrentProfile("Image removed");
+      applyUpdatedProfile(updated, "Image removed");
     } catch (removeError) {
       setError(getApiErrorMessage(removeError, "Failed to remove image"));
     } finally {
@@ -279,8 +285,8 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
                   </Stack>
                 )}
               </Box>
-              <Avatar
-                src={profile.profilePicture || undefined}
+              <UserAvatar
+                user={profile}
                 sx={{
                   position: "absolute",
                   left: 24,
@@ -288,13 +294,12 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
                   transform: "translateY(50%)",
                   width: 96,
                   height: 96,
+                  fontSize: "2rem",
                   border: "4px solid",
                   borderColor: "background.paper",
                   boxShadow: 2,
                 }}
-              >
-                {(profile.firstName?.[0] || profile.username?.[0] || "U").toUpperCase()}
-              </Avatar>
+              />
             </Box>
             {/* Clear space under overlapping avatar */}
             <Box sx={{ height: 52 }} />

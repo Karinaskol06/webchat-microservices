@@ -1,6 +1,31 @@
 import api, { getApiErrorMessage } from "./api";
 
 const chatService = {
+  getPersonalSpace: async () => {
+    try {
+      const response = await api.get('/api/chat/personal-space');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  sendRichMessage: async (chatId, type, content, replyToMessageId = null) => {
+    try {
+      const response = await api.post(
+        `/api/chat/${encodeURIComponent(chatId)}/rich-messages`,
+        {
+          type,
+          content,
+          ...(replyToMessageId ? { replyToMessageId } : {}),
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // create a new chat with the specified user
   createPrivateChat: async (createChatData) => {
     try {
@@ -98,6 +123,18 @@ const chatService = {
     } catch (error) {
       throw error.response?.data || error.message;
     }
+  },
+
+  updateRoomProfile: async (roomId, { groupName, description, groupPhoto } = {}) => {
+    const body = {};
+    if (groupName !== undefined) body.groupName = groupName;
+    if (description !== undefined) body.description = description;
+    if (groupPhoto !== undefined) body.groupPhoto = groupPhoto;
+    const response = await api.patch(
+      `/api/chat/rooms/${encodeURIComponent(roomId)}`,
+      body,
+    );
+    return response.data;
   },
 
   inviteRoomMemberByUsername: async (roomId, username) => {
@@ -246,35 +283,23 @@ const chatService = {
 
   uploadAttachments: async (chatId, files) => {
     const formData = new FormData();
-
-    // Важливо: додаємо кожен файл окремо
-    files.forEach(file => {
+    files.forEach((file) => {
       formData.append('files', file);
     });
 
-    try {
-      // Перевіряємо чи є токен
-      const token = localStorage.getItem('token');
-      console.log('📤 Uploading to:', `/api/chat/${chatId}/attachments`);
-      console.log('🔑 Token exists:', !!token);
-
-      const response = await api.post(`/api/chat/${chatId}/attachments`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          // Переконайтесь, що Authorization додається
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      return response.data;
-    } catch (error) {
-      console.error('❌ Upload error details:', {
-        status: error.response?.status,
-        message: error.response?.data,
-        headers: error.response?.headers
-      });
-      throw error;
-    }
+    const token = localStorage.getItem('token');
+    const response = await api.post(
+      `/api/chat/${encodeURIComponent(chatId)}/attachments`,
+      formData,
+      token
+        ? {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        : undefined,
+    );
+    return response.data;
   },
 
   getChatAttachments: async (chatId) => {
@@ -374,6 +399,19 @@ const chatService = {
       await api.post(`/api/chat/${chatId}/leave`);
     } catch (error) {
       throw error.response?.data || error.message;
+    }
+  },
+
+  deleteRoom: async (roomId) => {
+    try {
+      await api.delete(`/api/chat/rooms/${encodeURIComponent(roomId)}`);
+    } catch (error) {
+      const data = error.response?.data;
+      const message =
+        typeof data === 'string'
+          ? data
+          : data?.message || error.message || 'Failed to delete room';
+      throw new Error(message);
     }
   },
 

@@ -291,7 +291,12 @@ export const disconnectWebSocket = () => {
   }
 };
 
-const attachUserEventSubscriptions = ({ onChatCreated, onChatUpdated, onRoomMemberInvite } = {}) => {
+const attachUserEventSubscriptions = ({
+  onChatCreated,
+  onChatUpdated,
+  onChatDeleted,
+  onRoomMemberInvite,
+} = {}) => {
   if (!isStompConnected()) return [];
   const subscriptions = [];
   if (onChatCreated) {
@@ -316,6 +321,17 @@ const attachUserEventSubscriptions = ({ onChatCreated, onChatUpdated, onRoomMemb
       })
     );
   }
+  if (onChatDeleted) {
+    subscriptions.push(
+      stompClient.subscribe(`/user/queue/chats/deleted`, (frame) => {
+        try {
+          onChatDeleted(JSON.parse(frame.body));
+        } catch (error) {
+          console.error('Failed to parse chat deleted event:', error);
+        }
+      }),
+    );
+  }
   if (onRoomMemberInvite) {
     subscriptions.push(
       stompClient.subscribe(`/user/queue/rooms/member-invites/new`, (frame) => {
@@ -330,8 +346,13 @@ const attachUserEventSubscriptions = ({ onChatCreated, onChatUpdated, onRoomMemb
   return subscriptions;
 };
 
-export const subscribeToUserChatEvents = ({ onChatCreated, onChatUpdated, onRoomMemberInvite } = {}) => {
-  const handlers = { onChatCreated, onChatUpdated, onRoomMemberInvite };
+export const subscribeToUserChatEvents = ({
+  onChatCreated,
+  onChatUpdated,
+  onChatDeleted,
+  onRoomMemberInvite,
+} = {}) => {
+  const handlers = { onChatCreated, onChatUpdated, onChatDeleted, onRoomMemberInvite };
   pendingUserEventHandlers.push(handlers);
   const subscriptions = attachUserEventSubscriptions(handlers);
   userEventSubscriptions.push(...subscriptions);

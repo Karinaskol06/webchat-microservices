@@ -4,6 +4,11 @@ import {
   Button,
   Box,
   Typography,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from '@mui/material';
 import ChatShell from '../components/layout/ChatShell';
 import ChatInfoSidebar from '../components/chat/ChatInfoSidebar';
@@ -22,6 +27,8 @@ import UserSearchDialog from '../components/chat/UserSearchDialog';
 import RoomProfileDialog from '../components/chat/RoomProfileDialog';
 import ChatSettingsDialog from '../components/chat/ChatSettingsDialog';
 import ChatInMessageSearch from '../components/chat/ChatInMessageSearch';
+import TwoStepDeleteRoomDialog from '../components/chat/TwoStepDeleteRoomDialog';
+import useChatFolderStore from '../store/useChatFolderStore';
 import { findInChatMessageMatches } from '../utils/chatMessageSearch';
 import useWebSocket from '../hooks/useWebSocket';
 import useMessages from '../hooks/useMessages';
@@ -30,7 +37,18 @@ import useTyping from '../hooks/useTyping';
 import { useShallow } from 'zustand/react/shallow';
 import contactsService from '../services/contactsService';
 import { useSearchParams } from 'react-router-dom';
-import { channelPostingRestricted } from '../utils/channelPermissions';
+import {
+  canDeleteRoom,
+  canLeaveRoom,
+  channelPostingRestricted,
+  roomTypeLabel,
+} from '../utils/channelPermissions';
+import {
+  createCalloutPayload,
+  createStickyPayload,
+  createTodoPayload,
+  serializePayload,
+} from '../utils/personalSpace';
 
 const ChatPage = () => {
   const { currentChat, messages } = useChatStore(
@@ -43,6 +61,8 @@ const ChatPage = () => {
   const { user } = useAuthStore();
   const chats = useChatStore((state) => state.chats);
   const setCurrentChat = useChatStore((state) => state.setCurrentChat);
+  const removeChat = useChatStore((state) => state.removeChat);
+  const assignChatToFolder = useChatFolderStore((s) => s.assignChatToFolder);
   const [searchParams, setSearchParams] = useSearchParams();
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [profileDialogUser, setProfileDialogUser] = useState(null);
@@ -62,26 +82,51 @@ const ChatPage = () => {
   const [contactActionLoading, setContactActionLoading] = useState(false);
   const [roomMemberInvites, setRoomMemberInvites] = useState([]);
   const [roomInviteActionLoading, setRoomInviteActionLoading] = useState(false);
+  const [messageToForward, setMessageToForward] = useState(null);
+  const [personalSpaceActive, setPersonalSpaceActive] = useState(false);
+  const [richMessageSending, setRichMessageSending] = useState(false);
+  const [roomInfoPanelOpen, setRoomInfoPanelOpen] = useState(true);
+  const [leaveRoomDialogOpen, setLeaveRoomDialogOpen] = useState(false);
+  const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
+  const [roomActionLoading, setRoomActionLoading] = useState(false);
+  const [roomActionError, setRoomActionError] = useState('');
+  const addMessage = useChatStore((state) => state.addMessage);
   const afkTimeoutRef = useRef(null);
   const heartbeatIntervalRef = useRef(null);
   const isAfkRef = useRef(false);
   const composerRef = useRef(null);
-  
+
+  const {
+    composerError,
+    setComposerError,
+    handleSendMessage,
+    handleTyping,
+    selectedAttachments,
+    handleSelectAttachments,
+    handleRemoveAttachment,
+    messagesEndRef,
+    replyToMessage,
+    setReplyToMessage,
+  } = useMessages(currentChat, composerRef);
+
   const otherUser =
     currentChat?.otherUser ||
     messages.find((m) => m.sender && m.sender.id !== user?.id)?.sender ||
     null;
 
   const chatTypeUpper = String(currentChat?.type || '').toUpperCase();
+  const isPersonalSpace = chatTypeUpper === 'PERSONAL_SPACE';
   const isGroupOrChannel = chatTypeUpper === 'GROUP' || chatTypeUpper === 'CHANNEL';
 
   const headerTitle = useMemo(() => {
+    if (isPersonalSpace) return currentChat?.groupName || 'Personal Space';
     if (!isGroupOrChannel) return undefined;
     if (chatTypeUpper === 'CHANNEL') return currentChat?.groupName || 'Channel';
     return currentChat?.groupName || 'Group chat';
-  }, [isGroupOrChannel, chatTypeUpper, currentChat?.groupName]);
+  }, [isGroupOrChannel, isPersonalSpace, chatTypeUpper, currentChat?.groupName]);
 
   const headerSubtitle = useMemo(() => {
+    if (isPersonalSpace) return 'Notes, to-dos & reminders';
     if (!isGroupOrChannel) return undefined;
     const vis = String(currentChat?.visibility || '').toUpperCase();
     const kind = chatTypeUpper === 'CHANNEL' ? 'Channel' : 'Group';
@@ -89,9 +134,78 @@ const ChatPage = () => {
     const mc = currentChat?.memberCount;
     const countPart = typeof mc === 'number' ? ` · ${mc} members` : '';
     return `${kind} · ${visLabel}${countPart}`;
-  }, [isGroupOrChannel, chatTypeUpper, currentChat?.visibility, currentChat?.memberCount]);
+  }, [isGroupOrChannel, isPersonalSpace, chatTypeUpper, currentChat?.visibility, currentChat?.memberCount]);
 
-  const headerAvatarSrc = isGroupOrChannel ? currentChat?.groupPhoto : undefined;
+  useEffect(() => {
+    setPersonalSpaceActive(String(currentChat?.type || '').toUpperCase() === 'PERSONAL_SPACE');
+  }, [currentChat?.id, currentChat?.type]);
+
+  useEffect(() => {
+    setRoomInfoPanelOpen(true);
+  }, [currentChat?.id]);
+
+  const openPersonalSpace = useCallback(async () => {
+    try {
+      const room = await chatService.getPersonalSpace();
+      useChatStore.getState().upsertChat(room);
+      setCurrentChat(room);
+      setUserSearchOpen(false);
+      setSettingsOpen(false);
+    } catch (err) {
+      console.error('Failed to open personal space', err);
+    }
+  }, [setCurrentChat]);
+
+  const handleInsertRichMessage = useCallback(
+    async (type) => {
+      if (!currentChat?.id || richMessageSending) return;
+      let payload;
+      const upper = String(type || '').toUpperCase();
+      switch (upper) {
+        case 'TODO':
+          payload = createTodoPayload();
+          break;
+        case 'STICKY_NOTE':
+          payload = createStickyPayload({
+            x: 40 + Math.floor(Math.random() * 120),
+            y: 40 + Math.floor(Math.random() * 80),
+          });
+          break;
+        case 'CALLOUT':
+          payload = createCalloutPayload();
+          break;
+        default:
+          return;
+      }
+      setRichMessageSending(true);
+      setComposerError('');
+      try {
+        const created = await chatService.sendRichMessage(
+          currentChat.id,
+          upper,
+          serializePayload(payload),
+          replyToMessage?.id || null,
+        );
+        addMessage(created);
+        setReplyToMessage(null);
+      } catch (error) {
+        console.error('Failed to insert block', error);
+        setComposerError('Could not add this block. Please try again.');
+      } finally {
+        setRichMessageSending(false);
+      }
+    },
+    [
+      addMessage,
+      currentChat?.id,
+      replyToMessage?.id,
+      richMessageSending,
+      setComposerError,
+      setReplyToMessage,
+    ],
+  );
+
+  const headerAvatarSrc = isGroupOrChannel || isPersonalSpace ? currentChat?.groupPhoto : undefined;
   const { openSeparatorIndex, liveBeforeMessageId, scrollToMessageId } =
     useUnreadMessageSeparator({
       userId: user?.id,
@@ -101,10 +215,11 @@ const ChatPage = () => {
     });
 
   const headerAvatarLetter = useMemo(() => {
+    if (isPersonalSpace) return 'P';
     if (!isGroupOrChannel) return undefined;
     const n = currentChat?.groupName;
     return (n?.[0] || (chatTypeUpper === 'CHANNEL' ? 'C' : 'G')).toUpperCase();
-  }, [isGroupOrChannel, chatTypeUpper, currentChat?.groupName]);
+  }, [isGroupOrChannel, isPersonalSpace, chatTypeUpper, currentChat?.groupName]);
 
   const showCopyRoomInvite = Boolean(
     isGroupOrChannel &&
@@ -128,23 +243,52 @@ const ChatPage = () => {
     }
   }, [currentChat?.id]);
 
+  const clearRoomFromClient = useCallback(
+    (chatId) => {
+      if (chatId != null) {
+        removeChat(chatId);
+        assignChatToFolder(chatId, null);
+      }
+      setCurrentChat(null);
+      setLeaveRoomDialogOpen(false);
+      setDeleteRoomDialogOpen(false);
+      setRoomActionError('');
+    },
+    [removeChat, assignChatToFolder, setCurrentChat],
+  );
+
+  const handleConfirmLeaveRoom = useCallback(async () => {
+    if (!currentChat?.id) return;
+    setRoomActionLoading(true);
+    setRoomActionError('');
+    try {
+      await chatService.leaveChat(currentChat.id);
+      clearRoomFromClient(currentChat.id);
+    } catch (err) {
+      setRoomActionError(err?.message || 'Failed to leave room');
+    } finally {
+      setRoomActionLoading(false);
+    }
+  }, [currentChat?.id, clearRoomFromClient]);
+
+  const handleConfirmDeleteRoom = useCallback(async () => {
+    if (!currentChat?.id) return;
+    setRoomActionLoading(true);
+    setRoomActionError('');
+    try {
+      await chatService.deleteRoom(currentChat.id);
+      clearRoomFromClient(currentChat.id);
+    } catch (err) {
+      setRoomActionError(err?.message || 'Failed to delete room');
+    } finally {
+      setRoomActionLoading(false);
+    }
+  }, [currentChat?.id, clearRoomFromClient]);
+
+  const roomDisplayName = currentChat?.groupName || roomTypeLabel(currentChat);
+
   // Use the typing hook instead of direct store access
   const { isOtherUserTyping } = useTyping(currentChat, otherUser);
-
-  const {
-    composerError,
-    setComposerError,
-    handleSendMessage,
-    handleTyping,
-    selectedAttachments,
-    handleSelectAttachments,
-    handleRemoveAttachment,
-    messagesEndRef,
-    replyToMessage,
-    setReplyToMessage,
-  } = useMessages(currentChat, composerRef);
-
-  const [messageToForward, setMessageToForward] = useState(null);
 
   const closeProfileDialog = () => {
     setProfileDialogOpen(false);
@@ -388,7 +532,7 @@ const ChatPage = () => {
         username: selectedUser.username,
         firstName: selectedUser.firstName,
         lastName: selectedUser.lastName,
-        profilePicture: selectedUser.avatar || null,
+        profilePicture: selectedUser.avatar ?? selectedUser.profilePicture ?? null,
       },
       lastMessage: null,
       unreadCount: 0,
@@ -508,10 +652,10 @@ const ChatPage = () => {
   );
 
   const openRoomProfileFromHeader = useCallback(() => {
-    if (currentChat?.id && isGroupOrChannel) {
+    if (currentChat?.id && (isGroupOrChannel || isPersonalSpace)) {
       openRoomProfileById(currentChat.id);
     }
-  }, [currentChat?.id, isGroupOrChannel, openRoomProfileById]);
+  }, [currentChat?.id, isGroupOrChannel, isPersonalSpace, openRoomProfileById]);
 
   const closeRoomProfile = useCallback(() => {
     setRoomProfileOpen(false);
@@ -597,18 +741,30 @@ const ChatPage = () => {
           presenceStatus={presenceStatus}
           isTyping={isOtherUserTyping}
           emojiSidebarOpen={emojiSidebarOpen}
-          onOpenProfile={isGroupOrChannel ? openRoomProfileFromHeader : openPartnerProfile}
+          onOpenProfile={isGroupOrChannel || isPersonalSpace ? openRoomProfileFromHeader : openPartnerProfile}
           onShowEmojiSidebar={() => setEmojiSidebarOpen(true)}
           headerTitle={headerTitle}
           headerSubtitle={headerSubtitle}
           headerAvatarSrc={headerAvatarSrc}
           headerAvatarLetter={headerAvatarLetter}
-          headerAvatarClickable={isGroupOrChannel || Boolean(otherUser)}
+          headerAvatarClickable={isGroupOrChannel || isPersonalSpace || Boolean(otherUser)}
           showCopyInvite={showCopyRoomInvite}
           onCopyInvite={handleCopyRoomInvite}
           isGroupOrChannel={isGroupOrChannel}
+          canLeaveRoom={canLeaveRoom(currentChat)}
+          canDeleteRoom={canDeleteRoom(currentChat)}
+          onRequestLeaveRoom={() => {
+            setRoomActionError('');
+            setLeaveRoomDialogOpen(true);
+          }}
+          onRequestDeleteRoom={() => {
+            setRoomActionError('');
+            setDeleteRoomDialogOpen(true);
+          }}
           inChatSearchOpen={inChatSearchOpen}
           onToggleInChatSearch={toggleInChatSearch}
+          roomInfoPanelOpen={roomInfoPanelOpen}
+          onToggleRoomInfoPanel={() => setRoomInfoPanelOpen((open) => !open)}
         />
       </Box>
 
@@ -696,6 +852,7 @@ const ChatPage = () => {
         inChatSearchMatches={inChatSearchMatches}
         activeInChatSearchMatch={activeInChatSearchMatch}
         onOpenEmojiSidebarForReaction={handleOpenEmojiSidebarForReaction}
+        isPersonalSpace={isPersonalSpace}
       />
 
       <MessageInput
@@ -714,6 +871,8 @@ const ChatPage = () => {
         onDismissComposerError={() => setComposerError('')}
         channelReadOnly={channelComposerLocked}
         channelReadOnlyHint="Only the channel owner, moderators, or members granted posting can send messages here."
+        onInsertRichMessage={handleInsertRichMessage}
+        richMessageSending={richMessageSending}
       />
 
       <UserProfileDialog
@@ -764,9 +923,15 @@ const ChatPage = () => {
         onFindUsers={() => setUserSearchOpen(true)}
         findUsersOpen={userSearchOpen}
         onFolderViewChange={() => setCurrentChat(null)}
-        showInfoPanel={Boolean(currentChat && isGroupOrChannel)}
+        personalSpaceActive={personalSpaceActive}
+        onPersonalSpaceSelect={() => void openPersonalSpace()}
+        showInfoPanel={Boolean(currentChat && isGroupOrChannel && roomInfoPanelOpen)}
         infoPanel={
-          <ChatInfoSidebar room={currentChat} onOpenRoomProfile={openRoomProfileFromHeader} />
+          <ChatInfoSidebar
+            room={currentChat}
+            onOpenRoomProfile={openRoomProfileFromHeader}
+            onClose={() => setRoomInfoPanelOpen(false)}
+          />
         }
         listPanel={({ chatFilter, activeFolderId }) => (
           <ChatList
@@ -818,9 +983,56 @@ const ChatPage = () => {
         variant={settingsDialogVariant}
         onClose={() => setSettingsOpen(false)}
         onJoinedRoom={handleJoinedRoom}
+        onOpenContact={handleSelectUserForNewChat}
+        currentUserId={user?.id}
       />
 
       <RoomProfileDialog open={roomProfileOpen} roomId={roomProfileId} onClose={closeRoomProfile} />
+
+      <Dialog
+        open={leaveRoomDialogOpen}
+        onClose={() => !roomActionLoading && setLeaveRoomDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Leave {roomTypeLabel(currentChat)}?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            You will no longer see messages from <strong>{roomDisplayName}</strong>. You can rejoin
+            if the room is public or you receive a new invite.
+          </DialogContentText>
+          {roomActionError ? (
+            <Typography variant="body2" color="error" sx={{ mt: 1.5 }}>
+              {roomActionError}
+            </Typography>
+          ) : null}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setLeaveRoomDialogOpen(false)} disabled={roomActionLoading}>
+            Cancel
+          </Button>
+          <Button
+            color="primary"
+            variant="contained"
+            disabled={roomActionLoading}
+            onClick={() => void handleConfirmLeaveRoom()}
+          >
+            {roomActionLoading ? 'Leaving…' : 'Leave'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <TwoStepDeleteRoomDialog
+        open={deleteRoomDialogOpen}
+        roomLabel={roomDisplayName}
+        roomTypeLabel={roomTypeLabel(currentChat)}
+        loading={roomActionLoading}
+        error={roomActionError}
+        onClose={() => {
+          if (!roomActionLoading) setDeleteRoomDialogOpen(false);
+        }}
+        onConfirmDelete={() => void handleConfirmDeleteRoom()}
+      />
     </>
   );
 };

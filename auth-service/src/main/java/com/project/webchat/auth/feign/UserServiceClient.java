@@ -32,6 +32,9 @@ public interface UserServiceClient {
     @GetMapping("/api/users/exists/email/{email}")
     ResponseEntity<Boolean> existsByEmail(@PathVariable("email") String email);
 
+    @GetMapping("/api/users/resolve-login/{loginIdentifier}")
+    ResponseEntity<String> resolveLoginIdentifier(@PathVariable("loginIdentifier") String loginIdentifier);
+
     @PostMapping("/api/users/validate-credentials")
     ResponseEntity<Boolean> validateCredentials(@RequestBody CredentialsDTO credentialsDTO);
 

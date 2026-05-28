@@ -5,6 +5,7 @@ import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -15,25 +16,33 @@ public class ChatRoomPermissionService {
         if (room.getType() != ChatType.CHANNEL) {
             return;
         }
-        boolean canPost = room.getCreatedBy() != null && room.getCreatedBy().equals(senderId)
-                || (room.getAdminIds() != null && room.getAdminIds().contains(senderId))
-                || channelPosterIdsSet(room).contains(senderId);
+        boolean canPost = sameUserId(room.getCreatedBy(), senderId)
+                || setContainsUserId(room.getAdminIds(), senderId)
+                || setContainsUserId(channelPosterIdsSet(room), senderId);
         if (!canPost) {
             throw new ForbiddenChatOperationException("You do not have permission to post in this channel.");
         }
     }
 
     public boolean canEditOrDeleteMessage(ChatRoom room, Long actorId, Long messageSenderId) {
-        if (actorId.equals(messageSenderId)) {
+        if (sameUserId(actorId, messageSenderId)) {
             return true;
         }
         if (room.getType() == ChatType.GROUP) {
-            return effectiveAdminIds(room).contains(actorId);
+            return hasGroupAdminRights(room, actorId);
         }
         if (room.getType() == ChatType.CHANNEL) {
-            return effectiveChannelModeratorIds(room).contains(actorId);
+            return hasChannelModeratorRights(room, actorId);
         }
         return false;
+    }
+
+    public boolean hasGroupAdminRights(ChatRoom room, Long userId) {
+        return room.getType() == ChatType.GROUP && setContainsUserId(effectiveAdminIds(room), userId);
+    }
+
+    public boolean hasChannelModeratorRights(ChatRoom room, Long userId) {
+        return room.getType() == ChatType.CHANNEL && setContainsUserId(effectiveChannelModeratorIds(room), userId);
     }
 
     public Set<Long> effectiveChannelModeratorIds(ChatRoom room) {
@@ -57,17 +66,52 @@ public class ChatRoomPermissionService {
         return new HashSet<>(room.getChannelPosterIds());
     }
 
+    public void assertCanManageRoomProfile(ChatRoom room, Long actorId) {
+        if (room.getType() == ChatType.PERSONAL_SPACE) {
+            if (!room.isMember(actorId) || !sameUserId(room.getCreatedBy(), actorId)) {
+                throw new ForbiddenChatOperationException("You cannot update this personal space profile");
+            }
+            return;
+        }
+        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Profile can only be updated for groups or channels");
+        }
+        if (!room.isMember(actorId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        boolean canEdit = room.getType() == ChatType.GROUP
+                ? hasGroupAdminRights(room, actorId)
+                : hasChannelModeratorRights(room, actorId);
+        if (!canEdit) {
+            throw new ForbiddenChatOperationException("You cannot update this room profile");
+        }
+    }
+
+    /**
+     * GROUP admins plus the room creator (owner), who always retains admin rights.
+     */
     public Set<Long> effectiveAdminIds(ChatRoom room) {
         if (room.getType() != ChatType.GROUP) {
             return Set.of();
         }
-        Set<Long> raw = room.getAdminIds();
-        if (raw != null && !raw.isEmpty()) {
-            return new HashSet<>(raw);
+        Set<Long> out = new HashSet<>();
+        if (room.getAdminIds() != null) {
+            out.addAll(room.getAdminIds());
         }
         if (room.getCreatedBy() != null) {
-            return new HashSet<>(Set.of(room.getCreatedBy()));
+            out.add(room.getCreatedBy());
         }
-        return new HashSet<>();
+        return out;
+    }
+
+    public boolean setContainsUserId(Collection<Long> ids, Long userId) {
+        if (ids == null || userId == null) {
+            return false;
+        }
+        return ids.stream().anyMatch(id -> sameUserId(id, userId));
+    }
+
+    public boolean sameUserId(Long a, Long b) {
+        return a != null && b != null && a.longValue() == b.longValue();
     }
 }

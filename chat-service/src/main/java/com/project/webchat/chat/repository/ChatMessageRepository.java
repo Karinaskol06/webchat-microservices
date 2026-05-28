@@ -25,4 +25,6 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
 
     //amount of messages in the chat
     Long countByChatId(String chatId);
+
+    void deleteByChatId(String chatId);
 }

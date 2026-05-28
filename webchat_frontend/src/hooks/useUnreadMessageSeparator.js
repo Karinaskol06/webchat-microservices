@@ -9,24 +9,42 @@ import {
   persistReadEdgeFromMessages,
 } from '../utils/readCursorStorage';
 
+const messageSenderId = (message) => message?.senderId ?? message?.sender?.id ?? null;
+
+export const isIncomingMessageForUser = (message, userId) => {
+  const senderId = messageSenderId(message);
+  if (senderId == null || senderId === '' || userId == null || userId === '') {
+    return true;
+  }
+  return Number(senderId) !== Number(userId);
+};
+
 const messageTimestampMs = (m) => {
   const ms = new Date(m?.timestamp).getTime();
   return Number.isFinite(ms) ? ms : null;
 };
 
-const findFirstUnreadIndex = (messages, edgeTimestampMs, unreadCount) => {
+export const findFirstUnreadIndex = (messages, edgeTimestampMs, unreadCount, userId) => {
   if (!Array.isArray(messages) || messages.length === 0) return null;
 
   if (edgeTimestampMs != null) {
     const idx = messages.findIndex((m) => {
       const ms = messageTimestampMs(m);
-      return ms != null && ms > edgeTimestampMs;
+      return ms != null && ms > edgeTimestampMs && isIncomingMessageForUser(m, userId);
     });
     return idx >= 0 ? idx : null;
   }
 
   if (unreadCount > 0) {
-    return Math.max(0, messages.length - unreadCount);
+    let remainingIncomingUnread = Math.max(0, Number(unreadCount) || 0);
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (!isIncomingMessageForUser(messages[index], userId)) continue;
+      remainingIncomingUnread -= 1;
+      if (remainingIncomingUnread <= 0) {
+        return index;
+      }
+    }
+    return null;
   }
 
   return null;
@@ -92,6 +110,7 @@ export function useUnreadMessageSeparator({
       messages,
       safeEdgeMs,
       visitUnreadCountRef.current,
+      userId,
     );
 
     queueMicrotask(() => {
@@ -104,8 +123,7 @@ export function useUnreadMessageSeparator({
     const handler = (e) => {
       const detail = e.detail || {};
       if (String(detail.chatId) !== String(chatId)) return;
-      const senderId = detail.message?.senderId ?? detail.message?.sender?.id;
-      if (!senderId || Number(senderId) === Number(userId)) return;
+      if (!isIncomingMessageForUser(detail.message, userId)) return;
       const mid = detail.message?.id ?? detail.message?._id;
       if (mid != null && mid !== '') {
         setLiveBeforeMessageId(String(mid));

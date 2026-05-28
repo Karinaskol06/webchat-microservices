@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import useChatStore from '../store/useChatStore';
+import useChatFolderStore from '../store/useChatFolderStore';
 import chatService from '../services/chatService';
 import {
   connectWebSocket,
@@ -70,9 +71,20 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
 
   /** Every chat: message stream + presence (updates list preview, unread, avatars). */
   useEffect(() => {
-    if (!user || !chatIdsKey) return undefined;
+    if (!user) return undefined;
 
-    const ids = chatIdsKey.split(',').filter(Boolean);
+    const ids = [
+      ...new Set(
+        [chatIdsKey, currentChatId]
+          .flatMap((value) =>
+            String(value || '')
+              .split(',')
+              .map((id) => id.trim())
+              .filter(Boolean),
+          ),
+      ),
+    ];
+    if (ids.length === 0) return undefined;
 
     const unsubs = ids.map((id) =>
       subscribeToChat(id, {
@@ -155,7 +167,7 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
         markReadTimeoutRef.current = null;
       }
     };
-  }, [user, chatIdsKey]);
+  }, [user, chatIdsKey, currentChatId]);
 
   /** Focused chat: typing / read receipts / deletes / edits / attachments — not messages (handled above). */
   useEffect(() => {
@@ -217,6 +229,12 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
       },
       onChatUpdated: (chat) => {
         useChatStore.getState().upsertChat(chat);
+      },
+      onChatDeleted: (event) => {
+        const chatId = event?.chatId ?? event?.id;
+        if (!chatId) return;
+        useChatStore.getState().removeChat(chatId);
+        useChatFolderStore.getState().assignChatToFolder(chatId, null);
       },
       onRoomMemberInvite,
     });

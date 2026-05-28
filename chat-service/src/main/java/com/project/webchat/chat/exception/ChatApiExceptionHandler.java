@@ -3,16 +3,33 @@ package com.project.webchat.chat.exception;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 @Slf4j
 public class ChatApiExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException e) {
+        String msg = e.getBindingResult().getFieldErrors().stream()
+                .map(FieldError::getDefaultMessage)
+                .filter(m -> m != null && !m.isBlank())
+                .collect(Collectors.joining("; "));
+        if (msg.isBlank()) {
+            msg = "Invalid request";
+        }
+        log.warn("Validation failed: {}", msg);
+        return ResponseEntity.badRequest().body(Map.of("message", msg, "error", msg));
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException e) {
@@ -52,8 +69,33 @@ public class ChatApiExceptionHandler {
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<Map<String, String>> handleMultipart(MultipartException e) {
         log.warn("Multipart error: {}", e.getMessage());
-        String msg = "Could not read the uploaded file. Try a smaller file or a supported format.";
-        return ResponseEntity.badRequest()
-                .body(Map.of("message", msg, "error", msg));
+        if (e.getCause() instanceof MaxUploadSizeExceededException) {
+            return handleMaxUploadSize((MaxUploadSizeExceededException) e.getCause());
+        }
+        String msg = resolveMultipartMessage(e);
+        HttpStatus status = msg.toLowerCase().contains("too large")
+                ? HttpStatus.PAYLOAD_TOO_LARGE
+                : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(Map.of("message", msg, "error", msg));
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<Map<String, String>> handleMissingPart(MissingServletRequestPartException e) {
+        log.warn("Missing multipart part: {}", e.getRequestPartName());
+        String msg = "No files were provided";
+        return ResponseEntity.badRequest().body(Map.of("message", msg, "error", msg));
+    }
+
+    private static String resolveMultipartMessage(MultipartException e) {
+        String detail = e.getMostSpecificCause() != null
+                ? e.getMostSpecificCause().getMessage()
+                : e.getMessage();
+        if (detail != null) {
+            String lower = detail.toLowerCase();
+            if (lower.contains("size") && (lower.contains("exceed") || lower.contains("larger") || lower.contains("limit"))) {
+                return "This file is too large for the server. Maximum size is 10 MB per file.";
+            }
+        }
+        return "Could not read the uploaded file. Try a smaller file or a supported format.";
     }
 }

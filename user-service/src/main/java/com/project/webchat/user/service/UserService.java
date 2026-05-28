@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -152,6 +153,25 @@ public class UserService {
         return userRepository.existsByEmail(email.trim());
     }
 
+    /**
+     * Resolves a login field value (username or email) to the canonical username for authentication.
+     */
+    public Optional<String> resolveUsernameForLogin(String loginIdentifier) {
+        if (loginIdentifier == null || loginIdentifier.isBlank()) {
+            return Optional.empty();
+        }
+        String normalized = loginIdentifier.trim();
+        if (looksLikeEmail(normalized)) {
+            //get username from returned user, otherwise return empty
+            return userRepository.findByEmailIgnoreCase(normalized).map(User::getUsername);
+        }
+        return userRepository.findByUsername(normalized).map(User::getUsername);
+    }
+
+    private static boolean looksLikeEmail(String value) {
+        return value.contains("@");
+    }
+
     public boolean validateCredentials(String username, String password) {
         try {
             User user = userRepository.findByUsername(username)
@@ -251,7 +271,7 @@ public class UserService {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .displayName(resolveDisplayName(user))
-                .avatar(user.getProfilePicture())
+                .avatar(resolveAvatarPictureUrl(user.getId()))
                 .build();
     }
 

@@ -2,7 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Autocomplete, Box, TextField } from "@mui/material";
 import { COUNTRY_PHONE_OPTIONS, COUNTRY_PHONE_OPTIONS_FOR_PARSE } from "../../constants/countryPhoneOptions";
 import { combinePhone, isValidInternationalPhone, PHONE_FORMAT_HINT, splitPhoneToDialNational } from "../../utils/internationalPhone";
-import { glassFieldSx } from "../auth/authPageTheme";
+import {
+  authHideScrollbarSx,
+  glassCountryDropdownListboxSx,
+  glassCountryDropdownOptionSx,
+  glassCountryDropdownPaperSx,
+  glassFieldSx,
+} from "../auth/authPageTheme";
 
 const optionLabel = (o) => `${o.label} (${o.dial})`;
 
@@ -60,7 +66,35 @@ export default function PhoneCountryField({
           if (!opt) return;
           emit(opt.iso, national);
         }}
-        ListboxProps={{ style: { maxHeight: 320 } }}
+        slotProps={
+          glass
+            ? {
+                popper: { sx: { zIndex: 1500 } },
+                paper: { sx: glassCountryDropdownPaperSx },
+                listbox: { sx: glassCountryDropdownListboxSx },
+              }
+            : {
+                listbox: {
+                  sx: {
+                    maxHeight: 320,
+                    ...authHideScrollbarSx,
+                  },
+                },
+              }
+        }
+        renderOption={(props, option) => {
+          const { key, ...optionProps } = props;
+          return (
+            <Box
+              component="li"
+              key={key}
+              {...optionProps}
+              sx={glass ? glassCountryDropdownOptionSx : undefined}
+            >
+              {optionLabel(option)}
+            </Box>
+          );
+        }}
         renderInput={(params) => (
           <TextField
             {...params}

@@ -3,6 +3,8 @@ package com.project.webchat.user.service;
 import com.project.webchat.shared.dto.ContactPromptDescriptorDTO;
 import com.project.webchat.shared.dto.ContactRequestState;
 import com.project.webchat.shared.dto.ContactStatusDTO;
+import com.project.webchat.shared.dto.UserDTO;
+import com.project.webchat.user.dto.IncomingContactRequestDTO;
 import com.project.webchat.user.entity.FriendRequest;
 import com.project.webchat.user.entity.UserContact;
 import com.project.webchat.user.repository.FriendRequestRepository;
@@ -13,7 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +25,7 @@ import java.util.List;
 public class ContactService {
     private final FriendRequestRepository friendRequestRepository;
     private final UserContactRepository userContactRepository;
+    private final UserService userService;
 
     @Value("${app.contacts.snooze-days:7}")
     private long snoozeDays;
@@ -58,6 +63,29 @@ public class ContactService {
     @Transactional(readOnly = true)
     public List<FriendRequest> getIncomingPendingRequests(Long userId) {
         return friendRequestRepository.findByToUserIdAndStateOrderByCreatedAtDesc(userId, ContactRequestState.PENDING);
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserDTO> getContacts(Long userId) {
+        return userContactRepository.findByUserIdOrderByIdDesc(userId).stream()
+                .map(UserContact::getContactUserId)
+                .distinct()
+                .map(userService::getUserDTOById)
+                .sorted(Comparator.comparing(this::displayName, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<IncomingContactRequestDTO> getIncomingPendingRequestViews(Long userId) {
+        return getIncomingPendingRequests(userId).stream()
+                .map(request -> IncomingContactRequestDTO.builder()
+                        .id(request.getId())
+                        .state(request.getState())
+                        .createdAt(request.getCreatedAt())
+                        .nextEligibleAt(request.getNextEligibleAt())
+                        .fromUser(userService.getUserDTOById(request.getFromUserId()))
+                        .build())
+                .toList();
     }
 
     public ContactStatusDTO acceptRequest(Long requestId, Long currentUserId) {
@@ -165,5 +193,17 @@ public class ContactService {
         if (fromUserId.equals(toUserId)) {
             throw new IllegalArgumentException("Cannot create contact request to self");
         }
+    }
+
+    private String displayName(UserDTO user) {
+        if (user == null) {
+            return "";
+        }
+        String fullName = ((user.getFirstName() == null ? "" : user.getFirstName().trim()) + " "
+                + (user.getLastName() == null ? "" : user.getLastName().trim())).trim();
+        if (!fullName.isEmpty()) {
+            return fullName;
+        }
+        return user.getUsername() == null ? "" : user.getUsername().toLowerCase(Locale.ROOT);
     }
 }

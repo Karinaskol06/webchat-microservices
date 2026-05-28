@@ -3,6 +3,7 @@ import { Box } from '@mui/material';
 import { chatColors, chatHideScrollbarSx } from '../../theme/chatDesignTokens';
 import MessageItem from './MessageItem';
 import MessageUnreadSeparator from './MessageUnreadSeparator';
+import PersonalSpaceStickyLayer from '../personalSpace/PersonalSpaceStickyLayer';
 import { ChatAreaMetricsProvider } from '../../context/ChatAreaMetricsContext';
 
 const HIGHLIGHT_MS = 2200;
@@ -26,6 +27,7 @@ const MessageList = ({
   inChatSearchMatches = [],
   activeInChatSearchMatch = null,
   onOpenEmojiSidebarForReaction,
+  isPersonalSpace = false,
 }) => {
   const safeMessages = Array.isArray(messages) ? messages : [];
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
@@ -115,7 +117,13 @@ const MessageList = ({
       }}
     >
       <ChatAreaMetricsProvider viewportRef={viewportRef}>
-        <div ref={contentRef}>
+        <div
+          ref={contentRef}
+          style={{ position: 'relative', minHeight: isPersonalSpace ? 520 : undefined }}
+        >
+        {isPersonalSpace ? (
+          <PersonalSpaceStickyLayer messages={safeMessages} currentUserId={currentUserId} />
+        ) : null}
         {safeMessages.map((message, index) => {
           const mid = messageRowId(message);
           const showOpen = openSeparatorIndex === index;
@@ -148,6 +156,7 @@ const MessageList = ({
                 inChatSearchMatches={inChatSearchMatches}
                 activeInChatSearchMatch={activeInChatSearchMatch}
                 onOpenEmojiSidebarForReaction={onOpenEmojiSidebarForReaction}
+                isPersonalSpace={isPersonalSpace}
               />
             </Fragment>
           );

@@ -4,6 +4,8 @@ import com.project.webchat.chat.dto.*;
 import com.project.webchat.chat.entity.*;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import com.project.webchat.chat.feign.UserServiceClient;
+import com.project.webchat.chat.repository.AttachmentRepository;
+import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.chat.service.RedisService;
@@ -34,6 +36,8 @@ import java.util.regex.Pattern;
 public class ChatRoomManagementService {
 
     private final ChatRoomRepository chatRoomRepository;
+    private final ChatMessageRepository chatMessageRepository;
+    private final AttachmentRepository attachmentRepository;
     private final RoomMemberInviteRepository roomMemberInviteRepository;
     private final UserServiceClient userServiceClient;
     private final RedisService redisService;
@@ -48,6 +52,7 @@ public class ChatRoomManagementService {
 
         List<ChatRoomDTO> chatRooms = chatPage.getContent()
                 .stream()
+                .filter(chat -> chat.getType() != ChatType.PERSONAL_SPACE)
                 .map(chat -> roomEnrichmentService.enrichChatWithUserData(
                         chat, userId, roomEnrichmentService.getUnreadCount(chat.getId(), userId)))
                 .toList();
@@ -59,6 +64,13 @@ public class ChatRoomManagementService {
     public void leaveChat(String chatId, Long userId) {
         ChatRoom chat = chatRoomRepository.findById(chatId)
                 .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+
+        if (chat.getType() == ChatType.PERSONAL_SPACE) {
+            throw new IllegalArgumentException("You cannot leave your personal space.");
+        }
+        if (chat.getType() != ChatType.GROUP && chat.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("You can only leave group chats and channels");
+        }
 
         if (!chat.getMemberIds().contains(userId)) {
             throw new IllegalArgumentException("User is not a member of this chat");
@@ -85,6 +97,31 @@ public class ChatRoomManagementService {
 
         redisService.markUserOffline(userId);
         webSocketService.notifyUserLeftChat(chatId, userId);
+    }
+
+    @Transactional
+    public void deleteRoom(String roomId, Long userId) {
+        ChatRoom room = loadRoom(roomId);
+        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Only group chats and channels can be deleted");
+        }
+        if (!room.isMember(userId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        boolean canDelete = room.getType() == ChatType.GROUP
+                ? roomPermissionService.hasGroupAdminRights(room, userId)
+                : roomPermissionService.hasChannelModeratorRights(room, userId);
+        if (!canDelete) {
+            throw new ForbiddenChatOperationException("Only the creator or admins can delete this room");
+        }
+
+        Set<Long> members = new HashSet<>(room.getMemberIds());
+        attachmentRepository.deleteByChatId(roomId);
+        chatMessageRepository.deleteByChatId(roomId);
+        roomMemberInviteRepository.deleteByRoomId(roomId);
+        chatRoomRepository.delete(room);
+        webSocketService.notifyChatDeleted(roomId, members);
+        log.info("Room {} deleted by user {}", roomId, userId);
     }
 
     @Transactional
@@ -248,20 +285,43 @@ public class ChatRoomManagementService {
 
     @Transactional
     public ChatRoomDTO updateRoomPhoto(String roomId, Long actorId, String groupPhotoRaw) {
+        UpdateRoomProfileRequest request = new UpdateRoomProfileRequest();
+        request.setGroupPhoto(groupPhotoRaw);
+        return updateRoomProfile(roomId, actorId, request);
+    }
+
+    @Transactional
+    public ChatRoomDTO updateRoomProfile(String roomId, Long actorId, UpdateRoomProfileRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Update payload is required");
+        }
+        boolean hasName = request.getGroupName() != null;
+        boolean hasDescription = request.getDescription() != null;
+        boolean hasPhoto = request.getGroupPhoto() != null;
+        if (!hasName && !hasDescription && !hasPhoto) {
+            throw new IllegalArgumentException("At least one field must be provided to update");
+        }
+
         ChatRoom room = loadRoom(roomId);
-        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
-            throw new IllegalArgumentException("Photo can only be updated for groups or channels");
+        roomPermissionService.assertCanManageRoomProfile(room, actorId);
+        if (room.getType() == ChatType.PERSONAL_SPACE && (hasName || hasDescription)) {
+            throw new IllegalArgumentException("Only the personal space avatar can be updated.");
         }
-        if (!room.isMember(actorId)) {
-            throw new ForbiddenChatOperationException("You are not a member of this chat");
+
+        if (hasName) {
+            String name = request.getGroupName().trim();
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException("Name is required");
+            }
+            room.setGroupName(name);
         }
-        boolean canEdit = room.getType() == ChatType.GROUP
-                ? roomPermissionService.effectiveAdminIds(room).contains(actorId)
-                : roomPermissionService.effectiveChannelModeratorIds(room).contains(actorId);
-        if (!canEdit) {
-            throw new ForbiddenChatOperationException("You cannot update this room photo");
+        if (hasDescription) {
+            room.setDescription(normalizeRoomDescription(request.getDescription()));
         }
-        room.setGroupPhoto(normalizeGroupPhoto(groupPhotoRaw));
+        if (hasPhoto) {
+            room.setGroupPhoto(normalizeGroupPhoto(request.getGroupPhoto()));
+        }
+
         ChatRoom saved = chatRoomRepository.save(room);
         roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
         return roomEnrichmentService.enrichChatWithUserData(
@@ -416,8 +476,8 @@ public class ChatRoomManagementService {
             throw new ForbiddenChatOperationException("You are not a member of this chat");
         }
         boolean canInvite = room.getType() == ChatType.GROUP
-                ? roomPermissionService.effectiveAdminIds(room).contains(actorId)
-                : roomPermissionService.effectiveChannelModeratorIds(room).contains(actorId);
+                ? roomPermissionService.hasGroupAdminRights(room, actorId)
+                : roomPermissionService.hasChannelModeratorRights(room, actorId);
         if (!canInvite) {
             throw new ForbiddenChatOperationException("You cannot invite members to this room");
         }
@@ -425,11 +485,11 @@ public class ChatRoomManagementService {
 
     private void assertCanManageInvite(ChatRoom room, Long userId) {
         if (room.getType() == ChatType.GROUP) {
-            if (!roomPermissionService.effectiveAdminIds(room).contains(userId)) {
+            if (!roomPermissionService.hasGroupAdminRights(room, userId)) {
                 throw new ForbiddenChatOperationException("Only group admins can manage the invite link");
             }
         } else if (room.getType() == ChatType.CHANNEL) {
-            if (!roomPermissionService.effectiveChannelModeratorIds(room).contains(userId)) {
+            if (!roomPermissionService.hasChannelModeratorRights(room, userId)) {
                 throw new ForbiddenChatOperationException(
                         "Only channel owners and moderators can manage the invite link");
             }
@@ -442,17 +502,20 @@ public class ChatRoomManagementService {
         if (action != AdminAction.PROMOTE && action != AdminAction.DEMOTE) {
             throw new IllegalArgumentException("Unsupported admin action for groups");
         }
-        if (!roomPermissionService.effectiveAdminIds(room).contains(actorId)) {
+        if (!roomPermissionService.hasGroupAdminRights(room, actorId)) {
             throw new ForbiddenChatOperationException("Only admins can change admin roles");
         }
         if (!room.isMember(target)) {
             throw new IllegalArgumentException("That user is not a member of this group");
         }
-        Set<Long> admins = new HashSet<>(roomPermissionService.effectiveAdminIds(room));
+        Set<Long> admins = new HashSet<>();
+        if (room.getAdminIds() != null) {
+            admins.addAll(room.getAdminIds());
+        }
         if (action == AdminAction.PROMOTE) {
             admins.add(target);
         } else {
-            if (!admins.contains(target)) {
+            if (!roomPermissionService.setContainsUserId(admins, target)) {
                 throw new IllegalArgumentException("That user is not an admin");
             }
             Set<Long> after = new HashSet<>(admins);
@@ -466,19 +529,19 @@ public class ChatRoomManagementService {
     }
 
     private void mutateChannelRole(ChatRoom room, Long actorId, Long target, AdminAction action) {
-        if (!roomPermissionService.effectiveChannelModeratorIds(room).contains(actorId)) {
+        if (!roomPermissionService.hasChannelModeratorRights(room, actorId)) {
             throw new ForbiddenChatOperationException("Only channel owners and moderators can manage roles");
         }
         if (!room.isMember(target)) {
             throw new IllegalArgumentException("That user is not a member of this channel");
         }
-        if (room.getCreatedBy() != null && room.getCreatedBy().equals(target)
+        if (room.getCreatedBy() != null && roomPermissionService.sameUserId(room.getCreatedBy(), target)
                 && (action == AdminAction.DEMOTE || action == AdminAction.REVOKE_POST)) {
             throw new IllegalArgumentException("Cannot change the channel owner's moderator role or posting rights");
         }
         switch (action) {
             case PROMOTE -> {
-                if (room.getCreatedBy() != null && room.getCreatedBy().equals(target)) {
+                if (room.getCreatedBy() != null && roomPermissionService.sameUserId(room.getCreatedBy(), target)) {
                     throw new IllegalArgumentException("The channel owner is already a moderator");
                 }
                 if (room.getAdminIds() == null) {
@@ -490,16 +553,16 @@ public class ChatRoomManagementService {
                 }
             }
             case DEMOTE -> {
-                if (room.getAdminIds() == null || !room.getAdminIds().contains(target)) {
+                if (!roomPermissionService.setContainsUserId(room.getAdminIds(), target)) {
                     throw new IllegalArgumentException("That user is not a channel moderator");
                 }
                 room.getAdminIds().remove(target);
             }
             case GRANT_POST -> {
-                if (room.getCreatedBy() != null && room.getCreatedBy().equals(target)) {
+                if (room.getCreatedBy() != null && roomPermissionService.sameUserId(room.getCreatedBy(), target)) {
                     throw new IllegalArgumentException("The channel owner can already post");
                 }
-                if (room.getAdminIds() != null && room.getAdminIds().contains(target)) {
+                if (roomPermissionService.setContainsUserId(room.getAdminIds(), target)) {
                     throw new IllegalArgumentException("Channel moderators can already post");
                 }
                 if (room.getChannelPosterIds() == null) {

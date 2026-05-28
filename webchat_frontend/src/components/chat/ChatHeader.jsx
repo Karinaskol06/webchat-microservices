@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
-  Avatar,
   Box,
   IconButton,
+  ListItemIcon,
+  ListItemText,
   Menu,
   MenuItem,
   Tooltip,
@@ -12,8 +13,14 @@ import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import LinkIcon from '@mui/icons-material/Link';
 import SearchIcon from '@mui/icons-material/Search';
+import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
+import ExitToAppOutlinedIcon from '@mui/icons-material/ExitToAppOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { getPresenceLabel } from '../../utils/presence';
 import { chatColors } from '../../theme/chatDesignTokens';
+
+import UserAvatar from '../user/UserAvatar';
+import { getUserAvatarLetter } from '../../utils/userAvatar';
 const ChatHeader = ({
   otherUser,
   presenceStatus,
@@ -28,11 +35,17 @@ const ChatHeader = ({
   headerAvatarLetter,
   /** If false, avatar is not clickable (rooms). */
   headerAvatarClickable = true,
-  showCopyInvite,
+  showCopyInvite = false,
   onCopyInvite,
   isGroupOrChannel = false,
+  canLeaveRoom = false,
+  canDeleteRoom = false,
+  onRequestLeaveRoom,
+  onRequestDeleteRoom,
   inChatSearchOpen = false,
   onToggleInChatSearch,
+  roomInfoPanelOpen = true,
+  onToggleRoomInfoPanel,
 }) => {
   const [menuAnchor, setMenuAnchor] = useState(null);
 
@@ -43,11 +56,8 @@ const ChatHeader = ({
 
   const title = headerTitle ?? derivedTitle;
 
-  const avatarSrc = headerAvatarSrc ?? otherUser?.profilePicture ?? undefined;
-  const letter =
-    headerAvatarLetter ??
-    (otherUser?.firstName?.[0] || otherUser?.username?.[0] || 'U').toUpperCase();
-
+  const avatarSrc = headerAvatarSrc ?? undefined;
+  const letter = headerAvatarLetter ?? getUserAvatarLetter(otherUser);
   const subtitle = isTyping
     ? getPresenceLabel(presenceStatus, true)
     : headerSubtitle ?? getPresenceLabel(presenceStatus, false);
@@ -68,11 +78,19 @@ const ChatHeader = ({
     await onCopyInvite?.();
   };
 
+  const closeMenu = () => setMenuAnchor(null);
+
   const avatarInteractive = Boolean(headerAvatarClickable && onOpenProfile);
 
+  const hasRoomMenuItems = showCopyInvite || canLeaveRoom || canDeleteRoom;
+
   const avatarEl = (
-    <Avatar
+    <UserAvatar
+      user={otherUser}
+      src={avatarSrc}
+      letter={letter}
       variant="rounded"
+      onClick={handleAvatarClick}
       sx={{
         mr: 1.5,
         width: 48,
@@ -80,11 +98,7 @@ const ChatHeader = ({
         cursor: avatarInteractive ? 'pointer' : 'default',
         flexShrink: 0,
       }}
-      src={avatarSrc || undefined}
-      onClick={handleAvatarClick}
-    >
-      {!avatarSrc ? letter : null}
-    </Avatar>
+    />
   );
 
   return (
@@ -109,6 +123,19 @@ const ChatHeader = ({
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+        {isGroupOrChannel && onToggleRoomInfoPanel ? (
+          <Tooltip title={roomInfoPanelOpen ? 'Hide room panel' : 'Show room panel'}>
+            <IconButton
+              aria-label={roomInfoPanelOpen ? 'Hide room panel' : 'Show room panel'}
+              aria-pressed={roomInfoPanelOpen ? 'true' : 'false'}
+              size="small"
+              onClick={onToggleRoomInfoPanel}
+              sx={{ color: roomInfoPanelOpen ? chatColors.primary : chatColors.textPrimary }}
+            >
+              <ViewSidebarOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        ) : null}
         {onToggleInChatSearch ? (
           <Tooltip title={inChatSearchOpen ? 'Close search' : 'Search in chat'}>
             <IconButton
@@ -124,11 +151,11 @@ const ChatHeader = ({
         ) : null}
       </Box>
 
-      {showCopyInvite ? (
+      {isGroupOrChannel && hasRoomMenuItems ? (
         <>
-          <Tooltip title="Invite options">
+          <Tooltip title="Room options">
             <IconButton
-              aria-label="Chat menu"
+              aria-label="Room options"
               onClick={(e) => setMenuAnchor(e.currentTarget)}
               size="small"
               sx={{ flexShrink: 0, color: chatColors.textPrimary }}
@@ -139,14 +166,46 @@ const ChatHeader = ({
           <Menu
             anchorEl={menuAnchor}
             open={Boolean(menuAnchor)}
-            onClose={() => setMenuAnchor(null)}
+            onClose={closeMenu}
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            slotProps={{ paper: { sx: { minWidth: 220 } } }}
           >
-            <MenuItem onClick={handleCopyInvite}>
-              <LinkIcon fontSize="small" sx={{ mr: 1 }} />
-              Copy invite link
-            </MenuItem>
+            {showCopyInvite ? (
+              <MenuItem onClick={handleCopyInvite}>
+                <ListItemIcon>
+                  <LinkIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText primary="Copy invite link" />
+              </MenuItem>
+            ) : null}
+            {canLeaveRoom ? (
+              <MenuItem
+                onClick={() => {
+                  closeMenu();
+                  onRequestLeaveRoom?.();
+                }}
+              >
+                <ListItemIcon>
+                  <ExitToAppOutlinedIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText primary="Leave group/channel" />
+              </MenuItem>
+            ) : null}
+            {canDeleteRoom ? (
+              <MenuItem
+                onClick={() => {
+                  closeMenu();
+                  onRequestDeleteRoom?.();
+                }}
+                sx={{ color: 'error.main' }}
+              >
+                <ListItemIcon>
+                  <DeleteOutlineIcon fontSize="small" color="error" />
+                </ListItemIcon>
+                <ListItemText primary="Delete group/channel" />
+              </MenuItem>
+            ) : null}
           </Menu>
         </>
       ) : null}

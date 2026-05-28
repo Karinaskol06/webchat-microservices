@@ -1,6 +1,6 @@
 spring:
   codec:
-    max-in-memory-size: 5MB
+    max-in-memory-size: 12MB
   application:
     name: api-gateway
   data:
@@ -10,6 +10,9 @@ spring:
       password: ${REDIS_PASSWORD:}
   cloud:
     gateway:
+      httpclient:
+        connect-timeout: 10000
+        response-timeout: 120s
       globalcors:
         add-to-simple-url-handler-mapping: true
         cors-configurations:
@@ -54,6 +57,8 @@ spring:
           uri: lb://chat-service
           predicates:
             - Path=/api/presence/**
+          filters:
+            - name: JwtValidationFilter
 
         - id: notification-service
           uri: lb://notification-service
@@ -78,6 +83,9 @@ spring:
 jwt:
   secret: ${JWT_SECRET:defaultSecretKeyForLocalDev}
   expiration: 86400000
+
+gateway:
+  internal-auth-token: ${GATEWAY_INTERNAL_AUTH_TOKEN:local-gateway-token}
 
 server:
   port: 8089

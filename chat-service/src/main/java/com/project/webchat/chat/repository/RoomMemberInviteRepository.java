@@ -17,4 +17,6 @@ public interface RoomMemberInviteRepository extends MongoRepository<RoomMemberIn
             String roomId,
             Long inviteeUserId,
             RoomMemberInviteState state);
+
+    void deleteByRoomId(String roomId);
 }

@@ -24,6 +24,31 @@ class ChatRoomPermissionServiceTest {
                 .build();
 
         assertThat(permissionService.effectiveAdminIds(room)).containsExactly(1L);
+        assertThat(permissionService.hasGroupAdminRights(room, 1L)).isTrue();
+    }
+
+    @Test
+    void effectiveAdminIds_alwaysIncludesCreatorWhenOtherAdminsExist() {
+        ChatRoom room = ChatRoom.builder()
+                .type(ChatType.GROUP)
+                .createdBy(1L)
+                .adminIds(new HashSet<>(Set.of(5L)))
+                .build();
+
+        assertThat(permissionService.effectiveAdminIds(room)).containsExactlyInAnyOrder(1L, 5L);
+        assertThat(permissionService.hasGroupAdminRights(room, 1L)).isTrue();
+    }
+
+    @Test
+    void hasGroupAdminRights_matchesIdsByNumericValue() {
+        ChatRoom room = ChatRoom.builder()
+                .type(ChatType.GROUP)
+                .createdBy(1L)
+                .adminIds(new HashSet<>(Set.of(5L)))
+                .build();
+
+        assertThat(permissionService.hasGroupAdminRights(room, 5L)).isTrue();
+        assertThat(permissionService.hasGroupAdminRights(room, Long.valueOf(5))).isTrue();
     }
 
     @Test
@@ -36,6 +61,29 @@ class ChatRoomPermissionServiceTest {
                 .build();
 
         assertThatThrownBy(() -> permissionService.assertCanPostMessage(channel, 42L))
+                .isInstanceOf(ForbiddenChatOperationException.class);
+    }
+
+    @Test
+    void assertCanManageRoomProfile_allowsGroupAdmin() {
+        ChatRoom room = ChatRoom.builder()
+                .type(ChatType.GROUP)
+                .memberIds(Set.of(5L, 10L))
+                .adminIds(Set.of(5L))
+                .build();
+
+        permissionService.assertCanManageRoomProfile(room, 5L);
+    }
+
+    @Test
+    void assertCanManageRoomProfile_deniesNonAdminMember() {
+        ChatRoom room = ChatRoom.builder()
+                .type(ChatType.GROUP)
+                .memberIds(Set.of(5L, 10L))
+                .adminIds(Set.of(5L))
+                .build();
+
+        assertThatThrownBy(() -> permissionService.assertCanManageRoomProfile(room, 10L))
                 .isInstanceOf(ForbiddenChatOperationException.class);
     }
 

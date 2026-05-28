@@ -87,10 +87,18 @@ public class FileStorageService {
             // File extension validation
             String extension = getFileExtension(originalFilename);
             String extensionWithoutDot = extension.startsWith(".") ? extension.substring(1) : extension;
+            String allowedList = allowedExtensionSet.stream()
+                    .sorted()
+                    .collect(Collectors.joining(", "));
+            if (extensionWithoutDot.isBlank()) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "This file has no extension. Allowed types: %s.",
+                                allowedList
+                        )
+                );
+            }
             if (!allowedExtensionSet.contains(extensionWithoutDot.toLowerCase())) {
-                String allowedList = allowedExtensionSet.stream()
-                        .sorted()
-                        .collect(Collectors.joining(", "));
                 throw new IllegalArgumentException(
                         String.format(
                                 "This file type is not allowed (.%s). Allowed types: %s.",
@@ -105,31 +113,27 @@ public class FileStorageService {
                 throw new IllegalArgumentException("Filename contains invalid characters");
             }
 
-            // Basic MIME type check to avoid extension spoofing
-            // create byte array for header
-            // different file types have unique first few bytes
-            byte[] fileHeader = new byte[8];
-            try (InputStream is = file.getInputStream()) {
-                if (is.read(fileHeader) < 8) {
-                    throw new IllegalArgumentException("File is too small or corrupted");
-                }
-            }
-            // verify magic number matches extension
-            if (!isValidFileType(fileHeader, extension)) {
-                throw new IllegalArgumentException(
-                        "This file doesn't match its type. It may be corrupted or renamed with the wrong extension."
-                );
-            }
-
             // Generating a safe filename
             String safeStoredFilename = generateSafeFilename(extension);
             Path targetPath = uploadPath.resolve(safeStoredFilename);
 
-            // Safe copying - prevents several common files problems
-            try (InputStream inputStream = file.getInputStream()) {
-                // uploaded file data, path where to save on a server, if exists - overwrite
-                Files.copy(inputStream, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            } // automatically closes input stream
+            // Write once — lazy multipart streams cannot be read via getInputStream() twice.
+            file.transferTo(targetPath);
+
+            // Magic-byte check on the saved file (avoids consuming the upload stream twice).
+            byte[] fileHeader = new byte[8];
+            try (InputStream is = Files.newInputStream(targetPath)) {
+                if (is.read(fileHeader) < 8) {
+                    Files.deleteIfExists(targetPath);
+                    throw new IllegalArgumentException("File is too small or corrupted");
+                }
+            }
+            if (!isValidFileType(fileHeader, extension)) {
+                Files.deleteIfExists(targetPath);
+                throw new IllegalArgumentException(
+                        "This file doesn't match its type. It may be corrupted or renamed with the wrong extension."
+                );
+            }
 
             // Creating db record
             Attachment attachment = Attachment.builder()
@@ -326,12 +330,27 @@ public class FileStorageService {
     }
 
     private String sanitizeFilename(String filename) {
-        if (filename == null) return "unknown";
+        if (filename == null || filename.isBlank()) {
+            return "unknown";
+        }
 
-        // deleting dangerous symbols
-        return filename.replaceAll("[^a-zA-Z0-9.\\-_]", "_")
+        String base = filename.strip();
+        int lastSep = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
+        if (lastSep >= 0) {
+            base = base.substring(lastSep + 1).strip();
+        }
+        if (base.isBlank()) {
+            return "unknown";
+        }
+
+        // Keep Unicode letters (e.g. Ukrainian Cyrillic), numbers, and safe punctuation.
+        String sanitized = base.replaceAll("[^\\p{L}\\p{M}\\p{N}.\\-_]", "_")
                 .replaceAll("_{2,}", "_")
-                .substring(0, Math.min(filename.length(), 255));
+                .replaceAll("^_+|_+$", "");
+        if (sanitized.isBlank()) {
+            return "unknown";
+        }
+        return sanitized.substring(0, Math.min(sanitized.length(), 255));
     }
 
     // Determine file type base on extension

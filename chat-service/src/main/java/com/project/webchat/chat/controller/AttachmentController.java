@@ -9,14 +9,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/chat")
@@ -40,13 +44,30 @@ public class AttachmentController {
     }
 
     @PostMapping("/{chatId}/attachments")
-    public ResponseEntity<List<AttachmentDTO>> uploadAttachments(
+    public ResponseEntity<?> uploadAttachments(
             @PathVariable String chatId,
-            @RequestParam("files") List<MultipartFile> files,
+            @RequestParam(value = "files", required = false) List<MultipartFile> files,
             @AuthenticationPrincipal CustomUserDetails currentUser) {
 
+        if (currentUser == null || currentUser.getId() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "message", "Authentication required",
+                            "error", "Unauthorized"));
+        }
+
+        if (files == null || files.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of(
+                            "message", "No files were provided",
+                            "error", "No files were provided"));
+        }
+
         if (!chatService.isUserChatMember(chatId, currentUser.getId())) {
-            return ResponseEntity.status(403).build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of(
+                            "message", "You can't upload files in this chat",
+                            "error", "Forbidden"));
         }
 
         List<AttachmentDTO> attachments = files.stream()
@@ -86,12 +107,15 @@ public class AttachmentController {
                 && (attachment.getMimeType() != null)
                 && (attachment.getMimeType().startsWith("image/")
                 || attachment.getMimeType().startsWith("video/"));
-        String disposition = (isInlinePreview ? "inline" : "attachment")
-                + "; filename=\"" + attachment.getFilename() + "\"";
+
+        ContentDisposition disposition = ContentDisposition
+                .builder(isInlinePreview ? "inline" : "attachment")
+                .filename(attachment.getFilename(), StandardCharsets.UTF_8)
+                .build();
 
         return ResponseEntity.ok()
                 .contentType(mediaType)
-                .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .body(resource);
     }
 }

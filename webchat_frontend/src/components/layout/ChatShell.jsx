@@ -31,6 +31,8 @@ const ChatShell = ({
   onFindUsers,
   findUsersOpen,
   onFolderViewChange,
+  personalSpaceActive,
+  onPersonalSpaceSelect,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -90,6 +92,8 @@ const ChatShell = ({
           settingsOpen={settingsOpen}
           onFindUsers={onFindUsers}
           findUsersOpen={findUsersOpen}
+          personalSpaceActive={personalSpaceActive}
+          onPersonalSpaceSelect={onPersonalSpaceSelect}
         />
       </Box>
 

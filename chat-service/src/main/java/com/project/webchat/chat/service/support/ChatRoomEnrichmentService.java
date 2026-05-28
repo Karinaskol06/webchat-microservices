@@ -42,17 +42,15 @@ public class ChatRoomEnrichmentService {
                 .unreadCount(unreadCount)
                 .createdBy(chat.getCreatedBy())
                 .memberCount(chat.getMemberIds() != null ? chat.getMemberIds().size() : 0)
-                .currentUserAdmin(chat.getType() == ChatType.GROUP
-                        && roomPermissionService.effectiveAdminIds(chat).contains(currentUserId));
+                .currentUserAdmin(roomPermissionService.hasGroupAdminRights(chat, currentUserId));
 
         boolean channelCreator = chat.getType() == ChatType.CHANNEL
-                && chat.getCreatedBy() != null
-                && chat.getCreatedBy().equals(currentUserId);
+                && roomPermissionService.sameUserId(chat.getCreatedBy(), currentUserId);
         boolean channelPromotedAdmin = chat.getType() == ChatType.CHANNEL
-                && chat.getAdminIds() != null
-                && chat.getAdminIds().contains(currentUserId);
+                && roomPermissionService.setContainsUserId(chat.getAdminIds(), currentUserId);
         boolean channelPoster = chat.getType() == ChatType.CHANNEL
-                && roomPermissionService.channelPosterIdsSet(chat).contains(currentUserId);
+                && roomPermissionService.setContainsUserId(
+                        roomPermissionService.channelPosterIdsSet(chat), currentUserId);
         builder.currentUserChannelCreator(channelCreator)
                 .currentUserChannelAdmin(channelPromotedAdmin)
                 .currentUserChannelPoster(channelPoster);
@@ -66,6 +64,13 @@ public class ChatRoomEnrichmentService {
                 UserInfoDTO otherUser = chatUserInfoService.getUserInfo(otherUserId);
                 builder.otherUser(otherUser);
             }
+        }
+
+        if (chat.getType() == ChatType.PERSONAL_SPACE) {
+            builder.groupName(chat.getGroupName() != null
+                    ? chat.getGroupName()
+                    : com.project.webchat.chat.service.room.PersonalSpaceService.PERSONAL_SPACE_DISPLAY_NAME);
+            builder.groupPhoto(chat.getGroupPhoto());
         }
 
         if (chat.getType() == ChatType.GROUP || chat.getType() == ChatType.CHANNEL) {

@@ -98,7 +98,7 @@ public class UserController {
             @RequestParam("file") MultipartFile file) {
         try {
             profileImageService.upload(userId, ProfileImageService.KIND_AVATAR, file);
-            return ResponseEntity.ok().build();
+            return ResponseEntity.ok(userService.getUserDTOById(userId));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
@@ -107,7 +107,7 @@ public class UserController {
     @DeleteMapping("/profile/avatar")
     public ResponseEntity<?> deleteAvatar(@RequestHeader("X-User-Id") Long userId) {
         profileImageService.delete(userId, ProfileImageService.KIND_AVATAR);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(userService.getUserDTOById(userId));
     }
 
     @PostMapping(value = "/profile/background", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -116,7 +116,7 @@ public class UserController {
             @RequestParam("file") MultipartFile file) {
         try {
             profileImageService.upload(userId, ProfileImageService.KIND_BACKGROUND, file);
-            return ResponseEntity.ok().build();
+            return ResponseEntity.ok(userService.getUserDTOById(userId));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
@@ -125,7 +125,7 @@ public class UserController {
     @DeleteMapping("/profile/background")
     public ResponseEntity<?> deleteBackground(@RequestHeader("X-User-Id") Long userId) {
         profileImageService.delete(userId, ProfileImageService.KIND_BACKGROUND);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(userService.getUserDTOById(userId));
     }
 
     @GetMapping("/{id}/avatar")

@@ -181,6 +181,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - EUREKA_URL=${EUREKA_URL}
       - JWT_SECRET=${JWT_SECRET}
+      - GATEWAY_INTERNAL_AUTH_TOKEN=${GATEWAY_INTERNAL_AUTH_TOKEN:-local-gateway-token}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
     volumes:
       - chat_uploads:/var/webchat/uploads
@@ -243,6 +244,7 @@ services:
     environment:
       - EUREKA_URL=${EUREKA_URL}
       - JWT_SECRET=${JWT_SECRET}
+      - GATEWAY_INTERNAL_AUTH_TOKEN=${GATEWAY_INTERNAL_AUTH_TOKEN:-local-gateway-token}
     ports:
       - "8089:8089"
     networks:

@@ -32,3 +32,35 @@ export function canModerateOthersMessages(chat, currentUserId) {
 export function channelPostingRestricted(chat) {
   return Boolean(chat && isChannelType(chat) && !canPostInChannel(chat));
 }
+
+export function isGroupOrChannelType(chat) {
+  const t = String(chat?.type || '').toUpperCase();
+  return t === 'GROUP' || t === 'CHANNEL';
+}
+
+/** Group creator/admins or channel owner/moderators may delete the room. */
+/** Group admins or channel owner/moderators may edit name, description, and avatar. */
+export function canEditRoomProfile(chat) {
+  return canDeleteRoom(chat);
+}
+
+export function canDeleteRoom(chat) {
+  if (!chat || !isGroupOrChannelType(chat)) return false;
+  const t = String(chat.type || '').toUpperCase();
+  if (t === 'GROUP') return Boolean(chat.isCurrentUserAdmin);
+  if (t === 'CHANNEL') {
+    return Boolean(chat.isCurrentUserChannelCreator || chat.isCurrentUserChannelAdmin);
+  }
+  return false;
+}
+
+export function canLeaveRoom(chat) {
+  return isGroupOrChannelType(chat);
+}
+
+export function roomTypeLabel(chat) {
+  const t = String(chat?.type || '').toUpperCase();
+  if (t === 'CHANNEL') return 'Channel';
+  if (t === 'GROUP') return 'Group chat';
+  return 'Room';
+}

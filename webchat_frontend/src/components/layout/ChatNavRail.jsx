@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Avatar,
   Badge,
   Box,
   IconButton,
@@ -12,6 +11,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import PeopleOutlineIcon from '@mui/icons-material/PeopleOutline';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import { useNavigate } from 'react-router-dom';
@@ -21,6 +21,7 @@ import useChatFolderStore from '../../store/useChatFolderStore';
 import ChatFolderRailSection from './ChatFolderRailSection';
 import { isChatDragEvent, readChatDragId } from '../../utils/chatDrag';
 import { chatColors, chatLayout } from '../../theme/chatDesignTokens';
+import UserAvatar from '../user/UserAvatar';
 
 const CHAT_FILTERS = [
   { id: 'ALL', label: 'All chats', icon: ChatBubbleOutlineIcon },
@@ -46,6 +47,8 @@ const ChatNavRail = ({
   onFindUsers,
   findUsersOpen,
   settingsOpen,
+  personalSpaceActive,
+  onPersonalSpaceSelect,
 }) => {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
@@ -73,8 +76,6 @@ const ChatNavRail = ({
     logout();
     navigate('/login');
   };
-
-  const letter = (user?.firstName?.[0] || user?.username?.[0] || 'U').toUpperCase();
 
   return (
     <Box
@@ -217,6 +218,27 @@ const ChatNavRail = ({
         })}
       </Box>
 
+      <Tooltip title="Personal Space" placement="right">
+        <IconButton
+          aria-label="Personal Space"
+          aria-current={personalSpaceActive ? 'true' : undefined}
+          onClick={() => onPersonalSpaceSelect?.()}
+          sx={{
+            width: 48,
+            height: 48,
+            mx: 'auto',
+            color: personalSpaceActive ? chatColors.navIconActive : chatColors.navIcon,
+            bgcolor: personalSpaceActive ? chatColors.navActiveBg : 'transparent',
+            borderRadius: 2,
+            '&:hover': {
+              bgcolor: personalSpaceActive ? chatColors.navActiveBg : 'rgba(24, 20, 28, 0.06)',
+            },
+          }}
+        >
+          <SpaceDashboardOutlinedIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+
       <ChatFolderRailSection
         activeFolderId={activeFolderId}
         onSelectFolder={onFolderSelect}
@@ -241,13 +263,11 @@ const ChatNavRail = ({
             onClick={onOpenProfile}
             sx={{ p: 0.5 }}
           >
-            <Avatar
-              src={user?.profilePicture || undefined}
+            <UserAvatar
+              user={user}
               variant="rounded"
               sx={{ width: 40, height: 40, border: `2px solid ${chatColors.glassPanelBorder}` }}
-            >
-              {!user?.profilePicture ? letter : null}
-            </Avatar>
+            />
           </IconButton>
         </Tooltip>
         <Tooltip title="Settings">

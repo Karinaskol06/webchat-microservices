@@ -67,5 +67,14 @@ export function parseQuotedSnippet(replied) {
     }
     return { kind: 'photo', subtitle: 'Photo' };
   }
+  if (mt === 'TODO') {
+    return { kind: 'text', subtitle: 'To-do list' };
+  }
+  if (mt === 'STICKY_NOTE') {
+    return { kind: 'text', subtitle: 'Sticky note' };
+  }
+  if (mt === 'CALLOUT') {
+    return { kind: 'text', subtitle: 'Reminder' };
+  }
   return { kind: 'text', subtitle: raw || 'Message' };
 }
