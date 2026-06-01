@@ -13,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ChatRoomPermissionServiceTest {
 
+    // determines who can do what in a chat room based on room type and member/admin list
     private final ChatRoomPermissionService permissionService = new ChatRoomPermissionService();
 
     @Test

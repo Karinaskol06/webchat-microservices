@@ -12,27 +12,8 @@ import authService from './services/authService';
 import { disconnectWebSocket } from './utils/websocket';
 import chatService from './services/chatService';
 import pushNotificationService from './services/pushNotificationService';
-import { Box, CircularProgress } from '@mui/material';
-
-// ProtectedRoute component to guard routes that require authentication
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, isInitialized } = useAuthStore();
-
-  // While we are checking existing session, show a loader
-  if (!isInitialized) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" />;
-  }
-
-  return children;
-};
+import { Box } from '@mui/material';
+import ProtectedRoute from './components/routing/ProtectedRoute';
 
 function AppRoutes() {
   const location = useLocation();

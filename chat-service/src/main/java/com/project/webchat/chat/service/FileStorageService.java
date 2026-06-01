@@ -3,6 +3,7 @@ package com.project.webchat.chat.service;
 import com.project.webchat.chat.entity.Attachment;
 import com.project.webchat.chat.entity.FileType;
 import com.project.webchat.chat.repository.AttachmentRepository;
+import com.project.webchat.chat.service.support.AttachmentFilenameSecurity;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -109,7 +110,7 @@ public class FileStorageService {
             }
 
             // Malicious file names detection
-            if (containsMaliciousPattern(originalFilename)) {
+            if (AttachmentFilenameSecurity.containsMaliciousPattern(originalFilename)) {
                 throw new IllegalArgumentException("Filename contains invalid characters");
             }
 
@@ -128,7 +129,7 @@ public class FileStorageService {
                     throw new IllegalArgumentException("File is too small or corrupted");
                 }
             }
-            if (!isValidFileType(fileHeader, extension)) {
+            if (!AttachmentFilenameSecurity.isValidFileType(fileHeader, extension)) {
                 Files.deleteIfExists(targetPath);
                 throw new IllegalArgumentException(
                         "This file doesn't match its type. It may be corrupted or renamed with the wrong extension."
@@ -138,7 +139,7 @@ public class FileStorageService {
             // Creating db record
             Attachment attachment = Attachment.builder()
                     .id(UUID.randomUUID().toString())
-                    .filename(sanitizeFilename(originalFilename))
+                    .filename(AttachmentFilenameSecurity.sanitizeFilename(originalFilename))
                     .storedFilename(safeStoredFilename)
                     .filePath(targetPath.toAbsolutePath().toString())
                     .size(file.getSize())
@@ -269,88 +270,8 @@ public class FileStorageService {
         return filename.substring(filename.lastIndexOf('.')).toLowerCase();
     }
 
-    private boolean containsMaliciousPattern(String filename) {
-        if (filename == null) return true;
-
-        String lower = filename.toLowerCase();
-        // Prohibited patterns
-        return lower.contains("..") ||          // Path traversal
-                lower.contains("/") ||           // Unix path
-                lower.contains("\\") ||          // Windows path
-                lower.contains("%00") ||         // Null byte injection
-                lower.contains("script") ||      // XSS
-                // Dangerous extensions
-                lower.matches(".*\\.(php|jsp|asp|aspx|exe|bat|sh|cmd|vbs|ps1).*");
-    }
-
-    private boolean isValidFileType(byte[] header, String extension) {
-        if (header == null || header.length < 4) return false;
-
-        // magic numbers for different types of files
-        switch (extension.toLowerCase()) {
-            case ".jpg":
-            case ".jpeg":
-                return header[0] == (byte) 0xFF && header[1] == (byte) 0xD8;
-
-            case ".png":
-                return header[0] == (byte) 0x89 && header[1] == (byte) 0x50 &&
-                        header[2] == (byte) 0x4E && header[3] == (byte) 0x47;
-
-            case ".gif":
-                return (header[0] == (byte) 0x47 && header[1] == (byte) 0x49 && header[2] == (byte) 0x46) ||
-                        (header[0] == (byte) 0x47 && header[1] == (byte) 0x49 && header[2] == (byte) 0x46 && header[3] == (byte) 0x38);
-
-            case ".pdf":
-                return header[0] == (byte) 0x25 && header[1] == (byte) 0x50 &&
-                        header[2] == (byte) 0x44 && header[3] == (byte) 0x46;
-
-            case ".txt":
-                return true;
-
-            case ".doc":
-            case ".xls":
-            case ".ppt":
-                // OLE2 (CFB) header
-                return header[0] == (byte) 0xD0 && header[1] == (byte) 0xCF &&
-                        header[2] == (byte) 0x11 && header[3] == (byte) 0xE0;
-
-            case ".docx":
-            case ".xlsx":
-            case ".pptx":
-                // ZIP header (Office Open XML)
-                return header[0] == (byte) 0x50 && header[1] == (byte) 0x4B;
-
-            default:
-                return true;
-        }
-    }
-
     private String generateSafeFilename(String extension) {
         return UUID.randomUUID().toString() + extension;
-    }
-
-    private String sanitizeFilename(String filename) {
-        if (filename == null || filename.isBlank()) {
-            return "unknown";
-        }
-
-        String base = filename.strip();
-        int lastSep = Math.max(base.lastIndexOf('/'), base.lastIndexOf('\\'));
-        if (lastSep >= 0) {
-            base = base.substring(lastSep + 1).strip();
-        }
-        if (base.isBlank()) {
-            return "unknown";
-        }
-
-        // Keep Unicode letters (e.g. Ukrainian Cyrillic), numbers, and safe punctuation.
-        String sanitized = base.replaceAll("[^\\p{L}\\p{M}\\p{N}.\\-_]", "_")
-                .replaceAll("_{2,}", "_")
-                .replaceAll("^_+|_+$", "");
-        if (sanitized.isBlank()) {
-            return "unknown";
-        }
-        return sanitized.substring(0, Math.min(sanitized.length(), 255));
     }
 
     // Determine file type base on extension
