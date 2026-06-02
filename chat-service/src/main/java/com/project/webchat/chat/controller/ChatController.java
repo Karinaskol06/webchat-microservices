@@ -20,6 +20,7 @@ import com.project.webchat.chat.dto.UpdateRoomProfileRequest;
 import com.project.webchat.chat.security.CustomUserDetails;
 import com.project.webchat.chat.service.ChatService;
 import com.project.webchat.chat.service.WebSocketService;
+import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -251,6 +252,14 @@ public class ChatController {
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         ChatRoomDTO dto = chatService.getRoomForMember(id, currentUser.getId());
         return ResponseEntity.ok(dto);
+    }
+
+    @GetMapping("/rooms/{id}/participants")
+    public ResponseEntity<List<UserInfoDTO>> getRoomParticipantsForMember(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        List<UserInfoDTO> participants = chatService.getRoomParticipantsForMember(id, currentUser.getId());
+        return ResponseEntity.ok(participants);
     }
 
     /**

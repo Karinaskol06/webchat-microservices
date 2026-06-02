@@ -41,7 +41,6 @@ public class ChatMessagePreviewHelper {
             case TODO -> "To-do list";
             case STICKY_NOTE -> "Sticky note";
             case CALLOUT -> "Reminder";
-            case DIVIDER -> "Divider";
             default -> null;
         };
     }

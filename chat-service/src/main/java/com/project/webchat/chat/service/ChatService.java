@@ -18,6 +18,7 @@ import com.project.webchat.chat.service.room.ChatRoomManagementService;
 import com.project.webchat.chat.service.room.PersonalSpaceService;
 import com.project.webchat.chat.service.room.PrivateChatService;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -139,6 +140,10 @@ public class ChatService {
 
     public ChatRoomDTO getRoomForMember(String roomId, Long userId) {
         return chatRoomManagementService.getRoomForMember(roomId, userId);
+    }
+
+    public List<UserInfoDTO> getRoomParticipantsForMember(String roomId, Long userId) {
+        return chatRoomManagementService.getRoomParticipantsForMember(roomId, userId);
     }
 
     @Transactional

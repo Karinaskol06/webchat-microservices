@@ -14,6 +14,7 @@ import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.shared.dto.UserDTO;
+import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -88,9 +89,11 @@ public class ChatRoomManagementService {
 
         if (chat.getMemberIds().isEmpty()) {
             chatRoomRepository.delete(chat);
+            redisService.evictChatParticipants(chatId);
             webSocketService.notifyChatDeleted(chatId, otherMembers);
         } else {
             chatRoomRepository.save(chat);
+            redisService.evictChatParticipants(chatId);
             webSocketService.notifyUserLeftChatForAll(chatId, userId, otherMembers);
             roomEnrichmentService.notifyRoomMembersChatUpdated(chat);
         }
@@ -120,6 +123,7 @@ public class ChatRoomManagementService {
         chatMessageRepository.deleteByChatId(roomId);
         roomMemberInviteRepository.deleteByRoomId(roomId);
         chatRoomRepository.delete(room);
+        redisService.evictChatParticipants(roomId);
         webSocketService.notifyChatDeleted(roomId, members);
         log.info("Room {} deleted by user {}", roomId, userId);
     }
@@ -162,6 +166,25 @@ public class ChatRoomManagementService {
                 room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));
     }
 
+    public List<UserInfoDTO> getRoomParticipantsForMember(String roomId, Long userId) {
+        List<Long> cachedParticipantIds = redisService.getCachedChatParticipants(roomId);
+        if (!cachedParticipantIds.isEmpty() && cachedParticipantIds.contains(userId)) {
+            return cachedParticipantIds.stream()
+                    .map(chatUserInfoService::getUserInfo)
+                    .toList();
+        }
+
+        ChatRoom room = loadRoom(roomId);
+        if (!room.isMember(userId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+
+        redisService.cacheChatParticipants(roomId, room.getMemberIds());
+        return room.getMemberIds().stream()
+                .map(chatUserInfoService::getUserInfo)
+                .toList();
+    }
+
     @Transactional
     public ChatRoomDTO joinPublicRoom(String roomId, Long userId) {
         ChatRoom room = chatRoomRepository.findById(roomId)
@@ -179,6 +202,7 @@ public class ChatRoomManagementService {
         }
         room.addMember(userId);
         ChatRoom saved = chatRoomRepository.save(room);
+        redisService.evictChatParticipants(roomId);
         roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
         return roomEnrichmentService.enrichChatWithUserData(
                 saved, userId, roomEnrichmentService.getUnreadCount(saved.getId(), userId));
@@ -205,6 +229,7 @@ public class ChatRoomManagementService {
         }
         room.addMember(userId);
         ChatRoom saved = chatRoomRepository.save(room);
+        redisService.evictChatParticipants(saved.getId());
         roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
         return roomEnrichmentService.enrichChatWithUserData(
                 saved, userId, roomEnrichmentService.getUnreadCount(saved.getId(), userId));
@@ -446,6 +471,7 @@ public class ChatRoomManagementService {
                 .build();
 
         ChatRoom saved = chatRoomRepository.save(room);
+        redisService.evictChatParticipants(saved.getId());
         for (Long memberId : saved.getMemberIds()) {
             webSocketService.notifyChatCreated(memberId,
                     roomEnrichmentService.enrichChatWithUserData(
@@ -461,6 +487,7 @@ public class ChatRoomManagementService {
         }
         room.addMember(newMemberId);
         ChatRoom saved = chatRoomRepository.save(room);
+        redisService.evictChatParticipants(saved.getId());
         roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
         webSocketService.notifyChatCreated(newMemberId,
                 roomEnrichmentService.enrichChatWithUserData(

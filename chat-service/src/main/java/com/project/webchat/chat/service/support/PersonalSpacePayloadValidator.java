@@ -30,7 +30,6 @@ public class PersonalSpacePayloadValidator {
             case TODO -> validateTodo(root);
             case STICKY_NOTE -> validateSticky(root);
             case CALLOUT -> validateCallout(root);
-            case DIVIDER -> { /* empty object is fine */ }
             default -> throw new IllegalArgumentException("Unsupported rich message type.");
         }
     }
@@ -38,8 +37,7 @@ public class PersonalSpacePayloadValidator {
     public static boolean isRichMessageType(MessageType type) {
         return type == MessageType.TODO
                 || type == MessageType.STICKY_NOTE
-                || type == MessageType.CALLOUT
-                || type == MessageType.DIVIDER;
+                || type == MessageType.CALLOUT;
     }
 
     private void validateTodo(JsonNode root) {

@@ -9,7 +9,9 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -30,7 +32,9 @@ public class RedisService {
     private static final String AFK_CHAT_PREFIX = "AFK:";
     private static final String LAST_SEEN_PREFIX = "last_seen:";
     private static final String USER_INFO_PREFIX = "user_info:";
+    private static final String CHAT_PARTICIPANTS_PREFIX = "chat_participants:";
     private static final Duration USER_CACHE_TIMEOUT = Duration.ofMinutes(30);
+    private static final Duration CHAT_PARTICIPANTS_CACHE_TIMEOUT = Duration.ofMinutes(5);
     private static final Duration ONLINE_TIMEOUT = Duration.ofMinutes(1);
 
     //mark user online
@@ -170,6 +174,47 @@ public class RedisService {
             log.error("Failed to cache user info: {}", e.getMessage());
         }
         return null;
+    }
+
+    public void cacheChatParticipants(String chatId, Set<Long> participantIds) {
+        if (chatId == null || chatId.isBlank() || participantIds == null || participantIds.isEmpty()) {
+            return;
+        }
+        try {
+            String key = CHAT_PARTICIPANTS_PREFIX + chatId;
+            String value = objectMapper.writeValueAsString(participantIds);
+            redisTemplate.opsForValue().set(key, value, CHAT_PARTICIPANTS_CACHE_TIMEOUT);
+        } catch (Exception e) {
+            log.error("Failed to cache chat participants for {}: {}", chatId, e.getMessage());
+        }
+    }
+
+    public List<Long> getCachedChatParticipants(String chatId) {
+        if (chatId == null || chatId.isBlank()) {
+            return List.of();
+        }
+        try {
+            String key = CHAT_PARTICIPANTS_PREFIX + chatId;
+            String value = redisTemplate.opsForValue().get(key);
+            if (value != null) {
+                return new ArrayList<>(objectMapper.readValue(
+                        value,
+                        objectMapper.getTypeFactory().constructCollectionType(Set.class, Long.class)
+                ));
+            }
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to deserialize participants cache for {}: {}", chatId, e.getMessage());
+        } catch (Exception e) {
+            log.error("Failed to fetch participants cache for {}: {}", chatId, e.getMessage());
+        }
+        return List.of();
+    }
+
+    public void evictChatParticipants(String chatId) {
+        if (chatId == null || chatId.isBlank()) {
+            return;
+        }
+        redisTemplate.delete(CHAT_PARTICIPANTS_PREFIX + chatId);
     }
 
     //get the chat user is now in

@@ -35,8 +35,6 @@ class MessageReactionServiceTest {
     @Mock
     private ChatRoomRepository chatRoomRepository;
     @Mock
-    private WebSocketService webSocketService;
-    @Mock
     private ChatMessageMapper chatMessageMapper;
 
     @InjectMocks

@@ -33,11 +33,6 @@ class PersonalSpacePayloadValidatorTest {
     }
 
     @Test
-    void validate_acceptsDividerWithEmptyObject() {
-        validator.validate(MessageType.DIVIDER, "{}");
-    }
-
-    @Test
     void isRichMessageType_identifiesRichTypes() {
         assertThat(PersonalSpacePayloadValidator.isRichMessageType(MessageType.TODO)).isTrue();
         assertThat(PersonalSpacePayloadValidator.isRichMessageType(MessageType.TEXT)).isFalse();

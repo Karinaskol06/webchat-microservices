@@ -7,7 +7,5 @@ public enum MessageType {
     /** Sticky note card; JSON may include position for personal-space layout. */
     STICKY_NOTE,
     /** Notion-style callout block. */
-    CALLOUT,
-    /** Permanent horizontal divider in the message stream. */
-    DIVIDER
+    CALLOUT
 }

@@ -59,7 +59,6 @@ public final class AttachmentFilenameSecurity {
                     && header[3] == (byte) 0x38);
             case ".pdf" -> header[0] == (byte) 0x25 && header[1] == (byte) 0x50
                     && header[2] == (byte) 0x44 && header[3] == (byte) 0x46;
-            case ".txt" -> true;
             case ".doc", ".xls", ".ppt" -> header[0] == (byte) 0xD0 && header[1] == (byte) 0xCF
                     && header[2] == (byte) 0x11 && header[3] == (byte) 0xE0;
             case ".docx", ".xlsx", ".pptx" -> header[0] == (byte) 0x50 && header[1] == (byte) 0x4B;
