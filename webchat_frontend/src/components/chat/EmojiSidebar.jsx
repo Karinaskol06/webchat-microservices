@@ -8,7 +8,7 @@ import {
   Typography,
 } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { chatColors, chatHideScrollbarSx } from '../../theme/chatDesignTokens';
+import { chatColors, chatHideScrollbarSx, muiTransparent } from '../../theme/chatDesignTokens';
 
 /**
  * Curated emoji list by category — rendered natively so ZWJ / skin tones / flags
@@ -223,7 +223,7 @@ const EmojiSidebar = ({ onClose, onEmojiClick, highlighted = false, reactionMode
                     sx={{
                       border: 0,
                       borderRadius: 1,
-                      bgcolor: 'transparent',
+                      bgcolor: muiTransparent,
                       cursor: 'pointer',
                       p: 0.5,
                       m: 0,

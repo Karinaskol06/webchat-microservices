@@ -30,6 +30,15 @@ public class ChatRoomEnrichmentService {
     }
 
     public ChatRoomDTO enrichChatWithUserData(ChatRoom chat, Long currentUserId, int unreadCount) {
+        return enrichChatWithUserData(chat, currentUserId, unreadCount, false);
+    }
+
+    /**
+     * @param freshUserProfiles when true, user names/avatars are loaded without Redis user cache (chat list).
+     */
+    public ChatRoomDTO enrichChatWithUserData(
+            ChatRoom chat, Long currentUserId, int unreadCount, boolean freshUserProfiles) {
+        boolean useUserCache = !freshUserProfiles;
         RoomVisibility visibility = chat.getVisibility() != null ? chat.getVisibility() : RoomVisibility.PRIVATE;
 
         ChatRoomDTO.ChatRoomDTOBuilder builder = ChatRoomDTO.builder()
@@ -61,7 +70,7 @@ public class ChatRoomEnrichmentService {
                     .findFirst()
                     .orElse(null);
             if (otherUserId != null) {
-                UserInfoDTO otherUser = chatUserInfoService.getUserInfo(otherUserId);
+                UserInfoDTO otherUser = chatUserInfoService.getUserInfo(otherUserId, useUserCache);
                 builder.otherUser(otherUser);
             }
         }
@@ -75,7 +84,7 @@ public class ChatRoomEnrichmentService {
 
         if (chat.getType() == ChatType.GROUP || chat.getType() == ChatType.CHANNEL) {
             List<UserInfoDTO> members = chat.getMemberIds().stream()
-                    .map(chatUserInfoService::getUserInfo)
+                    .map(id -> chatUserInfoService.getUserInfo(id, useUserCache))
                     .toList();
             builder.members(members);
             builder.groupName(chat.getGroupName());

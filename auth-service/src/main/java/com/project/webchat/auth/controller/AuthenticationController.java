@@ -1,11 +1,15 @@
 package com.project.webchat.auth.controller;
 
 import com.project.webchat.auth.feign.UserServiceClient;
+import com.project.webchat.shared.dto.ForgotPasswordRequestDTO;
 import com.project.webchat.shared.dto.LoginRequestDTO;
 import com.project.webchat.shared.dto.LoginResponseDTO;
+import com.project.webchat.shared.dto.MessageResponseDTO;
 import com.project.webchat.shared.dto.RegisterRequestDTO;
+import com.project.webchat.shared.dto.ResetPasswordRequestDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.auth.service.AuthService;
+import com.project.webchat.auth.service.PasswordResetService;
 import com.project.webchat.auth.security.JwtService;
 import feign.FeignException;
 import jakarta.validation.Valid;
@@ -28,6 +32,7 @@ public class AuthenticationController {
 
     private final JwtService jwtService;
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
     private final UserServiceClient userServiceClient;
 
     @PostMapping("/login")
@@ -41,6 +46,18 @@ public class AuthenticationController {
     public ResponseEntity<String> logout() {
         SecurityContextHolder.clearContext();
         return ResponseEntity.ok("Logged out successfully");
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<MessageResponseDTO> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequestDTO request) {
+        return ResponseEntity.ok(passwordResetService.requestPasswordReset(request));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<MessageResponseDTO> resetPassword(
+            @Valid @RequestBody ResetPasswordRequestDTO request) {
+        return ResponseEntity.ok(passwordResetService.completePasswordReset(request));
     }
 
     @PostMapping("/register")

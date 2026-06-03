@@ -22,15 +22,18 @@ const RichMessageContent = ({
 
   const common = { payload: data, editable, onUpdate, onDelete, messageId };
 
+  const isTodo = type === 'TODO';
+
   return (
     <Box
       sx={{
-        width: '100%',
+        width: isTodo ? 'max-content' : '100%',
+        maxWidth: '100%',
         display: 'flex',
         justifyContent: 'flex-start',
       }}
     >
-      {type === 'TODO' && <TodoListMessage {...common} />}
+      {isTodo && <TodoListMessage {...common} />}
       {type === 'STICKY_NOTE' && (
         <StickyNoteMessage
           {...common}

@@ -1,6 +1,9 @@
 package com.project.webchat.user.service;
 
 import com.project.webchat.user.dto.ChangePasswordDTO;
+import com.project.webchat.user.dto.FieldAvailabilityDTO;
+import com.project.webchat.user.dto.UpdateAccountDTO;
+import com.project.webchat.user.dto.UpdateAccountResultDTO;
 import com.project.webchat.shared.dto.UserSearchResultDTO;
 import com.project.webchat.shared.dto.RegisterRequestDTO;
 import com.project.webchat.user.dto.UpdateUserDTO;
@@ -111,10 +114,149 @@ public class UserService {
         if (!passwordEncoder.matches(changePasswordDTO.getOldPassword(), user.getPasswordHash())) {
             throw new IllegalArgumentException("Old password is incorrect");
         }
-        if (changePasswordDTO.getOldPassword() != null) {
-            user.setPasswordHash(passwordEncoder.encode(changePasswordDTO.getNewPassword()));
+        String newPassword = changePasswordDTO.getNewPassword();
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new IllegalArgumentException("Password must be at least 6 characters long");
         }
+        if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("New password must be different from the current password");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(user);
+    }
+
+    public FieldAvailabilityDTO checkUsernameAvailability(String rawUsername, Long userId) {
+        String username = normalizeUsername(rawUsername);
+        if (username == null) {
+            return FieldAvailabilityDTO.builder()
+                    .available(false)
+                    .message("Username is required")
+                    .build();
+        }
+        if (username.length() < 3 || username.length() > 50) {
+            return FieldAvailabilityDTO.builder()
+                    .available(false)
+                    .message("Username must be between 3 and 50 characters")
+                    .build();
+        }
+        if (!username.matches("^[a-zA-Z0-9._-]+$")) {
+            return FieldAvailabilityDTO.builder()
+                    .available(false)
+                    .message("Username may only contain letters, numbers, dots, underscores, and hyphens")
+                    .build();
+        }
+        boolean taken = isUsernameTakenByAnotherUser(username, userId);
+        return FieldAvailabilityDTO.builder()
+                .available(!taken)
+                .message(taken ? "This username is already taken" : "Username is available")
+                .build();
+    }
+
+    public FieldAvailabilityDTO checkEmailAvailability(String rawEmail, Long userId) {
+        if (rawEmail == null || rawEmail.isBlank()) {
+            return FieldAvailabilityDTO.builder()
+                    .available(false)
+                    .message("Email is required")
+                    .build();
+        }
+        String email = rawEmail.trim();
+        boolean taken = isEmailTakenByAnotherUser(email, userId);
+        return FieldAvailabilityDTO.builder()
+                .available(!taken)
+                .message(taken ? "This email is already in use" : "Email is available")
+                .build();
+    }
+
+    @Transactional
+    public UpdateAccountResultDTO updateAccountIdentifiers(Long userId, UpdateAccountDTO updateAccountDTO) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found " + userId));
+
+        boolean usernameChanged = false;
+        boolean emailChanged = false;
+        String newUsername = updateAccountDTO.getUsername();
+        if (newUsername != null && !newUsername.isBlank()) {
+            String normalized = normalizeUsername(newUsername);
+            FieldAvailabilityDTO availability = checkUsernameAvailability(normalized, userId);
+            if (!availability.isAvailable()) {
+                throw new IllegalArgumentException(availability.getMessage());
+            }
+            if (!normalized.equals(user.getUsername())) {
+                user.setUsername(normalized);
+                usernameChanged = true;
+            }
+        }
+
+        String newEmail = updateAccountDTO.getEmail();
+        if (newEmail != null && !newEmail.isBlank()) {
+            String trimmed = newEmail.trim();
+            FieldAvailabilityDTO availability = checkEmailAvailability(trimmed, userId);
+            if (!availability.isAvailable()) {
+                throw new IllegalArgumentException(availability.getMessage());
+            }
+            if (!trimmed.equalsIgnoreCase(user.getEmail())) {
+                user.setEmail(trimmed);
+                emailChanged = true;
+            }
+        }
+
+        if ((newUsername == null || newUsername.isBlank()) && (newEmail == null || newEmail.isBlank())) {
+            throw new IllegalArgumentException("Provide a new username or email to update");
+        }
+        if (!usernameChanged && !emailChanged) {
+            throw new IllegalArgumentException("No changes to save");
+        }
+
+        User saved = userRepository.save(user);
+        String message = usernameChanged
+                ? "Username updated. Sign in again with your new username or email."
+                : "Account details updated.";
+        return UpdateAccountResultDTO.builder()
+                .user(convertToDTO(saved))
+                .usernameChanged(usernameChanged)
+                .message(message)
+                .build();
+    }
+
+    private boolean isUsernameTakenByAnotherUser(String username, Long userId) {
+        return userRepository.findByUsername(username)
+                .filter(existing -> !existing.getId().equals(userId))
+                .isPresent();
+    }
+
+    private boolean isEmailTakenByAnotherUser(String email, Long userId) {
+        return userRepository.findByEmailIgnoreCase(email.trim())
+                .filter(existing -> !existing.getId().equals(userId))
+                .isPresent();
+    }
+
+    private static String normalizeUsername(String rawUsername) {
+        if (rawUsername == null) {
+            return null;
+        }
+        return rawUsername.trim();
+    }
+
+    @Transactional
+    public void resetPassword(String username, String newPassword) {
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new IllegalArgumentException("Password must be at least 6 characters long");
+        }
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found " + username));
+        if (!user.isActive()) {
+            throw new IllegalArgumentException("Account is not active");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+
+    public Optional<UserDTO> findUserByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return Optional.empty();
+        }
+        return userRepository.findByEmailIgnoreCase(email.trim())
+                .map(this::convertToDTO);
     }
 
     public List<UserDTO> getAllUsers() {

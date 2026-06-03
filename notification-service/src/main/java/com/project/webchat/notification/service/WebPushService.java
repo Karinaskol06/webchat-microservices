@@ -6,6 +6,8 @@ import com.project.webchat.notification.config.VapidProperties;
 import com.project.webchat.notification.entity.PushSubscription;
 import com.project.webchat.notification.repository.PushSubscriptionRepository;
 import com.project.webchat.shared.events.v1.MessageCreatedEventV1;
+import com.project.webchat.shared.events.v1.MessageReactionEventV1;
+import com.project.webchat.shared.events.v1.RoomMemberInvitedEventV1;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import nl.martijndwars.webpush.Notification;
@@ -22,6 +24,7 @@ import java.security.Security;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +49,18 @@ public class WebPushService {
      * @return number of subscriptions that the push provider acknowledged with 2xx
      */
     public int sendMessageCreated(Long recipientUserId, MessageCreatedEventV1 event) {
+        return sendPayload(recipientUserId, event.getEventId(), buildMessageCreatedPayload(event));
+    }
+
+    public int sendMessageReaction(Long recipientUserId, MessageReactionEventV1 event) {
+        return sendPayload(recipientUserId, event.getEventId(), buildMessageReactionPayload(event));
+    }
+
+    public int sendRoomMemberInvited(Long recipientUserId, RoomMemberInvitedEventV1 event) {
+        return sendPayload(recipientUserId, event.getEventId(), buildRoomMemberInvitedPayload(event));
+    }
+
+    private int sendPayload(Long recipientUserId, UUID eventId, String payload) {
         List<PushSubscription> subscriptions = pushSubscriptionRepository
                 .findByUserIdOrderByUpdatedAtDesc(recipientUserId);
         if (subscriptions.isEmpty()) {
@@ -53,26 +68,20 @@ public class WebPushService {
             return 0;
         }
 
-        String payload = buildPayload(event);
         PushService pushService = createPushService();
 
         int delivered = 0;
         boolean retryableFailureSeen = false;
 
         for (PushSubscription subscription : subscriptions) {
-            DeliveryOutcome outcome = deliverToSingleSubscription(pushService, subscription, payload, event, recipientUserId);
+            DeliveryOutcome outcome = deliverToSingleSubscription(pushService, subscription, payload, eventId, recipientUserId);
             if (outcome == DeliveryOutcome.DELIVERED) {
                 delivered++;
             } else if (outcome == DeliveryOutcome.RETRYABLE_FAILURE) {
                 retryableFailureSeen = true;
             }
-            // PERMANENTLY_FAILED / SKIPPED → just move on to the next subscription
         }
 
-        // Only rethrow (and trigger Kafka retry / DLQ) if we delivered to no-one
-        // AND at least one failure was the kind worth retrying. Otherwise we
-        // either already reached the user, or every endpoint we have is dead
-        // and retrying won't change anything.
         if (delivered == 0 && retryableFailureSeen) {
             throw new RuntimeException("All push subscriptions for recipient " + recipientUserId
                     + " failed with retryable errors");
@@ -83,7 +92,7 @@ public class WebPushService {
     private DeliveryOutcome deliverToSingleSubscription(PushService pushService,
                                                          PushSubscription subscription,
                                                          String payload,
-                                                         MessageCreatedEventV1 event,
+                                                         UUID eventId,
                                                          Long recipientUserId) {
         String endpointHost = subscription.getEndpoint() == null
                 ? "null"
@@ -104,15 +113,15 @@ public class WebPushService {
             // return 403 for AES128GCM payloads — fall back once before giving up.
             if (status == 403 && "fcm.googleapis.com".equals(endpointHost)) {
                 log.warn("WebPush FCM retry with AESGCM eventId={} recipientUserId={} subscriptionId={}",
-                        event.getEventId(), recipientUserId, subscription.getId());
+                        eventId, recipientUserId, subscription.getId());
                 response = sendWithTimeout(pushService, notification, Encoding.AESGCM);
                 status = response.getStatusLine().getStatusCode();
                 log.info("WebPush FCM retry response eventId={} recipientUserId={} subscriptionId={} status={}",
-                        event.getEventId(), recipientUserId, subscription.getId(), status);
+                        eventId, recipientUserId, subscription.getId(), status);
             }
 
             log.info("WebPush response eventId={} recipientUserId={} subscriptionId={} status={}",
-                    event.getEventId(), recipientUserId, subscription.getId(), status);
+                    eventId, recipientUserId, subscription.getId(), status);
 
             if (status >= 200 && status < 300) {
                 return DeliveryOutcome.DELIVERED;
@@ -128,38 +137,32 @@ public class WebPushService {
                             subscription.getId(), "rejected_status_" + status);
                 }
                 log.warn("WebPush non-retryable subscription response eventId={} recipientUserId={} subscriptionId={} status={}",
-                        event.getEventId(), recipientUserId, subscription.getId(), status);
+                        eventId, recipientUserId, subscription.getId(), status);
                 return DeliveryOutcome.PERMANENTLY_FAILED;
             }
-            // 5xx and anything else → treat as transient, but DON'T abort the loop.
             log.warn("WebPush retryable status eventId={} recipientUserId={} subscriptionId={} status={}",
-                    event.getEventId(), recipientUserId, subscription.getId(), status);
+                    eventId, recipientUserId, subscription.getId(), status);
             return DeliveryOutcome.RETRYABLE_FAILURE;
         } catch (PermanentNotificationException ex) {
-            // Configuration-level problem (e.g. invalid VAPID): genuinely
-            // permanent, no retry will help — propagate so the consumer
-            // routes the event to the DLQ instead of looping.
             log.error("WebPush permanent failure eventId={} recipientUserId={} subscriptionId={} message={}",
-                    event.getEventId(), recipientUserId, subscription.getId(), ex.getMessage(), ex);
+                    eventId, recipientUserId, subscription.getId(), ex.getMessage(), ex);
             throw ex;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             log.error("WebPush interrupted eventId={} recipientUserId={} subscriptionId={} message={}",
-                    event.getEventId(), recipientUserId, subscription.getId(), ex.getMessage(), ex);
+                    eventId, recipientUserId, subscription.getId(), ex.getMessage(), ex);
             return DeliveryOutcome.RETRYABLE_FAILURE;
         } catch (TimeoutException ex) {
             log.error("WebPush timeout eventId={} recipientUserId={} subscriptionId={} message={}",
-                    event.getEventId(), recipientUserId, subscription.getId(), ex.getMessage(), ex);
+                    eventId, recipientUserId, subscription.getId(), ex.getMessage(), ex);
             return DeliveryOutcome.RETRYABLE_FAILURE;
         } catch (ExecutionException ex) {
             log.error("WebPush execution failure eventId={} recipientUserId={} subscriptionId={} message={}",
-                    event.getEventId(), recipientUserId, subscription.getId(), ex.getMessage(), ex);
+                    eventId, recipientUserId, subscription.getId(), ex.getMessage(), ex);
             return DeliveryOutcome.RETRYABLE_FAILURE;
         } catch (Exception ex) {
-            // Anything else — e.g. bad p256dh/auth key on a single legacy row —
-            // must NOT poison delivery to the recipient's other subscriptions.
             log.error("WebPush failure eventId={} recipientUserId={} subscriptionId={} message={}",
-                    event.getEventId(), recipientUserId, subscription.getId(), ex.getMessage(), ex);
+                    eventId, recipientUserId, subscription.getId(), ex.getMessage(), ex);
             return DeliveryOutcome.RETRYABLE_FAILURE;
         }
     }
@@ -190,7 +193,7 @@ public class WebPushService {
         }
     }
 
-    private String buildPayload(MessageCreatedEventV1 event) {
+    private String buildMessageCreatedPayload(MessageCreatedEventV1 event) {
         String senderDisplayName = (event.getSenderDisplayName() == null || event.getSenderDisplayName().isBlank())
                 ? "New message"
                 : event.getSenderDisplayName();
@@ -199,6 +202,7 @@ public class WebPushService {
                 : event.getPreviewText();
 
         Map<String, Object> data = new HashMap<>();
+        data.put("notificationType", "message-created");
         data.put("eventId", event.getEventId());
         data.put("chatId", event.getChatId());
         data.put("messageId", event.getMessageId());
@@ -222,6 +226,76 @@ public class WebPushService {
         ));
         payload.put("data", data);
 
+        return serializePayload(payload);
+    }
+
+    private String buildMessageReactionPayload(MessageReactionEventV1 event) {
+        String reactorDisplayName = (event.getReactorDisplayName() == null || event.getReactorDisplayName().isBlank())
+                ? "Someone"
+                : event.getReactorDisplayName();
+        String emoji = event.getEmoji() != null ? event.getEmoji().trim() : "";
+        String body = emoji.isEmpty()
+                ? reactorDisplayName + " reacted to your message"
+                : reactorDisplayName + " reacted " + emoji + " to your message";
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("notificationType", "message-reaction");
+        data.put("eventId", event.getEventId());
+        data.put("chatId", event.getChatId());
+        data.put("messageId", event.getMessageId());
+        data.put("reactorDisplayName", reactorDisplayName);
+        data.put("emoji", emoji);
+        String reactorAvatarUrl = event.getReactorAvatarUrl() != null ? event.getReactorAvatarUrl().trim() : null;
+        if (reactorAvatarUrl != null && !reactorAvatarUrl.isEmpty()) {
+            data.put("reactorAvatarUrl", reactorAvatarUrl);
+        }
+        data.put("autoCloseMs", 10_000);
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("title", "New reaction");
+        payload.put("body", body);
+        if (reactorAvatarUrl != null && !reactorAvatarUrl.isEmpty()) {
+            payload.put("icon", reactorAvatarUrl);
+        }
+        payload.put("data", data);
+
+        return serializePayload(payload);
+    }
+
+    private String buildRoomMemberInvitedPayload(RoomMemberInvitedEventV1 event) {
+        String inviterDisplayName = (event.getInviterDisplayName() == null || event.getInviterDisplayName().isBlank())
+                ? "Someone"
+                : event.getInviterDisplayName();
+        String roomLabel = (event.getRoomName() == null || event.getRoomName().isBlank())
+                ? "a chat"
+                : "\"" + event.getRoomName().trim() + "\"";
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("notificationType", "room-member-invited");
+        data.put("eventId", event.getEventId());
+        data.put("inviteId", event.getInviteId());
+        data.put("roomId", event.getRoomId());
+        data.put("roomName", event.getRoomName());
+        data.put("roomType", event.getRoomType());
+        data.put("inviterDisplayName", inviterDisplayName);
+        String inviterAvatarUrl = event.getInviterAvatarUrl() != null ? event.getInviterAvatarUrl().trim() : null;
+        if (inviterAvatarUrl != null && !inviterAvatarUrl.isEmpty()) {
+            data.put("inviterAvatarUrl", inviterAvatarUrl);
+        }
+        data.put("autoCloseMs", 10_000);
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("title", "Chat invite");
+        payload.put("body", inviterDisplayName + " invited you to join " + roomLabel);
+        if (inviterAvatarUrl != null && !inviterAvatarUrl.isEmpty()) {
+            payload.put("icon", inviterAvatarUrl);
+        }
+        payload.put("data", data);
+
+        return serializePayload(payload);
+    }
+
+    private String serializePayload(Map<String, Object> payload) {
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException e) {

@@ -42,6 +42,32 @@ const authService = {
     }
   },
 
+  requestPasswordReset: async (email) => {
+    try {
+      const response = await api.post("/api/auth/forgot-password", { email });
+      return response.data;
+    } catch (error) {
+      throw new Error(
+        getApiErrorMessage(error, "Unable to process your request. Please try again.")
+      );
+    }
+  },
+
+  resetPassword: async ({ token, newPassword, confirmPassword }) => {
+    try {
+      const response = await api.post("/api/auth/reset-password", {
+        token,
+        newPassword,
+        confirmPassword,
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(
+        getApiErrorMessage(error, "Unable to reset password. Please try again.")
+      );
+    }
+  },
+
   //get current user info
   getCurrentUser: async () => {
     try {

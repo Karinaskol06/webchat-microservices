@@ -23,6 +23,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import LinkIcon from '@mui/icons-material/Link';
 import ContactsOutlinedIcon from '@mui/icons-material/ContactsOutlined';
 import PersonAddAlt1OutlinedIcon from '@mui/icons-material/PersonAddAlt1Outlined';
+import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
+import AccountCredentialsPanel from '../settings/AccountCredentialsPanel';
 import chatService from '../../services/chatService';
 import contactsService from '../../services/contactsService';
 import { joinInviteErrorMessage, parseInviteToken } from '../../utils/inviteLink';
@@ -32,6 +34,7 @@ import UserAvatar from '../user/UserAvatar';
 const VIEW_MENU = 'menu';
 const VIEW_INVITE = 'invite';
 const VIEW_CONTACTS = 'contacts';
+const VIEW_ACCOUNT = 'account';
 
 const displayName = (user) => {
   if (!user) return 'Unknown user';
@@ -50,6 +53,7 @@ const ChatSettingsDialog = ({
   onJoinedRoom,
   onOpenContact,
   currentUserId,
+  currentUser,
   /** `join` opens the invite form directly (e.g. from chat list menu). */
   variant = 'settings',
 }) => {
@@ -77,6 +81,12 @@ const ChatSettingsDialog = ({
         icon: LinkIcon,
         primary: 'Join via link',
         secondary: 'Paste a group or channel invite',
+      },
+      {
+        key: VIEW_ACCOUNT,
+        icon: ManageAccountsOutlinedIcon,
+        primary: 'Change username or password',
+        secondary: 'Update sign-in username, email, or password',
       },
     ],
     [],
@@ -201,7 +211,12 @@ const ChatSettingsDialog = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} fullWidth maxWidth={view === VIEW_CONTACTS ? 'sm' : 'xs'}>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      fullWidth
+      maxWidth={view === VIEW_CONTACTS || view === VIEW_ACCOUNT ? 'sm' : 'xs'}
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: 1 }}>
         {view !== VIEW_MENU ? (
           <IconButton
@@ -214,7 +229,13 @@ const ChatSettingsDialog = ({
           </IconButton>
         ) : null}
         <Typography component="span" variant="h6" sx={{ flex: 1 }}>
-          {view === VIEW_INVITE ? 'Join via link' : view === VIEW_CONTACTS ? 'Contacts' : 'Settings'}
+          {view === VIEW_INVITE
+            ? 'Join via link'
+            : view === VIEW_CONTACTS
+              ? 'Contacts'
+              : view === VIEW_ACCOUNT
+                ? 'Change username or password'
+                : 'Settings'}
         </Typography>
         <IconButton aria-label="Close settings" onClick={handleClose} size="small">
           <CloseIcon />
@@ -233,6 +254,8 @@ const ChatSettingsDialog = ({
               </ListItemButton>
             ))}
           </List>
+        ) : view === VIEW_ACCOUNT ? (
+          <AccountCredentialsPanel currentUser={currentUser} onClose={handleClose} />
         ) : view === VIEW_INVITE ? (
           <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary">

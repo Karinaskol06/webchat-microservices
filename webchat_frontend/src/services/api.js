@@ -1,11 +1,9 @@
 import axios, { AxiosHeaders } from "axios";
 import useAuthStore from "../store/useAuthStore";
 import { isChatAttachmentApiUrl } from "../utils/attachmentConstraints";
+import { resolveApiBaseUrl } from "../utils/apiBaseUrl";
 
-// Dev: relative base URL uses Vite proxy (/api → gateway). Prod: explicit gateway URL.
-const API_BASE_URL = import.meta.env.DEV
-  ? ''
-  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8089').replace(/\/$/, '');
+const API_BASE_URL = resolveApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -21,6 +19,8 @@ const isNotificationBootstrapEndpoint = (url = "") =>
 const shouldSkip401AutoLogout = (url = "") =>
   url.startsWith("/api/auth/login") ||
   url.startsWith("/api/auth/register") ||
+  url.startsWith("/api/auth/forgot-password") ||
+  url.startsWith("/api/auth/reset-password") ||
   url.startsWith("/api/notifications/");
 
 export const getApiErrorMessage = (error, fallbackMessage = "Request failed") => {

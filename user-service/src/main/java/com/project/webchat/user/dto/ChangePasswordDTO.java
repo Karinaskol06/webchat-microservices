@@ -17,7 +17,7 @@ public class ChangePasswordDTO {
     private String oldPassword;
 
     @NotBlank(message = "New password is required")
-    @Size(min = 5, message = "Password must be longer than 5 symbols")
+    @Size(min = 6, message = "Password must be at least 6 characters long")
     private String newPassword;
 
     @NotBlank(message = "Repeat new password")

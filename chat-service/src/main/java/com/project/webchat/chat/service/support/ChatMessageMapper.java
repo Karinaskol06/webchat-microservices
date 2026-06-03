@@ -131,7 +131,8 @@ public class ChatMessageMapper {
                 .senderId(parent.getSenderId())
                 .senderDisplayName(senderInfo != null ? senderInfo.getDisplayName() : parent.getSenderName())
                 .content(previewHelper.getPreviewText(parent.getContent(),
-                        attachmentRepository.findByMessageId(parent.getId())))
+                        attachmentRepository.findByMessageId(parent.getId()),
+                        parent.getMessageType()))
                 .messageType(parent.getMessageType())
                 .deleted(false)
                 .build();

@@ -35,7 +35,8 @@ import { canEditRoomProfile } from '../../utils/channelPermissions';
 import { getApiErrorMessage } from '../../services/api';
 import useChatStore from '../../store/useChatStore';
 import useAuthStore from '../../store/useAuthStore';
-import { fileToRoomPhotoDataUrl } from '../../utils/roomPhoto';
+import { fileToRoomPhotoDataUrl, ROOM_PHOTO_ACCEPT } from '../../utils/roomPhoto';
+import { chatHideScrollbarSx } from '../../theme/chatDesignTokens';
 
 const displayName = (u) => {
   if (!u) return 'Unknown';
@@ -136,8 +137,11 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
     const run = async () => {
       await Promise.resolve();
       if (cancelled) return;
+      setRoom(null);
+      setEditingProfile(false);
       setLoading(true);
       setError('');
+      setActionError('');
       try {
         const dto = await chatService.getRoom(roomId);
         if (cancelled) return;
@@ -231,7 +235,8 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
       const updatedRoom = await chatService.updateRoomProfile(room.id, { groupPhoto: dataUrl });
       applyRoomUpdate(updatedRoom);
     } catch (e) {
-      setActionError(getApiErrorMessage(e, 'Could not update photo'));
+      const message = e instanceof Error && e.message ? e.message : getApiErrorMessage(e, 'Could not update photo');
+      setActionError(message);
     } finally {
       setPhotoUploading(false);
     }
@@ -298,7 +303,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
     room &&
       (isPersonalSpace
         ? myId != null && Number(room.createdBy) === myId
-        : canEditRoomProfile(room)),
+        : canEditRoomProfile(room, myId)),
   );
   const canEditProfileDetails = canModerateRoom && !isPersonalSpace;
 
@@ -312,7 +317,6 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
       onClose={onClose}
       fullWidth
       maxWidth="sm"
-      scroll="paper"
       aria-labelledby="room-profile-title"
     >
       <DialogTitle
@@ -367,7 +371,15 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
         </IconButton>
       </DialogTitle>
 
-      <DialogContent sx={{ px: 0, pt: 0, pb: 2 }}>
+      <DialogContent
+        sx={{
+          px: 0,
+          pt: 0,
+          pb: 2,
+          overflowY: 'auto',
+          ...chatHideScrollbarSx,
+        }}
+      >
         {loading && (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
             <CircularProgress size={32} />
@@ -422,7 +434,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                       <input
                         ref={photoInputRef}
                         type="file"
-                        accept="image/*"
+                        accept={ROOM_PHOTO_ACCEPT}
                         hidden
                         onChange={(e) => void handlePhotoPick(e)}
                       />
@@ -659,7 +671,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                   <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.08 }}>
                     Members
                   </Typography>
-                  <List dense disablePadding sx={{ mt: 1, maxHeight: 320, overflow: 'auto' }}>
+                  <List dense disablePadding sx={{ mt: 1 }}>
                     {sortedMembers.map((m) => {
                       if (!m?.id) return null;
                       const mid = Number(m.id);

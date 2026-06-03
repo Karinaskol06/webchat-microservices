@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import useAuthStore from '../store/useAuthStore';
 import AuthPageLayout from '../components/auth/AuthPageLayout';
@@ -22,12 +22,13 @@ import {
   glassCheckboxLabelSx,
   glassCheckboxSx,
 } from '../components/auth/authPageTheme';
-
 const REMEMBER_KEY = 'webchat-remember-username';
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuthStore();
+  const infoMessage = location.state?.message || '';
 
   const [formData, setFormData] = useState({
     username: '',
@@ -102,6 +103,24 @@ const Login = () => {
         </>
       }
     >
+      {infoMessage ? (
+        <AuthAnimatedItem index={-1}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: 'rgba(200, 255, 220, 0.95)',
+              textAlign: 'center',
+              mb: 1.5,
+              px: 1,
+              lineHeight: 1.55,
+            }}
+            role="status"
+          >
+            {infoMessage}
+          </Typography>
+        </AuthAnimatedItem>
+      ) : null}
+
       <AuthErrorAlert message={error} shake={errorShake} />
 
       <Box component="form" onSubmit={handleSubmit} noValidate>
@@ -166,19 +185,12 @@ const Login = () => {
               sx={glassCheckboxLabelSx}
             />
             <Typography
-              component="button"
-              type="button"
+              component={RouterLink}
+              to="/forgot-password"
               variant="body2"
-              onClick={() =>
-                showError('Password reset is not available yet. Contact support.')
-              }
               sx={{
-                border: 0,
-                bgcolor: 'transparent',
                 color: 'rgba(255, 255, 255, 0.92)',
-                cursor: 'pointer',
-                font: 'inherit',
-                p: 0,
+                textDecoration: 'none',
                 transition: 'opacity 0.2s ease',
                 '&:hover': { textDecoration: 'underline', opacity: 0.9 },
               }}

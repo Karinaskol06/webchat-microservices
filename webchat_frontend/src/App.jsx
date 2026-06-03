@@ -4,6 +4,8 @@ import './App.css';
 import Navbar from './components/layout/Navbar';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import ChatPage from './pages/ChatPage';
 import JoinInvitePage from './pages/JoinInvitePage';
 import useAuthStore from './store/useAuthStore';
@@ -19,7 +21,10 @@ function AppRoutes() {
   const location = useLocation();
   const { isAuthenticated } = useAuthStore();
   const isAuthScreen =
-    location.pathname === '/login' || location.pathname === '/register';
+    location.pathname === '/login' ||
+    location.pathname === '/register' ||
+    location.pathname === '/forgot-password' ||
+    location.pathname === '/reset-password';
   const hideNavbar =
     isAuthScreen || (isAuthenticated && location.pathname.startsWith('/chat'));
 
@@ -36,6 +41,8 @@ function AppRoutes() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/chat"
             element={

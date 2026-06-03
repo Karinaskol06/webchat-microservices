@@ -1,4 +1,31 @@
 import { create } from 'zustand';
+import { appendCacheBust, bustRoomPhotoUrl, stripMediaCacheKey } from '../utils/userAvatar';
+
+function mergeChatRecord(existing, incoming) {
+  if (!incoming) return existing;
+  if (!existing) return incoming;
+
+  const merged = { ...existing, ...incoming };
+  const nextPhoto = incoming.groupPhoto;
+  const prevPhoto = existing.groupPhoto;
+
+  if (nextPhoto !== undefined && nextPhoto !== null) {
+    const nextBase = stripMediaCacheKey(nextPhoto);
+    const prevBase = stripMediaCacheKey(prevPhoto);
+    if (nextBase !== prevBase) {
+      const revision = incoming.groupPhotoRevision ?? Date.now();
+      merged.groupPhotoRevision = revision;
+      merged.groupPhoto = bustRoomPhotoUrl(nextPhoto, revision);
+    } else if (existing.groupPhotoRevision != null) {
+      merged.groupPhotoRevision = existing.groupPhotoRevision;
+      merged.groupPhoto = existing.groupPhoto;
+    }
+  } else if (existing.groupPhotoRevision != null) {
+    merged.groupPhotoRevision = existing.groupPhotoRevision;
+  }
+
+  return merged;
+}
 
 /** Sort key for sidebar: latest activity or last preview line time */
 const chatRecencyMs = (chat) => {
@@ -65,12 +92,12 @@ const useChatStore = create((set, get) => ({
       const exists = state.chats.some((item) => String(item?.id) === cid);
       const nextChats = exists
         ? state.chats.map((item) =>
-            String(item?.id) === cid ? { ...item, ...chat } : item
+            String(item?.id) === cid ? mergeChatRecord(item, chat) : item,
           )
         : [chat, ...state.chats];
       const next = { chats: reorderChatsByRecent(nextChats) };
       if (state.currentChat && String(state.currentChat.id) === cid) {
-        next.currentChat = { ...state.currentChat, ...chat };
+        next.currentChat = mergeChatRecord(state.currentChat, chat);
       }
       return next;
     });
@@ -91,7 +118,53 @@ const useChatStore = create((set, get) => ({
     });
   },
 
-  /** Merge sender / profile fields onto otherUser when it matches senderId */
+  /** After profile avatar upload/remove — refresh list, header, and open messages immediately. */
+  patchUserProfileInChats: (userId, { profilePicture } = {}) => {
+    const uid = Number(userId);
+    if (!Number.isFinite(uid)) return;
+
+    const revision = Date.now();
+    const bustedPicture =
+      profilePicture != null && String(profilePicture).trim() !== ''
+        ? appendCacheBust(stripMediaCacheKey(profilePicture), revision)
+        : null;
+
+    const patchUser = (user) => {
+      if (!user || Number(user.id) !== uid) return user;
+      return {
+        ...user,
+        profilePicture: bustedPicture,
+        avatar: bustedPicture,
+        avatarRevision: revision,
+      };
+    };
+
+    const patchChat = (chat) => {
+      if (!chat) return chat;
+      let next = chat;
+      if (chat.otherUser) {
+        const patched = patchUser(chat.otherUser);
+        if (patched !== chat.otherUser) next = { ...next, otherUser: patched };
+      }
+      if (Array.isArray(chat.members) && chat.members.length > 0) {
+        const members = chat.members.map((m) => patchUser(m));
+        if (members.some((m, i) => m !== chat.members[i])) {
+          next = { ...next, members };
+        }
+      }
+      return next;
+    };
+
+    set((state) => ({
+      chats: state.chats.map(patchChat),
+      currentChat: patchChat(state.currentChat),
+      messages: state.messages.map((message) => {
+        if (!message?.sender || Number(message.sender.id) !== uid) return message;
+        return { ...message, sender: patchUser(message.sender) };
+      }),
+    }));
+  },
+
   mergeChatSenderIntoOtherUser: (chatId, sender) => {
     if (!chatId || !sender?.id) return;
     const sid = Number(sender.id);
@@ -100,10 +173,14 @@ const useChatStore = create((set, get) => ({
       chats: state.chats.map((chat) => {
         if (String(chat.id) !== key || !chat.otherUser) return chat;
         if (Number(chat.otherUser.id) !== sid) return chat;
-        const nextPic =
+        const rawPic =
           sender.profilePicture !== undefined && sender.profilePicture !== null
             ? sender.profilePicture
             : chat.otherUser.profilePicture;
+        const nextPic =
+          rawPic != null && String(rawPic).trim() !== ''
+            ? appendCacheBust(rawPic)
+            : rawPic;
         return {
           ...chat,
           otherUser: {
@@ -112,6 +189,7 @@ const useChatStore = create((set, get) => ({
             firstName: sender.firstName ?? chat.otherUser.firstName,
             lastName: sender.lastName ?? chat.otherUser.lastName,
             profilePicture: nextPic,
+            avatarRevision: Date.now(),
           },
         };
       }),

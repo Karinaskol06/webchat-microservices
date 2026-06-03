@@ -45,11 +45,18 @@ self.addEventListener('push', (event) => {
   }
 
   const notificationData = payload.data || {};
+  const notificationType = notificationData.notificationType || 'message-created';
   const senderDisplayName =
-    notificationData.senderDisplayName || payload.title || 'New message';
+    notificationData.senderDisplayName ||
+    notificationData.reactorDisplayName ||
+    notificationData.inviterDisplayName ||
+    payload.title ||
+    'New message';
   const avatarRaw =
     payload.icon ||
     notificationData.senderAvatarUrl ||
+    notificationData.reactorAvatarUrl ||
+    notificationData.inviterAvatarUrl ||
     notificationData.senderProfilePicture ||
     notificationData.profilePicture ||
     null;
@@ -57,7 +64,10 @@ self.addEventListener('push', (event) => {
     resolveAbsoluteNotificationIcon(avatarRaw) ||
     new URL(FALLBACK_AVATAR_ICON_PATH, self.location.origin).toString();
   const autoCloseMs = Number(notificationData.autoCloseMs) || 10000;
-  const notificationTag = notificationData.chatId || 'chat-message';
+  const notificationTag =
+    notificationType === 'room-member-invited'
+      ? `invite-${notificationData.inviteId || notificationData.roomId || 'pending'}`
+      : notificationData.chatId || 'chat-message';
   const options = {
     body: payload.body || 'You have a new message',
     icon: avatarIcon,
@@ -93,19 +103,31 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const data = event.notification.data || {};
+  const notificationType = data.notificationType || 'message-created';
   const chatId = data.chatId;
   const messageId = data.messageId;
+  const inviteId = data.inviteId;
   const shouldMarkRead = event.action === 'mark-read';
 
   const targetUrl = new URL('/chat', self.location.origin);
-  if (chatId) {
-    targetUrl.searchParams.set('chatId', chatId);
-  }
-  if (messageId) {
-    targetUrl.searchParams.set('messageId', messageId);
-  }
-  if (shouldMarkRead && chatId) {
-    targetUrl.searchParams.set('markRead', '1');
+  if (notificationType === 'room-member-invited') {
+    if (inviteId) {
+      targetUrl.searchParams.set('inviteId', inviteId);
+    }
+    if (data.roomId) {
+      targetUrl.searchParams.set('roomId', data.roomId);
+    }
+    targetUrl.searchParams.set('view', 'invites');
+  } else {
+    if (chatId) {
+      targetUrl.searchParams.set('chatId', chatId);
+    }
+    if (messageId) {
+      targetUrl.searchParams.set('messageId', messageId);
+    }
+    if (shouldMarkRead && chatId) {
+      targetUrl.searchParams.set('markRead', '1');
+    }
   }
 
   event.waitUntil(

@@ -78,6 +78,10 @@ Recommended Kafka env vars for upcoming producers/consumers:
 - `SPRING_KAFKA_CONSUMER_GROUP_ID` (example: `notification-service`)
 - `KAFKA_TOPIC_MESSAGE_CREATED` (example: `chat.message.created.v1`)
 - `KAFKA_TOPIC_MESSAGE_CREATED_DLQ` (example: `chat.message.created.v1.dlq`)
+- `KAFKA_TOPIC_MESSAGE_REACTION` (example: `chat.message.reaction.v1`)
+- `KAFKA_TOPIC_MESSAGE_REACTION_DLQ` (example: `chat.message.reaction.v1.dlq`)
+- `KAFKA_TOPIC_ROOM_MEMBER_INVITED` (example: `chat.room.member.invited.v1`)
+- `KAFKA_TOPIC_ROOM_MEMBER_INVITED_DLQ` (example: `chat.room.member.invited.v1.dlq`)
 
 ### Topic creation (dev)
 
@@ -89,6 +93,10 @@ Two supported options:
 ```bash
 docker compose exec kafka kafka-topics --create --topic chat.message.created.v1 --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1
 docker compose exec kafka kafka-topics --create --topic chat.message.created.v1.dlq --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1
+docker compose exec kafka kafka-topics --create --topic chat.message.reaction.v1 --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1
+docker compose exec kafka kafka-topics --create --topic chat.message.reaction.v1.dlq --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1
+docker compose exec kafka kafka-topics --create --topic chat.room.member.invited.v1 --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1
+docker compose exec kafka kafka-topics --create --topic chat.room.member.invited.v1.dlq --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1
 ```
 
 ## :game_die: Current Features

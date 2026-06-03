@@ -8,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -17,14 +16,12 @@ public class ProfileImageService {
 
     public static final String KIND_AVATAR = "AVATAR";
     public static final String KIND_BACKGROUND = "BACKGROUND";
-    private static final Set<String> ALLOWED_TYPES = Set.of("image/png", "image/jpeg", "image/webp");
-    private static final long MAX_FILE_SIZE_BYTES = 5L * 1024L * 1024L;
 
     private final ProfileImageRepository profileImageRepository;
 
     public void upload(Long userId, String kind, MultipartFile file) {
         validateKind(kind);
-        validateFile(file);
+        ProfileImageUploadValidator.validate(file);
 
         byte[] data;
         try {
@@ -54,18 +51,6 @@ public class ProfileImageService {
     public ProfileImage load(Long userId, String kind) {
         validateKind(kind);
         return profileImageRepository.findByUserIdAndKind(userId, kind).orElse(null);
-    }
-
-    private void validateFile(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("Image file is required");
-        }
-        if (file.getSize() > MAX_FILE_SIZE_BYTES) {
-            throw new IllegalArgumentException("Image must be at most 5MB");
-        }
-        if (!ALLOWED_TYPES.contains(file.getContentType())) {
-            throw new IllegalArgumentException("Only PNG, JPEG and WEBP images are allowed");
-        }
     }
 
     private void validateKind(String kind) {

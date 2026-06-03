@@ -7,6 +7,8 @@ RUN --mount=type=cache,target=/root/.npm \
     if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 COPY . .
+ARG VITE_API_BASE_URL=SAME_ORIGIN
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
 FROM nginx:alpine

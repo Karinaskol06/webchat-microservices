@@ -40,11 +40,20 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete }) => {
     setNewTaskText('');
   };
 
+  const taskTextSx = {
+    wordBreak: 'break-word',
+    overflowWrap: 'anywhere',
+    whiteSpace: 'pre-wrap',
+    color: chatColors.textPrimary,
+  };
+
   return (
     <Box
       sx={{
+        width: 'max-content',
+        maxWidth: '100%',
         minWidth: { xs: '100%', sm: 280 },
-        maxWidth: 420,
+        boxSizing: 'border-box',
         p: 2,
         borderRadius: `${chatRadii.md}px`,
         bgcolor: alpha(chatColors.primary, 0.12),
@@ -69,7 +78,11 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete }) => {
           alignItems="flex-start"
           gap={0.5}
           mb={0.75}
-          sx={{ opacity: task.done ? 0.72 : 1 }}
+          sx={{
+            opacity: task.done ? 0.72 : 1,
+            width: '100%',
+            minWidth: 0,
+          }}
         >
           <Checkbox
             size="small"
@@ -81,6 +94,9 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete }) => {
           {editable ? (
             <TextField
               fullWidth
+              multiline
+              minRows={1}
+              maxRows={6}
               size="small"
               variant="standard"
               value={task.text ?? ''}
@@ -93,9 +109,15 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete }) => {
               placeholder="Task"
               InputProps={{ disableUnderline: false }}
               sx={{
+                flex: 1,
+                minWidth: 0,
+                alignSelf: 'stretch',
                 '& .MuiInput-input': {
+                  ...taskTextSx,
+                  fieldSizing: 'content',
+                  minWidth: '10ch',
+                  maxWidth: '100%',
                   textDecoration: task.done ? 'line-through' : 'none',
-                  color: chatColors.textPrimary,
                 },
               }}
             />
@@ -104,9 +126,10 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete }) => {
               variant="body2"
               sx={{
                 flex: 1,
+                minWidth: 0,
                 pt: 0.75,
                 textDecoration: task.done ? 'line-through' : 'none',
-                color: chatColors.textPrimary,
+                ...taskTextSx,
               }}
             >
               {task.text || '—'}

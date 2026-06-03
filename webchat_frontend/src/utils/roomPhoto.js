@@ -1,3 +1,9 @@
+import {
+  PROFILE_IMAGE_ACCEPT,
+  PROFILE_IMAGE_MAX_MB,
+  validateProfileImageFile,
+} from './profileImageConstraints';
+
 const MAX_EDGE = 512;
 const JPEG_QUALITY = 0.82;
 
@@ -17,10 +23,16 @@ function readFileAsImage(file) {
   });
 }
 
+export { PROFILE_IMAGE_ACCEPT as ROOM_PHOTO_ACCEPT };
+
 /** Resize and encode as JPEG data URL for Mongo-friendly room avatars. */
 export async function fileToRoomPhotoDataUrl(file) {
-  if (!file || !file.type?.startsWith('image/')) {
-    throw new Error('Please use an image file (PNG, JPEG, WebP, GIF).');
+  const validation = validateProfileImageFile(file);
+  if (!validation.ok) {
+    throw new Error(validation.message);
+  }
+  if (!file.type?.startsWith('image/')) {
+    throw new Error(`Please use an image file (PNG, JPEG, or WebP, up to ${PROFILE_IMAGE_MAX_MB} MB).`);
   }
   const img = await readFileAsImage(file);
   const w = img.naturalWidth || img.width;

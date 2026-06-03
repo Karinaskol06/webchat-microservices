@@ -30,6 +30,7 @@ export const withChatReducedMotion = (motionSx, staticSx = {}) => ({
     animation: 'none !important',
     transition: 'none !important',
     transform: 'none !important',
+    opacity: 1,
     ...staticSx,
   },
 });
@@ -37,19 +38,16 @@ export const withChatReducedMotion = (motionSx, staticSx = {}) => ({
 export const chatStaggerDelay = (index, stepSec = 0.04) => `${(index * stepSec).toFixed(3)}s`;
 
 export const chatBgSettleSx = withChatReducedMotion({
-  ...chatMotionKeyframes,
   animation: `chatBgSettle 1.1s ${CHAT_EASE_OUT} both`,
 });
 
 export const chatPanelEnterSx = (delaySec = 0) =>
   withChatReducedMotion({
-    ...chatMotionKeyframes,
     animation: `chatPanelIn 0.5s ${CHAT_EASE_OUT} ${delaySec}s both`,
     willChange: 'transform, opacity',
   });
 
 export const chatListItemEnterSx = (index = 0) =>
   withChatReducedMotion({
-    ...chatMotionKeyframes,
     animation: `chatListItemIn 0.35s ${CHAT_EASE_OUT} ${chatStaggerDelay(index, 0.035)} both`,
   });

@@ -9,7 +9,7 @@ import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutl
 import AudiotrackOutlinedIcon from '@mui/icons-material/AudiotrackOutlined';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import AuthenticatedImage from './AuthenticatedImage';
-import { chatColors, chatRadii } from '../../theme/chatDesignTokens';
+import { chatColors, chatRadii, muiTransparent } from '../../theme/chatDesignTokens';
 import { formatFileSize } from '../../utils/sharedMedia';
 import { openAttachment } from '../../utils/openAttachment';
 
@@ -54,7 +54,7 @@ const FileRow = ({ attachment, icon: Icon, onOpen }) => (
       gap: 1,
       width: '100%',
       border: 0,
-      bgcolor: 'transparent',
+      bgcolor: muiTransparent,
       cursor: 'pointer',
       textAlign: 'left',
       py: 0.75,

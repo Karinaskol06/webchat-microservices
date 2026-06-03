@@ -93,6 +93,9 @@ public class ChatApiExceptionHandler {
         if (detail != null) {
             String lower = detail.toLowerCase();
             if (lower.contains("size") && (lower.contains("exceed") || lower.contains("larger") || lower.contains("limit"))) {
+                if (lower.contains("request") || lower.contains("total")) {
+                    return "The upload request is too large. Stay under 10 MB per file and upload files one at a time if needed.";
+                }
                 return "This file is too large for the server. Maximum size is 10 MB per file.";
             }
         }

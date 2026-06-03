@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canEditRoomProfile,
   canModerateOthersMessages,
   canPostInChannel,
   channelPostingRestricted,
@@ -39,6 +40,38 @@ describe('channelPermissions', () => {
         isCurrentUserChannelCreator: false,
       }),
     ).toBe(true);
+  });
+
+  it('canEditRoomProfile allows channel owner via flags or createdBy fallback', () => {
+    expect(
+      canEditRoomProfile({
+        type: 'CHANNEL',
+        isCurrentUserChannelCreator: true,
+        isCurrentUserChannelAdmin: false,
+      }),
+    ).toBe(true);
+    expect(
+      canEditRoomProfile(
+        {
+          type: 'CHANNEL',
+          isCurrentUserChannelCreator: false,
+          isCurrentUserChannelAdmin: false,
+          createdBy: 5,
+        },
+        5,
+      ),
+    ).toBe(true);
+    expect(
+      canEditRoomProfile(
+        {
+          type: 'CHANNEL',
+          isCurrentUserChannelCreator: false,
+          isCurrentUserChannelAdmin: false,
+          createdBy: 5,
+        },
+        9,
+      ),
+    ).toBe(false);
   });
 
   it('canModerateOthersMessages respects group admin and channel moderator', () => {

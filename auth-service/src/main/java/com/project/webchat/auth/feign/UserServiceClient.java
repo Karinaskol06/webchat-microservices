@@ -3,6 +3,7 @@ package com.project.webchat.auth.feign;
 import com.project.webchat.auth.config.FeignConfig;
 import com.project.webchat.shared.dto.CredentialsDTO;
 import com.project.webchat.shared.dto.RegisterRequestDTO;
+import com.project.webchat.shared.dto.ResetPasswordInternalDTO;
 import com.project.webchat.shared.dto.UserCredentialsResponse;
 import com.project.webchat.shared.dto.UserDTO;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -46,5 +47,11 @@ public interface UserServiceClient {
     @GetMapping("/api/users/by-username/{username}/with-password")
     ResponseEntity<UserCredentialsResponse> getUserWithPasswordByUsername(
             @PathVariable("username") String username);
+
+    @GetMapping("/api/users/by-email")
+    ResponseEntity<UserDTO> getUserByEmail(@RequestParam("email") String email);
+
+    @PutMapping("/api/users/internal/reset-password")
+    ResponseEntity<Void> resetPasswordInternal(@RequestBody ResetPasswordInternalDTO request);
 
 }

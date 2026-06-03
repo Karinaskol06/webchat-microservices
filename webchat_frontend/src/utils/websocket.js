@@ -1,11 +1,9 @@
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
-// Dev: use relative URL so Vite proxies /ws to the gateway (no cross-origin SockJS / CORS).
-// Prod / custom: set VITE_API_BASE_URL (e.g. https://api.example.com).
-const WS_BASE_URL = import.meta.env.DEV
-  ? ''
-  : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8089').replace(/\/$/, '');
+import { resolveApiBaseUrl } from './apiBaseUrl';
+
+const WS_BASE_URL = resolveApiBaseUrl();
 
 let stompClient = null;
 let pendingChatSubscriptions = [];
@@ -232,7 +230,7 @@ const attachChatSubscriptions = (subscription) => {
 };
 
 export const subscribeToChat = (chatId, handlers) => {
-  console.log(`Subscribing to chat ${chatId} with handlers:`, Object.keys(handlers));
+  console.debug(`Subscribing to chat ${chatId} with handlers:`, Object.keys(handlers));
   
   const subscription = { chatId, handlers, _subscriptions: [] };
   pendingChatSubscriptions.push(subscription);
@@ -243,7 +241,7 @@ export const subscribeToChat = (chatId, handlers) => {
 
   // Return unsubscribe function
   return () => {
-    console.log(`Unsubscribing from chat ${chatId}`);
+    console.debug(`Unsubscribing from chat ${chatId}`);
     pendingChatSubscriptions = pendingChatSubscriptions.filter(
       (sub) => sub !== subscription
     );

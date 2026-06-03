@@ -220,4 +220,88 @@ public class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("at least 2 characters");
     }
+
+    @Test
+    void resetPassword_updatesStoredHash() {
+        userService.registerUser(RegisterRequestDTO.builder()
+                .username("resetuser")
+                .email("reset@example.com")
+                .password("oldpass1")
+                .phoneNumber("+15551111111")
+                .countryCode("US")
+                .build());
+
+        userService.resetPassword("resetuser", "newpass2");
+
+        User user = userRepository.findByUsername("resetuser").orElseThrow();
+        assertThat(passwordEncoder.matches("newpass2", user.getPasswordHash())).isTrue();
+        assertThat(passwordEncoder.matches("oldpass1", user.getPasswordHash())).isFalse();
+    }
+
+    @Test
+    void checkUsernameAvailability_allowsCurrentUser() {
+        userService.registerUser(RegisterRequestDTO.builder()
+                .username("availuser")
+                .email("avail@example.com")
+                .password("pass123")
+                .phoneNumber("+15553334444")
+                .countryCode("US")
+                .build());
+        Long userId = userRepository.findByUsername("availuser").orElseThrow().getId();
+
+        assertThat(userService.checkUsernameAvailability("availuser", userId).isAvailable()).isTrue();
+        assertThat(userService.checkUsernameAvailability("takenuser", userId).isAvailable()).isTrue();
+
+        userService.registerUser(RegisterRequestDTO.builder()
+                .username("takenuser")
+                .email("taken@example.com")
+                .password("pass123")
+                .phoneNumber("+15553335555")
+                .countryCode("US")
+                .build());
+
+        assertThat(userService.checkUsernameAvailability("takenuser", userId).isAvailable()).isFalse();
+    }
+
+    @Test
+    void updateAccountIdentifiers_changesEmailAndUsername() {
+        userService.registerUser(RegisterRequestDTO.builder()
+                .username("oldname")
+                .email("old@example.com")
+                .password("pass123")
+                .phoneNumber("+15554445555")
+                .countryCode("US")
+                .build());
+        Long userId = userRepository.findByUsername("oldname").orElseThrow().getId();
+
+        var result = userService.updateAccountIdentifiers(userId,
+                com.project.webchat.user.dto.UpdateAccountDTO.builder()
+                        .username("newname")
+                        .email("new@example.com")
+                        .build());
+
+        assertThat(result.isUsernameChanged()).isTrue();
+        assertThat(result.getUser().getUsername()).isEqualTo("newname");
+        assertThat(result.getUser().getEmail()).isEqualTo("new@example.com");
+        assertThat(userService.validateCredentials("newname", "pass123")).isTrue();
+        assertThat(userService.resolveUsernameForLogin("new@example.com"))
+                .contains("newname");
+    }
+
+    @Test
+    void findUserByEmail_isCaseInsensitive() {
+        userService.registerUser(RegisterRequestDTO.builder()
+                .username("emailuser")
+                .email("FindMe@Example.com")
+                .password("pass123")
+                .phoneNumber("+15552222222")
+                .countryCode("US")
+                .build());
+
+        assertThat(userService.findUserByEmail("findme@example.com"))
+                .isPresent()
+                .get()
+                .extracting(UserDTO::getUsername)
+                .isEqualTo("emailuser");
+    }
 }

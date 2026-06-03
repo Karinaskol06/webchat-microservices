@@ -45,6 +45,10 @@ app:
     topics:
       message-created: ${KAFKA_TOPIC_MESSAGE_CREATED:chat.message.created.v1}
       message-created-dlq: ${KAFKA_TOPIC_MESSAGE_CREATED_DLQ:chat.message.created.v1.dlq}
+      message-reaction: ${KAFKA_TOPIC_MESSAGE_REACTION:chat.message.reaction.v1}
+      message-reaction-dlq: ${KAFKA_TOPIC_MESSAGE_REACTION_DLQ:chat.message.reaction.v1.dlq}
+      room-member-invited: ${KAFKA_TOPIC_ROOM_MEMBER_INVITED:chat.room.member.invited.v1}
+      room-member-invited-dlq: ${KAFKA_TOPIC_ROOM_MEMBER_INVITED_DLQ:chat.room.member.invited.v1.dlq}
   vapid:
     public-key: ${VAPID_PUBLIC_KEY:}
     private-key: ${VAPID_PRIVATE_KEY:}

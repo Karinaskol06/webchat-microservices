@@ -49,7 +49,7 @@ public class RedisService {
             redisTemplate.opsForSet().remove(CHAT_ONLINE_USERS_PREFIX + previousChat, userId.toString());
         }
 
-        //to automatically disconnect user after 3 mins
+        //to automatically disconnect user after 1 min
         redisTemplate.opsForValue().set(userKey, chatId, ONLINE_TIMEOUT);
         redisTemplate.opsForValue().set(lastSeenKey, String.valueOf(System.currentTimeMillis()));
 
@@ -153,6 +153,7 @@ public class RedisService {
         return null;
     }
 
+    // cache user info (set of users with TTL 30 mins)
     public void cacheUserInfo(UserInfoDTO userInfo) {
         try {
             String key = USER_INFO_PREFIX + userInfo.getId();
@@ -163,11 +164,14 @@ public class RedisService {
         }
     }
 
+    // retrieve user info from cache
     public UserInfoDTO getCachedUserInfo(Long userId) {
         try {
+            // make sure user key exists
             String key = USER_INFO_PREFIX + userId;
             String value = redisTemplate.opsForValue().get(key);
             if (value != null) {
+                // deserialize user info
                 return objectMapper.readValue(value, UserInfoDTO.class);
             }
         } catch (Exception e) {
@@ -181,22 +185,29 @@ public class RedisService {
             return;
         }
         try {
+            // create key for chat participants
             String key = CHAT_PARTICIPANTS_PREFIX + chatId;
+            // serialize participant ids
             String value = objectMapper.writeValueAsString(participantIds);
+            // cache participants with TTL 5 mins
             redisTemplate.opsForValue().set(key, value, CHAT_PARTICIPANTS_CACHE_TIMEOUT);
         } catch (Exception e) {
             log.error("Failed to cache chat participants for {}: {}", chatId, e.getMessage());
         }
     }
 
+    // retrieve cached chat participants
     public List<Long> getCachedChatParticipants(String chatId) {
         if (chatId == null || chatId.isBlank()) {
             return List.of();
         }
         try {
+            // create key for chat participants
             String key = CHAT_PARTICIPANTS_PREFIX + chatId;
+            // get cached participants
             String value = redisTemplate.opsForValue().get(key);
             if (value != null) {
+                // deserialize participant ids
                 return new ArrayList<>(objectMapper.readValue(
                         value,
                         objectMapper.getTypeFactory().constructCollectionType(Set.class, Long.class)
@@ -210,6 +221,7 @@ public class RedisService {
         return List.of();
     }
 
+    // evict cached chat participants
     public void evictChatParticipants(String chatId) {
         if (chatId == null || chatId.isBlank()) {
             return;

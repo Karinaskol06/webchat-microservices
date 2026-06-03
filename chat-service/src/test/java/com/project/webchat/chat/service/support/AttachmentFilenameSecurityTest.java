@@ -44,4 +44,13 @@ class AttachmentFilenameSecurityTest {
         byte[] jpegHeader = new byte[]{(byte) 0xFF, (byte) 0xD8, 0, 0, 0, 0, 0, 0};
         assertThat(AttachmentFilenameSecurity.isValidFileType(jpegHeader, ".png")).isFalse();
     }
+
+    @Test
+    void isValidFileType_matchesWebpMagicBytes() {
+        byte[] webpHeader = new byte[]{
+                'R', 'I', 'F', 'F', 0, 0, 0, 0,
+                'W', 'E', 'B', 'P'
+        };
+        assertThat(AttachmentFilenameSecurity.isValidFileType(webpHeader, ".webp")).isTrue();
+    }
 }

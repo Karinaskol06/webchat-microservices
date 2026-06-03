@@ -23,6 +23,7 @@ import {
   chatColors,
   chatGlassListSx,
   chatHideScrollbarSx,
+  muiTransparent,
 } from '../../theme/chatDesignTokens';
 import UserAvatar from '../user/UserAvatar';
 
@@ -163,7 +164,7 @@ const ChatInfoSidebar = ({ room, onOpenRoomProfile, onClose }) => {
               defaultExpanded={idx === 0}
               sx={{
                 '&:before': { display: 'none' },
-                bgcolor: 'transparent',
+                bgcolor: muiTransparent,
               }}
             >
               <AccordionSummary
@@ -197,7 +198,7 @@ const ChatInfoSidebar = ({ room, onOpenRoomProfile, onClose }) => {
             onClick={() => onOpenRoomProfile?.()}
             sx={{
               border: 0,
-              bgcolor: 'transparent',
+              bgcolor: muiTransparent,
               color: chatColors.primary,
               fontWeight: 600,
               cursor: 'pointer',

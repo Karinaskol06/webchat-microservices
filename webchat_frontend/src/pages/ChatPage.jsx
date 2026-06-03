@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from '@mui/material';
 import ChatShell from '../components/layout/ChatShell';
-import ChatInfoSidebar from '../components/chat/ChatInfoSidebar';
 import { chatColors } from '../theme/chatDesignTokens';
 import useChatStore from '../store/useChatStore';
 import useAuthStore from '../store/useAuthStore';
@@ -31,6 +30,7 @@ import TwoStepDeleteRoomDialog from '../components/chat/TwoStepDeleteRoomDialog'
 import useChatFolderStore from '../store/useChatFolderStore';
 import { findInChatMessageMatches } from '../utils/chatMessageSearch';
 import useWebSocket from '../hooks/useWebSocket';
+import { WEBCHAT_ACTIVATE_CHAT } from '../constants/chatEvents';
 import useMessages from '../hooks/useMessages';
 import { useUnreadMessageSeparator } from '../hooks/useUnreadMessageSeparator';
 import useTyping from '../hooks/useTyping'; 
@@ -43,6 +43,7 @@ import {
   channelPostingRestricted,
   roomTypeLabel,
 } from '../utils/channelPermissions';
+import { resolveRoomAvatarSrc } from '../utils/userAvatar';
 import {
   createCalloutPayload,
   createStickyPayload,
@@ -61,6 +62,7 @@ const ChatPage = () => {
   const { user } = useAuthStore();
   const chats = useChatStore((state) => state.chats);
   const setCurrentChat = useChatStore((state) => state.setCurrentChat);
+  const resetUnreadCount = useChatStore((state) => state.resetUnreadCount);
   const removeChat = useChatStore((state) => state.removeChat);
   const assignChatToFolder = useChatFolderStore((s) => s.assignChatToFolder);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -85,7 +87,6 @@ const ChatPage = () => {
   const [messageToForward, setMessageToForward] = useState(null);
   const [personalSpaceActive, setPersonalSpaceActive] = useState(false);
   const [richMessageSending, setRichMessageSending] = useState(false);
-  const [roomInfoPanelOpen, setRoomInfoPanelOpen] = useState(true);
   const [leaveRoomDialogOpen, setLeaveRoomDialogOpen] = useState(false);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
   const [roomActionLoading, setRoomActionLoading] = useState(false);
@@ -140,21 +141,47 @@ const ChatPage = () => {
     setPersonalSpaceActive(String(currentChat?.type || '').toUpperCase() === 'PERSONAL_SPACE');
   }, [currentChat?.id, currentChat?.type]);
 
-  useEffect(() => {
-    setRoomInfoPanelOpen(true);
-  }, [currentChat?.id]);
+  const syncChatIdInUrl = useCallback(
+    (chatId) => {
+      const next = new URLSearchParams(searchParams);
+      if (chatId != null && chatId !== '') {
+        next.set('chatId', String(chatId));
+      } else {
+        next.delete('chatId');
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  /** Open a chat in the store and keep the URL in sync so deep-link logic does not override selection. */
+  const activateChat = useCallback(
+    (chat) => {
+      if (!chat) {
+        setCurrentChat(null);
+        syncChatIdInUrl(null);
+        return;
+      }
+      setCurrentChat(chat);
+      if (chat.id) {
+        resetUnreadCount(chat.id);
+        syncChatIdInUrl(chat.id);
+      }
+    },
+    [setCurrentChat, resetUnreadCount, syncChatIdInUrl],
+  );
 
   const openPersonalSpace = useCallback(async () => {
     try {
       const room = await chatService.getPersonalSpace();
       useChatStore.getState().upsertChat(room);
-      setCurrentChat(room);
+      activateChat(room);
       setUserSearchOpen(false);
       setSettingsOpen(false);
     } catch (err) {
       console.error('Failed to open personal space', err);
     }
-  }, [setCurrentChat]);
+  }, [activateChat]);
 
   const handleInsertRichMessage = useCallback(
     async (type) => {
@@ -205,7 +232,12 @@ const ChatPage = () => {
     ],
   );
 
-  const headerAvatarSrc = isGroupOrChannel || isPersonalSpace ? currentChat?.groupPhoto : undefined;
+  const headerAvatarSrc =
+    isGroupOrChannel || isPersonalSpace ? resolveRoomAvatarSrc(currentChat) : undefined;
+  const headerAvatarCacheKey =
+    isGroupOrChannel || isPersonalSpace
+      ? currentChat?.groupPhotoRevision
+      : currentChat?.otherUser?.avatarRevision;
   const { openSeparatorIndex, liveBeforeMessageId, scrollToMessageId } =
     useUnreadMessageSeparator({
       userId: user?.id,
@@ -249,12 +281,12 @@ const ChatPage = () => {
         removeChat(chatId);
         assignChatToFolder(chatId, null);
       }
-      setCurrentChat(null);
+      activateChat(null);
       setLeaveRoomDialogOpen(false);
       setDeleteRoomDialogOpen(false);
       setRoomActionError('');
     },
-    [removeChat, assignChatToFolder, setCurrentChat],
+    [removeChat, assignChatToFolder, activateChat],
   );
 
   const handleConfirmLeaveRoom = useCallback(async () => {
@@ -521,10 +553,10 @@ const ChatPage = () => {
       .getState()
       .chats.find((chat) => Number(chat.otherUser?.id) === Number(selectedUser.id));
     if (existingChat) {
-      useChatStore.getState().setCurrentChat(existingChat);
+      activateChat(existingChat);
       return;
     }
-    useChatStore.getState().setCurrentChat({
+    activateChat({
       id: null,
       type: 'PRIVATE',
       otherUser: {
@@ -539,19 +571,22 @@ const ChatPage = () => {
     });
   };
 
+  /** Apply chat from URL only when the query changes (notifications, invite links), not on every list click. */
   useEffect(() => {
     const requestedChatId = searchParams.get('chatId');
     if (!requestedChatId || !Array.isArray(chats) || chats.length === 0) {
       return;
     }
-    if (String(currentChat?.id) === requestedChatId) {
+    const targetChat = chats.find((chat) => String(chat.id) === requestedChatId);
+    if (!targetChat) {
       return;
     }
-    const targetChat = chats.find((chat) => String(chat.id) === requestedChatId);
-    if (targetChat) {
-      setCurrentChat(targetChat);
+    const openId = useChatStore.getState().currentChat?.id;
+    if (openId != null && String(openId) === requestedChatId) {
+      return;
     }
-  }, [searchParams, chats, currentChat?.id, setCurrentChat]);
+    setCurrentChat(targetChat);
+  }, [searchParams, chats, setCurrentChat]);
 
   useEffect(() => {
     const markRead = searchParams.get('markRead');
@@ -564,6 +599,22 @@ const ChatPage = () => {
     nextParams.delete('markRead');
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const onActivateChatEvent = (event) => {
+      const chatId = event?.detail?.chatId;
+      const forwardedMessage = event?.detail?.message;
+      if (!chatId) return;
+      const chat = chats.find((c) => String(c.id) === String(chatId));
+      if (!chat) return;
+      activateChat(chat);
+      if (forwardedMessage) {
+        useChatStore.getState().addMessage(forwardedMessage);
+      }
+    };
+    window.addEventListener(WEBCHAT_ACTIVATE_CHAT, onActivateChatEvent);
+    return () => window.removeEventListener(WEBCHAT_ACTIVATE_CHAT, onActivateChatEvent);
+  }, [chats, activateChat]);
 
   const handleAcceptContact = async () => {
     const requestId = contactStatus?.prompt?.requestId;
@@ -599,7 +650,7 @@ const ChatPage = () => {
       setRoomMemberInvites((prev) => prev.filter((item) => item.id !== invite.id));
       if (dto?.id) {
         useChatStore.getState().upsertChat(dto);
-        setCurrentChat(dto);
+        activateChat(dto);
       }
     } catch {
       /* invite may have expired */
@@ -620,23 +671,13 @@ const ChatPage = () => {
     }
   };
 
-  const roomInviteBannerLabel = (invite) => {
-    const inviter = invite?.invitedBy;
-    const inviterName =
-      inviter?.username ||
-      [inviter?.firstName, inviter?.lastName].filter(Boolean).join(' ') ||
-      'Someone';
-    const roomLabel = invite?.roomName || (invite?.roomType === 'CHANNEL' ? 'a channel' : 'a group');
-    return `${inviterName} invited you to join ${roomLabel}`;
-  };
-
   const handleJoinedRoom = useCallback((dto) => {
     if (!dto?.id) return;
     useChatStore.getState().upsertChat(dto);
-    setCurrentChat(dto);
+    activateChat(dto);
     setUserSearchOpen(false);
     setSettingsOpen(false);
-  }, [setCurrentChat]);
+  }, [activateChat]);
 
   const openRoomProfileById = useCallback((id) => {
     if (!id) return;
@@ -746,6 +787,7 @@ const ChatPage = () => {
           headerTitle={headerTitle}
           headerSubtitle={headerSubtitle}
           headerAvatarSrc={headerAvatarSrc}
+          headerAvatarCacheKey={headerAvatarCacheKey}
           headerAvatarLetter={headerAvatarLetter}
           headerAvatarClickable={isGroupOrChannel || isPersonalSpace || Boolean(otherUser)}
           showCopyInvite={showCopyRoomInvite}
@@ -763,8 +805,6 @@ const ChatPage = () => {
           }}
           inChatSearchOpen={inChatSearchOpen}
           onToggleInChatSearch={toggleInChatSearch}
-          roomInfoPanelOpen={roomInfoPanelOpen}
-          onToggleRoomInfoPanel={() => setRoomInfoPanelOpen((open) => !open)}
         />
       </Box>
 
@@ -781,38 +821,6 @@ const ChatPage = () => {
         onNextMatch={goNextInChatSearchMatch}
         onClose={closeInChatSearch}
       />
-
-      {roomMemberInvites.length > 0
-        ? roomMemberInvites.map((invite) => (
-            <Alert
-              key={invite.id}
-              severity="info"
-              sx={{ mx: 2, mt: 1, borderRadius: 3 }}
-              action={
-                <>
-                  <Button
-                    color="inherit"
-                    size="small"
-                    onClick={() => void handleAcceptRoomMemberInvite(invite)}
-                    disabled={roomInviteActionLoading}
-                  >
-                    Join
-                  </Button>
-                  <Button
-                    color="inherit"
-                    size="small"
-                    onClick={() => void handleDeclineRoomMemberInvite(invite)}
-                    disabled={roomInviteActionLoading}
-                  >
-                    Decline
-                  </Button>
-                </>
-              }
-            >
-              {roomInviteBannerLabel(invite)}
-            </Alert>
-          ))
-        : null}
 
       {contactStatus?.state === 'PENDING' &&
         !isGroupOrChannel &&
@@ -885,6 +893,7 @@ const ChatPage = () => {
         open={Boolean(messageToForward)}
         message={messageToForward}
         onClose={() => setMessageToForward(null)}
+        onActivateChat={activateChat}
       />
     </Box>
   ) : (
@@ -913,7 +922,7 @@ const ChatPage = () => {
     <>
       <ChatShell
         hasActiveChat={Boolean(currentChat)}
-        onBackFromChat={() => setCurrentChat(null)}
+        onBackFromChat={() => activateChat(null)}
         onOpenProfile={() => setMyProfileOpen(true)}
         onOpenSettings={() => {
           setSettingsDialogVariant('settings');
@@ -922,17 +931,10 @@ const ChatPage = () => {
         settingsOpen={settingsOpen}
         onFindUsers={() => setUserSearchOpen(true)}
         findUsersOpen={userSearchOpen}
-        onFolderViewChange={() => setCurrentChat(null)}
+        pendingRoomInviteCount={roomMemberInvites.length}
+        onFolderViewChange={() => activateChat(null)}
         personalSpaceActive={personalSpaceActive}
         onPersonalSpaceSelect={() => void openPersonalSpace()}
-        showInfoPanel={Boolean(currentChat && isGroupOrChannel && roomInfoPanelOpen)}
-        infoPanel={
-          <ChatInfoSidebar
-            room={currentChat}
-            onOpenRoomProfile={openRoomProfileFromHeader}
-            onClose={() => setRoomInfoPanelOpen(false)}
-          />
-        }
         listPanel={({ chatFilter, activeFolderId }) => (
           <ChatList
             chatFilter={chatFilter}
@@ -943,6 +945,11 @@ const ChatPage = () => {
               setSettingsOpen(true);
             }}
             onOpenRoomProfile={openRoomProfileFromChat}
+            onSelectChat={activateChat}
+            roomMemberInvites={roomMemberInvites}
+            roomInviteActionLoading={roomInviteActionLoading}
+            onAcceptRoomMemberInvite={handleAcceptRoomMemberInvite}
+            onDeclineRoomMemberInvite={handleDeclineRoomMemberInvite}
           />
         )}
         mainPanel={
@@ -985,6 +992,7 @@ const ChatPage = () => {
         onJoinedRoom={handleJoinedRoom}
         onOpenContact={handleSelectUserForNewChat}
         currentUserId={user?.id}
+        currentUser={user}
       />
 
       <RoomProfileDialog open={roomProfileOpen} roomId={roomProfileId} onClose={closeRoomProfile} />

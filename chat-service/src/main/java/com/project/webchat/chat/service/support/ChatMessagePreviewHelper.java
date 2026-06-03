@@ -40,7 +40,7 @@ public class ChatMessagePreviewHelper {
         return switch (messageType) {
             case TODO -> "To-do list";
             case STICKY_NOTE -> "Sticky note";
-            case CALLOUT -> "Reminder";
+            case CALLOUT -> "Callout";
             default -> null;
         };
     }

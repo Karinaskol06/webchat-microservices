@@ -6,6 +6,7 @@ import com.project.webchat.chat.entity.MessageReaction;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
+import com.project.webchat.chat.service.ChatNotificationEventPublisher;
 import com.project.webchat.chat.service.WebSocketService;
 import com.project.webchat.chat.service.support.ChatMessageMapper;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class MessageReactionService {
     private final ChatRoomRepository chatRoomRepository;
     private final WebSocketService webSocketService;
     private final ChatMessageMapper chatMessageMapper;
+    private final ChatNotificationEventPublisher chatNotificationEventPublisher;
 
     @Transactional
     public List<MessageReactionDTO> toggleMessageReaction(String chatId, String messageId, Long userId, String emojiRaw) {
@@ -51,6 +53,7 @@ public class MessageReactionService {
                 .findFirst()
                 .orElse(null);
 
+        boolean reactionAdded = false;
         if (existing != null) {
             List<Long> userIds = existing.getUserIds() != null
                     ? new ArrayList<>(existing.getUserIds())
@@ -66,6 +69,7 @@ public class MessageReactionService {
                 assertUserReactionLimit(reactions, userId);
                 userIds.add(userId);
                 existing.setUserIds(userIds);
+                reactionAdded = true;
             }
         } else {
             assertUserReactionLimit(reactions, userId);
@@ -73,12 +77,16 @@ public class MessageReactionService {
                     .emoji(emoji)
                     .userIds(new ArrayList<>(List.of(userId)))
                     .build());
+            reactionAdded = true;
         }
 
         message.setReactions(reactions);
         ChatMessage saved = chatMessageRepository.save(message);
         List<MessageReactionDTO> reactionDtos = chatMessageMapper.toReactionDtos(saved.getReactions(), userId);
         webSocketService.notifyMessageReactionUpdated(saved.getId(), saved.getChatId(), reactionDtos);
+        if (reactionAdded) {
+            chatNotificationEventPublisher.publishMessageReactionAdded(saved, userId, emoji);
+        }
         return reactionDtos;
     }
 

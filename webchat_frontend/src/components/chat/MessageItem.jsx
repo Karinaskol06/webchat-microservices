@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { resolveApiBaseUrl } from '../../utils/apiBaseUrl';
 import {
     Box,
     Button,
@@ -38,7 +39,7 @@ import useChatStore from '../../store/useChatStore';
 import { canModerateOthersMessages } from '../../utils/channelPermissions';
 import { countUserReactions, MAX_REACTIONS_PER_USER } from '../../utils/messageReactions';
 import RichMessageContent from '../personalSpace/RichMessageContent';
-import { isRichMessageType } from '../../utils/personalSpace';
+import { getMessageCopyText, isRichMessageType } from '../../utils/personalSpace';
 import UserAvatar from '../user/UserAvatar';
 
 /** Larger previews; landscape uses bubble width, portrait shrinks to stay on-screen. */
@@ -252,6 +253,30 @@ const MessageItem = ({
         onOpenForward?.(message);
         closeMenu();
         closeContextMenu();
+    };
+
+    const handleCopy = async () => {
+        const text = getMessageCopyText(message);
+        closeMenu();
+        closeContextMenu();
+        if (!text) return;
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.setAttribute('readonly', '');
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                textarea.remove();
+            } catch {
+                /* clipboard unavailable */
+            }
+        }
     };
 
     const handleForwardedNameClick = (e) => {
@@ -503,8 +528,7 @@ const MessageItem = ({
                                 >
                                     <source
                                         src={
-                                            (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8089') +
-                                            `/api/chat/attachments/${attachment.id}`
+                                            `${resolveApiBaseUrl()}/api/chat/attachments/${attachment.id}`
                                         }
                                         type={attachment.mimeType || undefined}
                                     />
@@ -583,6 +607,7 @@ const MessageItem = ({
             >
                 {reactionMenuHeader}
                 {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
+                <MenuItem onClick={() => void handleCopy()}>Copy</MenuItem>
                 <MenuItem onClick={handleForward}>Forward</MenuItem>
                 {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
                 {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
@@ -602,6 +627,7 @@ const MessageItem = ({
             >
                 {reactionMenuHeader}
                 {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
+                <MenuItem onClick={() => void handleCopy()}>Copy</MenuItem>
                 <MenuItem onClick={handleForward}>Forward</MenuItem>
                 {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
                 {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
@@ -701,6 +727,8 @@ const MessageItem = ({
             return null;
         }
 
+        const isTodoList = messageTypeUpper === 'TODO';
+
         return (
             <>
                 <Box
@@ -725,8 +753,9 @@ const MessageItem = ({
 
                     <Box
                         sx={{
-                            maxWidth: '92%',
+                            maxWidth: isTodoList ? 'min(96%, 720px)' : '92%',
                             minWidth: 0,
+                            width: isTodoList ? 'max-content' : undefined,
                             position: 'relative',
                         }}
                     >

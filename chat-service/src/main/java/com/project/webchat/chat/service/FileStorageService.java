@@ -122,13 +122,7 @@ public class FileStorageService {
             file.transferTo(targetPath);
 
             // Magic-byte check on the saved file (avoids consuming the upload stream twice).
-            byte[] fileHeader = new byte[8];
-            try (InputStream is = Files.newInputStream(targetPath)) {
-                if (is.read(fileHeader) < 8) {
-                    Files.deleteIfExists(targetPath);
-                    throw new IllegalArgumentException("File is too small or corrupted");
-                }
-            }
+            byte[] fileHeader = readFileHeader(targetPath, 12);
             if (!AttachmentFilenameSecurity.isValidFileType(fileHeader, extension)) {
                 Files.deleteIfExists(targetPath);
                 throw new IllegalArgumentException(
@@ -158,8 +152,26 @@ public class FileStorageService {
             return saved;
         } catch (IOException e) {
             log.error("Error saving file: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to save file: " + e.getMessage(), e);
+            throw new IllegalArgumentException("Failed to save file. Try again or use a different file.", e);
         }
+    }
+
+    private byte[] readFileHeader(Path path, int length) throws IOException {
+        byte[] fileHeader = new byte[length];
+        try (InputStream is = Files.newInputStream(path)) {
+            int offset = 0;
+            while (offset < length) {
+                int read = is.read(fileHeader, offset, length - offset);
+                if (read < 0) {
+                    Files.deleteIfExists(path);
+                    throw new IllegalArgumentException("File is too small or corrupted");
+                }
+                offset += read;
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        }
+        return fileHeader;
     }
 
     // Safe file saving without message connection
@@ -303,9 +315,8 @@ public class FileStorageService {
             case ".xls" -> "application/vnd.ms-excel";
             case ".xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
             case ".mp4" -> "video/mp4";
+            case ".webp" -> "image/webp";
             default -> "application/octet-stream";
         };
     }
-
-
 }

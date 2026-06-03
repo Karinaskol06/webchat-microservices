@@ -109,7 +109,7 @@ services:
       retries: 12
       start_period: 30s
     environment:
-      - EUREKA_URL=${EUREKA_URL}
+      - EUREKA_URL=http://discovery-service:8761/eureka/
     networks:
       - webchat-net
 
@@ -128,7 +128,7 @@ services:
       - DB_USERNAME=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_NAME=${POSTGRES_DB}
-      - EUREKA_URL=${EUREKA_URL}
+      - EUREKA_URL=http://discovery-service:8761/eureka/
       - JWT_SECRET=${JWT_SECRET}
     networks:
       - webchat-net
@@ -146,7 +146,7 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - EUREKA_URL=${EUREKA_URL}
+      - EUREKA_URL=http://discovery-service:8761/eureka/
       - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health || exit 1"]
@@ -179,7 +179,7 @@ services:
       - APP_UPLOAD_DIR=/var/webchat/uploads
       - REDIS_HOST=redis
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - EUREKA_URL=${EUREKA_URL}
+      - EUREKA_URL=http://discovery-service:8761/eureka/
       - JWT_SECRET=${JWT_SECRET}
       - GATEWAY_INTERNAL_AUTH_TOKEN=${GATEWAY_INTERNAL_AUTH_TOKEN:-local-gateway-token}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
@@ -205,12 +205,16 @@ services:
       - DB_USERNAME=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_NAME=${POSTGRES_DB}
-      - EUREKA_URL=${EUREKA_URL}
+      - EUREKA_URL=http://discovery-service:8761/eureka/
       - JWT_SECRET=${JWT_SECRET}
       - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
       - KAFKA_CONSUMER_GROUP=notification-service
       - KAFKA_TOPIC_MESSAGE_CREATED=chat.message.created.v1
       - KAFKA_TOPIC_MESSAGE_CREATED_DLQ=chat.message.created.v1.dlq
+      - KAFKA_TOPIC_MESSAGE_REACTION=chat.message.reaction.v1
+      - KAFKA_TOPIC_MESSAGE_REACTION_DLQ=chat.message.reaction.v1.dlq
+      - KAFKA_TOPIC_ROOM_MEMBER_INVITED=chat.room.member.invited.v1
+      - KAFKA_TOPIC_ROOM_MEMBER_INVITED_DLQ=chat.room.member.invited.v1.dlq
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT}
@@ -242,7 +246,7 @@ services:
       notification-service:
         condition: service_started
     environment:
-      - EUREKA_URL=${EUREKA_URL}
+      - EUREKA_URL=http://discovery-service:8761/eureka/
       - JWT_SECRET=${JWT_SECRET}
       - GATEWAY_INTERNAL_AUTH_TOKEN=${GATEWAY_INTERNAL_AUTH_TOKEN:-local-gateway-token}
     ports:
@@ -251,7 +255,10 @@ services:
       - webchat-net
 
   frontend:
-    build: ./webchat_frontend
+    build:
+      context: ./webchat_frontend
+      args:
+        VITE_API_BASE_URL: SAME_ORIGIN
     container_name: frontend
     ports:
       - "80:80"

@@ -1,12 +1,15 @@
 package com.project.webchat.user.exception;
 
 import com.project.webchat.shared.exceptions.ResourceNotFoundException;
+import com.project.webchat.user.service.ProfileImageUploadValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -51,6 +54,33 @@ public class GlobalExceptionHandler {
         errorResponse.put("status", HttpStatus.BAD_REQUEST.value());
         errorResponse.put("error", "Bad Request");
         errorResponse.put("message", ex.getMessage());
+        errorResponse.put("timestamp", System.currentTimeMillis());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        Map<String, Object> errorResponse = new HashMap<>();
+        String msg = String.format(
+                "Image is too large. Maximum size is %d MB.",
+                ProfileImageUploadValidator.MAX_MB
+        );
+        errorResponse.put("status", HttpStatus.PAYLOAD_TOO_LARGE.value());
+        errorResponse.put("error", "Payload Too Large");
+        errorResponse.put("message", msg);
+        errorResponse.put("timestamp", System.currentTimeMillis());
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(errorResponse);
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<Map<String, Object>> handleMultipart(MultipartException ex) {
+        if (ex.getCause() instanceof MaxUploadSizeExceededException max) {
+            return handleMaxUploadSize(max);
+        }
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("status", HttpStatus.BAD_REQUEST.value());
+        errorResponse.put("error", "Bad Request");
+        errorResponse.put("message", "Could not read the uploaded image. Try a smaller PNG, JPEG, or WebP file.");
         errorResponse.put("timestamp", System.currentTimeMillis());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }

@@ -36,6 +36,12 @@ export function getAttachmentUploadErrorMessage(
     if (raw && /mb/i.test(raw)) {
       return raw;
     }
+    if (lower.includes('request') || lower.includes('one at a time')) {
+      return (
+        raw ||
+        'The upload request is too large. Stay under 10 MB per file and add files one at a time if needed.'
+      );
+    }
     return `This file is too large. Maximum size is ${ATTACHMENT_MAX_MB} MB per file.`;
   }
 

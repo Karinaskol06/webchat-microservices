@@ -30,6 +30,7 @@ const ChatShell = ({
   settingsOpen,
   onFindUsers,
   findUsersOpen,
+  pendingRoomInviteCount = 0,
   onFolderViewChange,
   personalSpaceActive,
   onPersonalSpaceSelect,
@@ -38,7 +39,6 @@ const ChatShell = ({
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isCompact = useMediaQuery(theme.breakpoints.down('lg'));
   const [chatFilter, setChatFilter] = useState('ALL');
-  const [entered, setEntered] = useState(false);
   const user = useAuthStore((s) => s.user);
   const activeFolderId = useChatFolderStore((s) => s.activeFolderId);
   const initFoldersForUser = useChatFolderStore((s) => s.initForUser);
@@ -49,16 +49,10 @@ const ChatShell = ({
     else useChatFolderStore.getState().clearForUser();
   }, [user?.id, initFoldersForUser]);
 
-  useEffect(() => {
-    setEntered(false);
-    const id = requestAnimationFrame(() => setEntered(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
-
   const showListOnMobile = isMobile && !hasActiveChat;
   const showMainOnMobile = isMobile && hasActiveChat;
 
-  const panelMotion = (delay) => (entered ? chatPanelEnterSx(delay) : { opacity: 0 });
+  const panelMotion = (delay) => chatPanelEnterSx(delay);
 
   return (
     <Box sx={chatShellRootSx}>
@@ -92,6 +86,7 @@ const ChatShell = ({
           settingsOpen={settingsOpen}
           onFindUsers={onFindUsers}
           findUsersOpen={findUsersOpen}
+          pendingRoomInviteCount={pendingRoomInviteCount}
           personalSpaceActive={personalSpaceActive}
           onPersonalSpaceSelect={onPersonalSpaceSelect}
         />

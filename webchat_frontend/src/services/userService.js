@@ -30,6 +30,34 @@ const userService = {
     return response.data;
   },
 
+  checkUsernameAvailability: async (value) => {
+    const response = await api.get("/api/users/profile/availability/username", {
+      params: { value },
+    });
+    return response.data;
+  },
+
+  checkEmailAvailability: async (value) => {
+    const response = await api.get("/api/users/profile/availability/email", {
+      params: { value },
+    });
+    return response.data;
+  },
+
+  updateAccount: async (payload) => {
+    const response = await api.put("/api/users/account", payload);
+    return response.data;
+  },
+
+  changePassword: async ({ oldPassword, newPassword, repeatPassword }) => {
+    const response = await api.put("/api/users/change-password", {
+      oldPassword,
+      newPassword,
+      repeatPassword,
+    });
+    return response.data;
+  },
+
   uploadAvatar: async (file) => {
     const formData = new FormData();
     formData.append("file", file);

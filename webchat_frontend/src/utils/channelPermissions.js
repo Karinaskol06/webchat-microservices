@@ -39,9 +39,16 @@ export function isGroupOrChannelType(chat) {
 }
 
 /** Group creator/admins or channel owner/moderators may delete the room. */
+function isRoomOwner(chat, currentUserId) {
+  if (chat?.createdBy == null || currentUserId == null) return false;
+  return Number(chat.createdBy) === Number(currentUserId);
+}
+
 /** Group admins or channel owner/moderators may edit name, description, and avatar. */
-export function canEditRoomProfile(chat) {
-  return canDeleteRoom(chat);
+export function canEditRoomProfile(chat, currentUserId = null) {
+  if (!chat || !isGroupOrChannelType(chat)) return false;
+  if (canDeleteRoom(chat)) return true;
+  return isRoomOwner(chat, currentUserId);
 }
 
 export function canDeleteRoom(chat) {

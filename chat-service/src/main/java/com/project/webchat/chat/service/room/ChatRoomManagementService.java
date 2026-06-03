@@ -8,6 +8,7 @@ import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
+import com.project.webchat.chat.service.ChatNotificationEventPublisher;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
@@ -46,6 +47,7 @@ public class ChatRoomManagementService {
     private final ChatUserInfoService chatUserInfoService;
     private final ChatRoomEnrichmentService roomEnrichmentService;
     private final ChatRoomPermissionService roomPermissionService;
+    private final ChatNotificationEventPublisher chatNotificationEventPublisher;
 
     public Page<ChatRoomDTO> getAllUserChatsSorted(Long userId, Pageable pageable) {
         Page<ChatRoom> chatPage = chatRoomRepository
@@ -55,7 +57,7 @@ public class ChatRoomManagementService {
                 .stream()
                 .filter(chat -> chat.getType() != ChatType.PERSONAL_SPACE)
                 .map(chat -> roomEnrichmentService.enrichChatWithUserData(
-                        chat, userId, roomEnrichmentService.getUnreadCount(chat.getId(), userId)))
+                        chat, userId, roomEnrichmentService.getUnreadCount(chat.getId(), userId), true))
                 .toList();
 
         return new PageImpl<>(chatRooms, pageable, chatPage.getTotalElements());
@@ -66,33 +68,33 @@ public class ChatRoomManagementService {
         ChatRoom chat = chatRoomRepository.findById(chatId)
                 .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
 
-        if (chat.getType() == ChatType.PERSONAL_SPACE) {
-            throw new IllegalArgumentException("You cannot leave your personal space.");
-        }
-        if (chat.getType() != ChatType.GROUP && chat.getType() != ChatType.CHANNEL) {
-            throw new IllegalArgumentException("You can only leave group chats and channels");
-        }
-
         if (!chat.getMemberIds().contains(userId)) {
             throw new IllegalArgumentException("User is not a member of this chat");
         }
 
+        // remove user from chat
         Set<Long> otherMembers = new HashSet<>(chat.getMemberIds());
         otherMembers.remove(userId);
+        // remove user from chat members
         chat.getMemberIds().remove(userId);
+        // remove user from chat admins
         if (chat.getAdminIds() != null) {
             chat.getAdminIds().remove(userId);
         }
+        // remove user from chat channel posters
         if (chat.getChannelPosterIds() != null) {
             chat.getChannelPosterIds().remove(userId);
         }
 
+        // if chat has no members, delete chat
         if (chat.getMemberIds().isEmpty()) {
             chatRoomRepository.delete(chat);
             redisService.evictChatParticipants(chatId);
             webSocketService.notifyChatDeleted(chatId, otherMembers);
         } else {
+            // save chat
             chatRoomRepository.save(chat);
+            // evict cached chat participants
             redisService.evictChatParticipants(chatId);
             webSocketService.notifyUserLeftChatForAll(chatId, userId, otherMembers);
             roomEnrichmentService.notifyRoomMembersChatUpdated(chat);
@@ -105,12 +107,11 @@ public class ChatRoomManagementService {
     @Transactional
     public void deleteRoom(String roomId, Long userId) {
         ChatRoom room = loadRoom(roomId);
-        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
-            throw new IllegalArgumentException("Only group chats and channels can be deleted");
-        }
+        
         if (!room.isMember(userId)) {
             throw new ForbiddenChatOperationException("You are not a member of this chat");
         }
+        // check if user has permission to delete chat
         boolean canDelete = room.getType() == ChatType.GROUP
                 ? roomPermissionService.hasGroupAdminRights(room, userId)
                 : roomPermissionService.hasChannelModeratorRights(room, userId);
@@ -118,12 +119,16 @@ public class ChatRoomManagementService {
             throw new ForbiddenChatOperationException("Only the creator or admins can delete this room");
         }
 
+        // delete attachments, messages, invites and chat
         Set<Long> members = new HashSet<>(room.getMemberIds());
         attachmentRepository.deleteByChatId(roomId);
         chatMessageRepository.deleteByChatId(roomId);
         roomMemberInviteRepository.deleteByRoomId(roomId);
+        // delete chat
         chatRoomRepository.delete(room);
+        // evict cached chat participants
         redisService.evictChatParticipants(roomId);
+        // notify users that chat was deleted
         webSocketService.notifyChatDeleted(roomId, members);
         log.info("Room {} deleted by user {}", roomId, userId);
     }
@@ -138,6 +143,7 @@ public class ChatRoomManagementService {
         return createGroupOrChannelRoom(creatorId, request, ChatType.CHANNEL);
     }
 
+    // discover public rooms by query and current user id
     public Page<DiscoverableRoomDTO> discoverPublicRooms(Long currentUserId, String q, Pageable pageable) {
         String regex = (q == null || q.trim().isEmpty()) ? ".*" : Pattern.quote(q.trim());
         Page<ChatRoom> page = chatRoomRepository.findPublicDiscoverableRooms(
@@ -167,13 +173,16 @@ public class ChatRoomManagementService {
     }
 
     public List<UserInfoDTO> getRoomParticipantsForMember(String roomId, Long userId) {
+        // check if cached participants exist
         List<Long> cachedParticipantIds = redisService.getCachedChatParticipants(roomId);
+        // if cached participants exist and user is in them, return cached participants
         if (!cachedParticipantIds.isEmpty() && cachedParticipantIds.contains(userId)) {
             return cachedParticipantIds.stream()
                     .map(chatUserInfoService::getUserInfo)
                     .toList();
         }
 
+        // if cached participants do not exist, load room and cache participants
         ChatRoom room = loadRoom(roomId);
         if (!room.isMember(userId)) {
             throw new ForbiddenChatOperationException("You are not a member of this chat");
@@ -214,21 +223,26 @@ public class ChatRoomManagementService {
             throw new IllegalArgumentException("Invite token is required");
         }
         String token = rawToken.trim();
+        // find room by invite token
         ChatRoom room = chatRoomRepository.findByInviteToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid or expired invite"));
+        // check if room is a group or channel
         if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
             throw new IllegalArgumentException("Invalid invite");
         }
+        // check if room is private
         RoomVisibility vis = room.getVisibility() != null ? room.getVisibility() : RoomVisibility.PRIVATE;
         if (vis != RoomVisibility.PRIVATE) {
             throw new IllegalArgumentException("This invite is not valid for this room");
         }
+        // check if user is already a member of the room
         if (room.isMember(userId)) {
             return roomEnrichmentService.enrichChatWithUserData(
                     room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));
         }
         room.addMember(userId);
         ChatRoom saved = chatRoomRepository.save(room);
+        // evict cached chat participants
         redisService.evictChatParticipants(saved.getId());
         roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
         return roomEnrichmentService.enrichChatWithUserData(
@@ -395,6 +409,7 @@ public class ChatRoomManagementService {
         RoomMemberInvite saved = roomMemberInviteRepository.save(invite);
         RoomMemberInviteDTO dto = toRoomMemberInviteDto(saved);
         webSocketService.notifyRoomMemberInvite(inviteeId, dto);
+        chatNotificationEventPublisher.publishRoomMemberInvited(saved);
         return dto;
     }
 
@@ -448,9 +463,10 @@ public class ChatRoomManagementService {
         members.add(creatorId);
 
         RoomVisibility visibility = request.getVisibility();
+        // generate invite token for private rooms
         String inviteToken = visibility == RoomVisibility.PRIVATE ? UUID.randomUUID().toString() : null;
+        // set admin ids for group rooms
         Set<Long> adminIds = type == ChatType.GROUP ? new HashSet<>(Set.of(creatorId)) : new HashSet<>();
-
         String groupPhoto = normalizeGroupPhoto(request.getGroupPhoto());
         String description = normalizeRoomDescription(request.getDescription());
 

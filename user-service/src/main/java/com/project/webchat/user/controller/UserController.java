@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.webchat.shared.exceptions.ResourceNotFoundException;
 import com.project.webchat.user.dto.ChangePasswordDTO;
+import com.project.webchat.user.dto.FieldAvailabilityDTO;
+import com.project.webchat.user.dto.UpdateAccountDTO;
+import com.project.webchat.user.dto.UpdateAccountResultDTO;
 import com.project.webchat.user.dto.UpdateUserDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.user.entity.ProfileImage;
@@ -84,12 +87,51 @@ public class UserController {
         }
     }
 
+    @GetMapping("/profile/availability/username")
+    public ResponseEntity<FieldAvailabilityDTO> checkUsernameAvailability(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam("value") String value) {
+        return ResponseEntity.ok(userService.checkUsernameAvailability(value, userId));
+    }
+
+    @GetMapping("/profile/availability/email")
+    public ResponseEntity<FieldAvailabilityDTO> checkEmailAvailability(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestParam("value") String value) {
+        return ResponseEntity.ok(userService.checkEmailAvailability(value, userId));
+    }
+
+    @PutMapping("/account")
+    public ResponseEntity<?> updateAccount(
+            @RequestHeader("X-User-Id") Long userId,
+            @Valid @RequestBody UpdateAccountDTO updateAccountDTO) {
+        try {
+            UpdateAccountResultDTO result = userService.updateAccountIdentifiers(userId, updateAccountDTO);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", e.getMessage(), "error", e.getMessage()));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "User not found", "error", "User not found"));
+        }
+    }
+
     @PutMapping("/change-password")
     public ResponseEntity<?> changePassword(
             @RequestHeader("X-Username") String username,
             @Valid @RequestBody ChangePasswordDTO changePasswordDTO) {
-        userService.changePassword(username, changePasswordDTO);
-        return ResponseEntity.ok().build();
+        try {
+            userService.changePassword(username, changePasswordDTO);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Password updated. Sign in again with your new password."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", e.getMessage(), "error", e.getMessage()));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "User not found", "error", "User not found"));
+        }
     }
 
     @PostMapping(value = "/profile/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -100,7 +142,7 @@ public class UserController {
             profileImageService.upload(userId, ProfileImageService.KIND_AVATAR, file);
             return ResponseEntity.ok(userService.getUserDTOById(userId));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "error", e.getMessage()));
         }
     }
 
@@ -118,7 +160,7 @@ public class UserController {
             profileImageService.upload(userId, ProfileImageService.KIND_BACKGROUND, file);
             return ResponseEntity.ok(userService.getUserDTOById(userId));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "error", e.getMessage()));
         }
     }
 

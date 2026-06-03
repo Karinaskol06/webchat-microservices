@@ -10,7 +10,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import CloseIcon from '@mui/icons-material/Close';
 import { parseQuotedSnippetFromMessage } from '../../utils/quotedMessagePreview';
 import { QuotedKindIcon } from './QuotedKindIcon';
-import { chatColors, chatRadii } from '../../theme/chatDesignTokens';
+import { chatColors, chatRadii, muiTransparent } from '../../theme/chatDesignTokens';
 import { ATTACHMENT_ACCEPT } from '../../utils/attachmentConstraints';
 
 const TYPING_NOTIFY_MS = 400;
@@ -311,7 +311,7 @@ const MessageInput = forwardRef(function MessageInput(
             aria-label="Send message"
             size="small"
             sx={{
-              bgcolor: canSend ? chatColors.primary : 'transparent',
+              bgcolor: canSend ? chatColors.primary : muiTransparent,
               color: canSend ? '#fff' : 'action.disabled',
               '&:hover': { bgcolor: canSend ? chatColors.primaryDark : undefined },
             }}

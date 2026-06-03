@@ -20,7 +20,7 @@ import useChatStore from '../../store/useChatStore';
 import useChatFolderStore from '../../store/useChatFolderStore';
 import ChatFolderRailSection from './ChatFolderRailSection';
 import { isChatDragEvent, readChatDragId } from '../../utils/chatDrag';
-import { chatColors, chatLayout } from '../../theme/chatDesignTokens';
+import { chatColors, chatLayout, muiTransparent } from '../../theme/chatDesignTokens';
 import UserAvatar from '../user/UserAvatar';
 
 const CHAT_FILTERS = [
@@ -46,6 +46,7 @@ const ChatNavRail = ({
   onOpenSettings,
   onFindUsers,
   findUsersOpen,
+  pendingRoomInviteCount = 0,
   settingsOpen,
   personalSpaceActive,
   onPersonalSpaceSelect,
@@ -162,7 +163,7 @@ const ChatNavRail = ({
                       ? 'rgba(123, 97, 255, 0.45)'
                       : active
                         ? chatColors.navActiveBg
-                        : 'transparent',
+                        : muiTransparent,
                     outline: isAllDropTarget ? '2px dashed rgba(255,255,255,0.65)' : 'none',
                     outlineOffset: 2,
                     borderRadius: 2,
@@ -203,13 +204,32 @@ const ChatNavRail = ({
                       height: 48,
                       mx: 'auto',
                       color: findUsersOpen ? chatColors.navIconActive : chatColors.navIcon,
-                      bgcolor: findUsersOpen ? chatColors.navActiveBg : 'transparent',
+                      bgcolor: findUsersOpen ? chatColors.navActiveBg : muiTransparent,
                       '&:hover': {
                         bgcolor: findUsersOpen ? chatColors.navActiveBg : 'rgba(24, 20, 28, 0.06)',
                       },
                     }}
                   >
-                    <FindIcon fontSize="small" />
+                    <Badge
+                      badgeContent={
+                        pendingRoomInviteCount > 0
+                          ? pendingRoomInviteCount > 9
+                            ? '9+'
+                            : pendingRoomInviteCount
+                          : 0
+                      }
+                      overlap="circular"
+                      invisible={!pendingRoomInviteCount}
+                      sx={{
+                        '& .MuiBadge-badge': {
+                          bgcolor: chatColors.unreadBadge,
+                          color: chatColors.textOnPrimary,
+                          fontWeight: 700,
+                        },
+                      }}
+                    >
+                      <FindIcon fontSize="small" />
+                    </Badge>
                   </IconButton>
                 </Tooltip>
               ) : null}
@@ -228,7 +248,7 @@ const ChatNavRail = ({
             height: 48,
             mx: 'auto',
             color: personalSpaceActive ? chatColors.navIconActive : chatColors.navIcon,
-            bgcolor: personalSpaceActive ? chatColors.navActiveBg : 'transparent',
+            bgcolor: personalSpaceActive ? chatColors.navActiveBg : muiTransparent,
             borderRadius: 2,
             '&:hover': {
               bgcolor: personalSpaceActive ? chatColors.navActiveBg : 'rgba(24, 20, 28, 0.06)',
@@ -265,6 +285,7 @@ const ChatNavRail = ({
           >
             <UserAvatar
               user={user}
+              cacheKey={user?.avatarRevision}
               variant="rounded"
               sx={{ width: 40, height: 40, border: `2px solid ${chatColors.glassPanelBorder}` }}
             />
@@ -277,7 +298,7 @@ const ChatNavRail = ({
             onClick={() => onOpenSettings?.()}
             sx={{
               color: settingsOpen ? chatColors.navIconActive : chatColors.navIcon,
-              bgcolor: settingsOpen ? chatColors.navActiveBg : 'transparent',
+              bgcolor: settingsOpen ? chatColors.navActiveBg : muiTransparent,
               '&:hover': {
                 bgcolor: settingsOpen ? chatColors.navActiveBg : 'rgba(24, 20, 28, 0.06)',
               },

@@ -56,6 +56,7 @@ export const withReducedMotion = (motionSx, staticSx = {}) => ({
     animation: 'none !important',
     transition: 'none !important',
     transform: 'none !important',
+    opacity: 1,
     ...staticSx,
   },
 });
@@ -63,23 +64,19 @@ export const withReducedMotion = (motionSx, staticSx = {}) => ({
 export const staggerDelay = (index, stepSec = 0.055) => `${(index * stepSec).toFixed(3)}s`;
 
 export const authCardEnterSx = withReducedMotion({
-  ...authKeyframes,
   animation: `authCardIn 0.55s ${AUTH_EASE_OUT} both`,
   willChange: 'transform, opacity',
 });
 
 export const authTitleEnterSx = withReducedMotion({
-  ...authKeyframes,
   animation: `authFadeUp 0.5s ${AUTH_EASE_OUT} 0.08s both`,
 });
 
 export const authFooterEnterSx = withReducedMotion({
-  ...authKeyframes,
   animation: `authFadeUp 0.45s ${AUTH_EASE_OUT} 0.32s both`,
 });
 
 export const authBgLayerSx = withReducedMotion({
-  ...authKeyframes,
   position: 'absolute',
   inset: 0,
   backgroundImage: 'inherit',
@@ -93,20 +90,17 @@ export const authBgLayerSx = withReducedMotion({
 
 export const authRevealSx = (index = 0) =>
   withReducedMotion({
-    ...authKeyframes,
     animation: `authFadeUp 0.42s ${AUTH_EASE_OUT} ${staggerDelay(index)} both`,
     willChange: 'transform, opacity',
   });
 
 export const authAlertEnterSx = withReducedMotion({
-  ...authKeyframes,
   animation: `authAlertIn 0.35s ${AUTH_EASE_OUT} both`,
 });
 
 export const authShakeSx = (active) =>
   active
     ? withReducedMotion({
-        ...authKeyframes,
         animation: `authShake 0.42s ${AUTH_EASE} both`,
       })
     : {};

@@ -13,7 +13,6 @@ import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import LinkIcon from '@mui/icons-material/Link';
 import SearchIcon from '@mui/icons-material/Search';
-import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
 import ExitToAppOutlinedIcon from '@mui/icons-material/ExitToAppOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { getPresenceLabel } from '../../utils/presence';
@@ -32,6 +31,7 @@ const ChatHeader = ({
   headerTitle,
   headerSubtitle,
   headerAvatarSrc,
+  headerAvatarCacheKey,
   headerAvatarLetter,
   /** If false, avatar is not clickable (rooms). */
   headerAvatarClickable = true,
@@ -44,8 +44,6 @@ const ChatHeader = ({
   onRequestDeleteRoom,
   inChatSearchOpen = false,
   onToggleInChatSearch,
-  roomInfoPanelOpen = true,
-  onToggleRoomInfoPanel,
 }) => {
   const [menuAnchor, setMenuAnchor] = useState(null);
 
@@ -88,6 +86,7 @@ const ChatHeader = ({
     <UserAvatar
       user={otherUser}
       src={avatarSrc}
+      cacheKey={headerAvatarCacheKey}
       letter={letter}
       variant="rounded"
       onClick={handleAvatarClick}
@@ -123,19 +122,6 @@ const ChatHeader = ({
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-        {isGroupOrChannel && onToggleRoomInfoPanel ? (
-          <Tooltip title={roomInfoPanelOpen ? 'Hide room panel' : 'Show room panel'}>
-            <IconButton
-              aria-label={roomInfoPanelOpen ? 'Hide room panel' : 'Show room panel'}
-              aria-pressed={roomInfoPanelOpen ? 'true' : 'false'}
-              size="small"
-              onClick={onToggleRoomInfoPanel}
-              sx={{ color: roomInfoPanelOpen ? chatColors.primary : chatColors.textPrimary }}
-            >
-              <ViewSidebarOutlinedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        ) : null}
         {onToggleInChatSearch ? (
           <Tooltip title={inChatSearchOpen ? 'Close search' : 'Search in chat'}>
             <IconButton

@@ -22,10 +22,19 @@ public class ChatUserInfoService {
     private final UserServiceClient userServiceClient;
 
     public UserInfoDTO getUserInfo(Long userId) {
-        UserInfoDTO cached = redisService.getCachedUserInfo(userId);
-        if (cached != null) {
-            cached.setOnline(redisService.isUserOnline(userId));
-            return cached;
+        return getUserInfo(userId, true);
+    }
+
+    /**
+     * @param useCache when false, always loads from user-service (for chat list previews).
+     */
+    public UserInfoDTO getUserInfo(Long userId, boolean useCache) {
+        if (useCache) {
+            UserInfoDTO cached = redisService.getCachedUserInfo(userId);
+            if (cached != null) {
+                cached.setOnline(redisService.isUserOnline(userId));
+                return cached;
+            }
         }
 
         try {
@@ -42,7 +51,9 @@ public class ChatUserInfoService {
                         .online(redisService.isUserOnline(userId))
                         .build();
 
-                redisService.cacheUserInfo(userInfo);
+                if (useCache) {
+                    redisService.cacheUserInfo(userInfo);
+                }
                 return userInfo;
             }
         } catch (Exception e) {
@@ -57,10 +68,14 @@ public class ChatUserInfoService {
     }
 
     public Map<Long, UserInfoDTO> getUserInfoBatch(Set<Long> userIds) {
+        return getUserInfoBatch(userIds, true);
+    }
+
+    public Map<Long, UserInfoDTO> getUserInfoBatch(Set<Long> userIds, boolean useCache) {
         return userIds.stream()
                 .collect(Collectors.toMap(
                         id -> id,
-                        this::getUserInfo,
+                        id -> getUserInfo(id, useCache),
                         (existing, replacement) -> existing
                 ));
     }

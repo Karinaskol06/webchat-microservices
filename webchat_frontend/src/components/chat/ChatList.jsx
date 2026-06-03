@@ -42,8 +42,11 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import InputAdornment from '@mui/material/InputAdornment';
 import Tooltip from '@mui/material/Tooltip';
-import { chatColors, chatGlassFieldPanelSx, chatRadii } from '../../theme/chatDesignTokens';
+import { chatColors, chatGlassFieldPanelSx, chatRadii, muiTransparent } from '../../theme/chatDesignTokens';
 import UserAvatar from '../user/UserAvatar';
+import { resolveRoomAvatarSrc } from '../../utils/userAvatar';
+import { getMessagePreviewText } from '../../utils/personalSpace';
+import RoomMemberInvitesPanel from './RoomMemberInvitesPanel';
 
 const matchesChatFilter = (chat, filter) => {
   const t = String(chat?.type || 'PRIVATE').toUpperCase();
@@ -63,6 +66,10 @@ const ChatList = ({
   onJoinViaLink,
   chatFilter = 'ALL',
   activeFolderId = null,
+  roomMemberInvites = [],
+  roomInviteActionLoading = false,
+  onAcceptRoomMemberInvite,
+  onDeclineRoomMemberInvite,
 }) => {
   const { user } = useAuthStore();
 
@@ -235,8 +242,11 @@ const ChatList = ({
   const handleRoomCreated = (dto) => {
     if (!dto?.id) return;
     upsertChat(dto);
-    setCurrentChat(dto);
-    onSelectChat?.(dto);
+    if (onSelectChat) {
+      onSelectChat(dto);
+    } else {
+      setCurrentChat(dto);
+    }
   };
 
   const openListMenu = (event) => {
@@ -325,7 +335,7 @@ const ChatList = ({
           minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          bgcolor: 'transparent',
+          bgcolor: muiTransparent,
           color: chatColors.glassPanelText,
         }}
       >
@@ -355,7 +365,7 @@ const ChatList = ({
           minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
-          bgcolor: 'transparent',
+          bgcolor: muiTransparent,
           color: chatColors.glassPanelText,
         }}
       >
@@ -382,16 +392,21 @@ const ChatList = ({
       const name = isRoom
         ? (chat.groupName || '')
         : `${chat.otherUser?.firstName || ''} ${chat.otherUser?.lastName || ''} ${chat.otherUser?.username || ''}`;
-      const preview = String(chat.lastMessage || chat.lastMessageContent || '');
+      const preview = getMessagePreviewText({
+        content: chat.lastMessage || chat.lastMessageContent || '',
+      });
       return `${name} ${preview}`.toLowerCase().includes(searchLower);
     });
 
   const handleSelectChat = (chat) => {
+    if (onSelectChat) {
+      onSelectChat(chat);
+      return;
+    }
     setCurrentChat(chat);
     if (chat?.id) {
       resetUnreadCount(chat.id);
     }
-    onSelectChat?.(chat);
   };
 
   const emptyTitle = activeFolder
@@ -420,7 +435,7 @@ const ChatList = ({
         </Button>
       </Box>
     ) : (
-      <List sx={{ width: '100%', bgcolor: 'transparent', py: 0 }}>
+      <List sx={{ width: '100%', bgcolor: muiTransparent, py: 0 }}>
         {chatList.map((chat) => {
           const chatType = String(chat.type || '').toUpperCase();
           const isGroup = chatType === 'GROUP';
@@ -438,7 +453,10 @@ const ChatList = ({
           const presence = presenceByChatId[chat.id];
           const presenceState = derivePresenceState(presence);
 
-          const lastMessage = chat.lastMessage || chat.lastMessageContent;
+          const lastMessageRaw = chat.lastMessage || chat.lastMessageContent;
+          const lastMessage = lastMessageRaw
+            ? getMessagePreviewText({ content: lastMessageRaw })
+            : '';
           const lastMessagePreview = lastMessage
             ? lastMessage.length > 30
               ? `${lastMessage.substring(0, 30)}...`
@@ -451,7 +469,7 @@ const ChatList = ({
           const avatarLetter = isGroupOrChannel
             ? (chat.groupName?.[0] || '?').toUpperCase()
             : undefined;
-          const roomAvatarSrc = isGroupOrChannel ? chat.groupPhoto || undefined : undefined;
+          const roomAvatarSrc = isGroupOrChannel ? resolveRoomAvatarSrc(chat) : undefined;
 
           const isDragging = draggingChatId === String(chat.id);
 
@@ -473,7 +491,7 @@ const ChatList = ({
                 mb: 0.5,
                 pr: 0.5,
                 borderRadius: `${chatRadii.avatar}px`,
-                bgcolor: isSelected ? chatColors.surfaceMuted : 'transparent',
+                bgcolor: isSelected ? chatColors.surfaceMuted : muiTransparent,
                 opacity: isDragging ? 0.45 : 1,
                 transform: isDragging ? 'scale(0.98)' : 'none',
                 transition: 'opacity 0.15s ease, transform 0.15s ease, background-color 0.15s ease',
@@ -533,9 +551,13 @@ const ChatList = ({
                   }}
                 >
                   {isGroupOrChannel ? (
-                    <UserAvatar src={roomAvatarSrc} letter={avatarLetter} />
+                    <UserAvatar
+                      src={roomAvatarSrc}
+                      letter={avatarLetter}
+                      disableMediaCache
+                    />
                   ) : (
-                    <UserAvatar user={otherUser} />
+                    <UserAvatar user={otherUser} disableMediaCache />
                   )}
                 </Badge>
               </ListItemAvatar>
@@ -621,7 +643,7 @@ const ChatList = ({
         minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
-        bgcolor: 'transparent',
+        bgcolor: muiTransparent,
         color: chatColors.glassPanelText,
       }}
     >
@@ -704,7 +726,26 @@ const ChatList = ({
                 color: chatColors.primary,
               }}
             >
-              <SearchIcon fontSize="small" />
+              <Badge
+                badgeContent={
+                  roomMemberInvites.length > 0
+                    ? roomMemberInvites.length > 9
+                      ? '9+'
+                      : roomMemberInvites.length
+                    : 0
+                }
+                overlap="circular"
+                invisible={!roomMemberInvites.length}
+                sx={{
+                  '& .MuiBadge-badge': {
+                    bgcolor: chatColors.unreadBadge,
+                    color: chatColors.textOnPrimary,
+                    fontWeight: 700,
+                  },
+                }}
+              >
+                <SearchIcon fontSize="small" />
+              </Badge>
             </IconButton>
           </Tooltip>
           <Tooltip title="Chat list options">
@@ -725,6 +766,13 @@ const ChatList = ({
           </Tooltip>
         </Box>
       </Box>
+
+      <RoomMemberInvitesPanel
+        invites={roomMemberInvites}
+        loading={roomInviteActionLoading}
+        onAccept={onAcceptRoomMemberInvite}
+        onDecline={onDeclineRoomMemberInvite}
+      />
 
       <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
         {listSection}

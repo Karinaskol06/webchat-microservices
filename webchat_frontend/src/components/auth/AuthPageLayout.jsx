@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
-import { useLocation } from 'react-router-dom';
 import {
   authBgLayerSx,
   authCardEnterSx,
@@ -17,15 +16,6 @@ import {
 } from './authPageTheme';
 
 const AuthPageLayout = ({ title, children, footer, maxWidth = 420, shake = false }) => {
-  const { pathname } = useLocation();
-  const [entered, setEntered] = useState(false);
-
-  useEffect(() => {
-    setEntered(false);
-    const id = requestAnimationFrame(() => setEntered(true));
-    return () => cancelAnimationFrame(id);
-  }, [pathname]);
-
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -58,7 +48,7 @@ const AuthPageLayout = ({ title, children, footer, maxWidth = 420, shake = false
         sx={{
           ...authGlassCardSx,
           maxWidth,
-          ...(entered ? authCardEnterSx : { opacity: 0 }),
+          ...authCardEnterSx,
           ...authShakeSx(shake),
         }}
         role="region"

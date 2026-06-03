@@ -126,15 +126,19 @@ const chatService = {
   },
 
   updateRoomProfile: async (roomId, { groupName, description, groupPhoto } = {}) => {
-    const body = {};
-    if (groupName !== undefined) body.groupName = groupName;
-    if (description !== undefined) body.description = description;
-    if (groupPhoto !== undefined) body.groupPhoto = groupPhoto;
-    const response = await api.patch(
-      `/api/chat/rooms/${encodeURIComponent(roomId)}`,
-      body,
-    );
-    return response.data;
+    try {
+      const body = {};
+      if (groupName !== undefined) body.groupName = groupName;
+      if (description !== undefined) body.description = description;
+      if (groupPhoto !== undefined) body.groupPhoto = groupPhoto;
+      const response = await api.patch(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}`,
+        body,
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error;
+    }
   },
 
   inviteRoomMemberByUsername: async (roomId, username) => {
@@ -282,24 +286,23 @@ const chatService = {
   },
 
   uploadAttachments: async (chatId, files) => {
-    const formData = new FormData();
-    files.forEach((file) => {
-      formData.append('files', file);
-    });
+    const list = Array.isArray(files) ? files : [];
+    if (list.length === 0) {
+      return [];
+    }
 
-    const token = localStorage.getItem('token');
-    const response = await api.post(
-      `/api/chat/${encodeURIComponent(chatId)}/attachments`,
-      formData,
-      token
-        ? {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        : undefined,
-    );
-    return response.data;
+    const uploaded = [];
+    for (const file of list) {
+      const formData = new FormData();
+      formData.append('files', file);
+      const response = await api.post(
+        `/api/chat/${encodeURIComponent(chatId)}/attachments`,
+        formData,
+      );
+      const batch = Array.isArray(response.data) ? response.data : [];
+      uploaded.push(...batch);
+    }
+    return uploaded;
   },
 
   getChatAttachments: async (chatId) => {

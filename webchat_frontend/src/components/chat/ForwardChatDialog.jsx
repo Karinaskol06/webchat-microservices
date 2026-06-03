@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Dialog,
@@ -13,33 +13,58 @@ import {
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import useChatStore from '../../store/useChatStore';
+import chatService from '../../services/chatService';
 import { sendForwardMessage } from '../../utils/websocket';
 import { parseQuotedSnippetFromMessage } from '../../utils/quotedMessagePreview';
+import {
+  getChatDisplayLabel,
+  getChatDisplaySecondary,
+  getChatTypeUpper,
+  isRoomLikeChat,
+} from '../../utils/chatDisplay';
 import { QuotedKindIcon } from './QuotedKindIcon';
 import UserAvatar from '../user/UserAvatar';
+import { resolveRoomAvatarSrc } from '../../utils/userAvatar';
 
-const chatLabel = (chat) => {
-  const isGroup = String(chat?.type || '').toUpperCase() === 'GROUP';
-  if (isGroup) {
-    return chat.groupName || 'Group chat';
-  }
-  const u = chat.otherUser;
-  if (u?.firstName || u?.lastName) {
-    return `${u.firstName || ''} ${u.lastName || ''}`.trim();
-  }
-  return u?.username || 'Chat';
-};
-
-const ForwardChatDialog = ({ open, message, onClose }) => {
+const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
   const chats = useChatStore((s) => s.chats);
-  const setCurrentChat = useChatStore((s) => s.setCurrentChat);
-  const resetUnreadCount = useChatStore((s) => s.resetUnreadCount);
   const [error, setError] = useState('');
+  const [personalSpace, setPersonalSpace] = useState(null);
+
+  useEffect(() => {
+    if (!open) {
+      setPersonalSpace(null);
+      return undefined;
+    }
+    let cancelled = false;
+    chatService
+      .getPersonalSpace()
+      .then((room) => {
+        if (cancelled || !room?.id) return;
+        useChatStore.getState().upsertChat(room);
+        setPersonalSpace(room);
+      })
+      .catch(() => {
+        if (!cancelled) setPersonalSpace(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   const selectableChats = useMemo(() => {
-    const list = Array.isArray(chats) ? chats : [];
-    return list.filter((c) => c?.id);
-  }, [chats]);
+    const list = Array.isArray(chats) ? chats.filter((c) => c?.id) : [];
+    const psFromStore = list.find((c) => getChatTypeUpper(c) === 'PERSONAL_SPACE');
+    const personal = personalSpace || psFromStore;
+    const rest = list
+      .filter((c) => getChatTypeUpper(c) !== 'PERSONAL_SPACE')
+      .sort((a, b) =>
+        getChatDisplayLabel(a).localeCompare(getChatDisplayLabel(b), undefined, {
+          sensitivity: 'base',
+        }),
+      );
+    return personal ? [personal, ...rest] : rest;
+  }, [chats, personalSpace]);
 
   const preview = message ? parseQuotedSnippetFromMessage(message) : null;
   const previewAuthor =
@@ -53,10 +78,7 @@ const ForwardChatDialog = ({ open, message, onClose }) => {
     const targetChatId = String(chat.id);
     const sourceMessageId = String(message.id);
 
-    // Open destination chat first so the live store matches the topic when the forwarded
-    // message arrives (see useWebSocket message handler).
-    setCurrentChat(chat);
-    resetUnreadCount(targetChatId);
+    onActivateChat?.(chat);
 
     const ok = sendForwardMessage({
       chatId: targetChatId,
@@ -113,19 +135,23 @@ const ForwardChatDialog = ({ open, message, onClose }) => {
         ) : (
           <List dense disablePadding sx={{ maxHeight: 360, overflow: 'auto' }}>
             {selectableChats.map((chat) => {
-              const label = chatLabel(chat);
-              const isGroup = String(chat.type || '').toUpperCase() === 'GROUP';
-              const letter = label?.[0]?.toUpperCase() || '?';
+              const label = getChatDisplayLabel(chat);
+              const roomLike = isRoomLikeChat(chat);
+              const letter = (label?.[0] || '?').toUpperCase();
+              const roomAvatarSrc = roomLike ? resolveRoomAvatarSrc(chat) : undefined;
               return (
                 <ListItemButton key={chat.id} onClick={() => handleSelectChat(chat)}>
                   <ListItemAvatar>
-                    {isGroup ? (
-                      <UserAvatar src={chat.groupPhoto} letter={letter} />
+                    {roomLike ? (
+                      <UserAvatar src={roomAvatarSrc} letter={letter} />
                     ) : (
                       <UserAvatar user={chat.otherUser} />
                     )}
                   </ListItemAvatar>
-                  <ListItemText primary={label} secondary={isGroup ? 'Group' : chat.otherUser?.username} />
+                  <ListItemText
+                    primary={label}
+                    secondary={getChatDisplaySecondary(chat)}
+                  />
                 </ListItemButton>
               );
             })}

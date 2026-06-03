@@ -1,6 +1,7 @@
 /** Shared glass auth screen tokens (login / register). */
 
 import { AUTH_EASE, withReducedMotion } from './authAnimations';
+import { muiTransparent } from '../../theme/chatDesignTokens';
 
 export const AUTH_BG_IMAGE = '/login-bg.png';
 
@@ -85,7 +86,7 @@ export const authLinkButtonSx = withReducedMotion({
   verticalAlign: 'baseline',
   transition: `opacity 0.2s ${AUTH_EASE}, transform 0.2s ${AUTH_EASE}`,
   '&:hover': {
-    backgroundColor: 'transparent',
+    backgroundColor: muiTransparent,
     textDecoration: 'underline',
     opacity: 0.92,
   },

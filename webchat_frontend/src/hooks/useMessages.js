@@ -4,7 +4,7 @@ import chatService from '../services/chatService';
 import { useShallow } from 'zustand/react/shallow';
 import { sendChatMessage, sendTypingEvent } from '../utils/websocket';
 import { getAttachmentUploadErrorMessage } from '../utils/attachmentUploadErrors';
-import { validateAttachmentFiles } from '../utils/attachmentConstraints';
+import { isChatAttachmentUploadUrl, validateAttachmentFiles } from '../utils/attachmentConstraints';
 import { WEBCHAT_MESSAGES_MARKED_READ } from '../constants/chatEvents';
 import { canPostInChannel } from '../utils/channelPermissions';
 
@@ -208,8 +208,7 @@ const useMessages = (currentChat, composerRef) => {
       console.error('Failed to send message:', error);
       const isUploadFailure =
         previousAttachments.length > 0 &&
-        error?.config?.url &&
-        String(error.config.url).includes('/attachments');
+        isChatAttachmentUploadUrl(error?.config?.url);
       const message = isUploadFailure
         ? getAttachmentUploadErrorMessage(error, 'Could not upload the file. Please try again.')
         : error?.message === 'WebSocket is not connected'

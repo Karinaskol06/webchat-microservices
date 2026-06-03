@@ -79,6 +79,9 @@ public class ChatRoomPermissionService {
         if (!room.isMember(actorId)) {
             throw new ForbiddenChatOperationException("You are not a member of this chat");
         }
+        if (sameUserId(room.getCreatedBy(), actorId)) {
+            return;
+        }
         boolean canEdit = room.getType() == ChatType.GROUP
                 ? hasGroupAdminRights(room, actorId)
                 : hasChannelModeratorRights(room, actorId);

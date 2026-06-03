@@ -22,10 +22,17 @@ import useAuthStore from "../../store/useAuthStore";
 import PhoneCountryField from "../common/PhoneCountryField";
 import { isValidInternationalPhone } from "../../utils/internationalPhone";
 import UserAvatar from "./UserAvatar";
+import useChatStore from "../../store/useChatStore";
+import { appendCacheBust } from "../../utils/userAvatar";
+import {
+  PROFILE_IMAGE_ACCEPT,
+  validateProfileImageFile,
+} from "../../utils/profileImageConstraints";
+import { getProfileImageUploadErrorMessage } from "../../utils/profileUploadErrors";
+import { chatHideScrollbarSx } from "../../theme/chatDesignTokens";
 
 const toInputDate = (value) => (value ? new Date(value) : null);
 const toIsoDate = (value) => (value ? value.toISOString().slice(0, 10) : null);
-const appendVersion = (url) => (url ? `${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}` : null);
 
 const normalizeCountryCode = (u) => {
   const c = u?.countryCode;
@@ -127,18 +134,25 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
     if (!updated) return;
     const versionedProfilePicture =
       changedImageKind === "avatar" && updated.profilePicture
-        ? appendVersion(updated.profilePicture)
+        ? appendCacheBust(updated.profilePicture)
         : updated.profilePicture || null;
     const versionedBackgroundPicture =
       changedImageKind === "background"
-        ? appendVersion(updated.backgroundPicture || `/api/users/${updated.id}/background`)
+        ? appendCacheBust(updated.backgroundPicture || `/api/users/${updated.id}/background`)
         : updated.backgroundPicture || null;
+    const avatarRevision = changedImageKind === "avatar" ? Date.now() : undefined;
     const decorated = {
       ...updated,
       profilePicture: versionedProfilePicture,
       backgroundPicture: versionedBackgroundPicture,
+      ...(avatarRevision != null ? { avatarRevision } : {}),
     };
     setUser(decorated);
+    if (changedImageKind === "avatar" && updated.id != null) {
+      useChatStore.getState().patchUserProfileInChats(updated.id, {
+        profilePicture: versionedProfilePicture,
+      });
+    }
     setProfile((prev) => ({
       ...(prev || {}),
       ...decorated,
@@ -209,6 +223,11 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
 
   const handleUpload = async (file, kind) => {
     if (!file) return;
+    const validation = validateProfileImageFile(file);
+    if (!validation.ok) {
+      setError(validation.message);
+      return;
+    }
     setError("");
     setIsSaving(true);
     try {
@@ -219,8 +238,19 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
         updated = await userService.uploadBackground(file);
       }
       applyUpdatedProfile(updated, "Image updated", kind);
+      if (kind === "avatar" && avatarInputRef.current) {
+        avatarInputRef.current.value = "";
+      }
+      if (kind === "background" && backgroundInputRef.current) {
+        backgroundInputRef.current.value = "";
+      }
     } catch (uploadError) {
-      setError(getApiErrorMessage(uploadError, "Failed to upload image"));
+      setError(
+        getProfileImageUploadErrorMessage(
+          uploadError,
+          kind === "background" ? "Failed to upload cover photo." : "Failed to upload avatar.",
+        ),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -251,7 +281,12 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{editable ? "My profile" : "User profile"}</DialogTitle>
-      <DialogContent>
+      <DialogContent
+        sx={{
+          overflowY: "auto",
+          ...chatHideScrollbarSx,
+        }}
+      >
         <LocalizationProvider dateAdapter={AdapterDateFns}>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {fetchError ? (
@@ -368,14 +403,14 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
         <input
           ref={avatarInputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp"
+          accept={PROFILE_IMAGE_ACCEPT}
           hidden
           onChange={(event) => handleUpload(event.target.files?.[0], "avatar")}
         />
         <input
           ref={backgroundInputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp"
+          accept={PROFILE_IMAGE_ACCEPT}
           hidden
           onChange={(event) => handleUpload(event.target.files?.[0], "background")}
         />

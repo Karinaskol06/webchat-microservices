@@ -1,5 +1,10 @@
 /** Labels for quoted message previews (Telegram / WhatsApp style). */
 
+import {
+  resolveMessageType,
+  richPreviewLabelForType,
+} from './personalSpace';
+
 /**
  * Composer / optimistic UX: derive preview from full message (`replyToMessage`) when API
  * fields might be incomplete (attachments without server preview text yet).
@@ -8,7 +13,7 @@ export function parseQuotedSnippetFromMessage(message) {
   if (!message) return { kind: 'text', subtitle: '' };
   const raw = typeof message.content === 'string' ? message.content.trim() : '';
   const attachments = Array.isArray(message.attachments) ? message.attachments : [];
-  let messageType = String(message.messageType ?? 'TEXT').toUpperCase();
+  let messageType = resolveMessageType(message);
   let content = raw;
 
   if (attachments.length > 0 && !raw) {
@@ -41,8 +46,12 @@ export function parseQuotedSnippet(replied) {
   if (replied.deleted) {
     return { kind: 'deleted', subtitle: 'This message was deleted' };
   }
-  const mt = String(replied.messageType ?? 'TEXT').toUpperCase();
+  const mt = resolveMessageType(replied);
   const raw = typeof replied.content === 'string' ? replied.content.trim() : '';
+  const richLabel = richPreviewLabelForType(mt);
+  if (richLabel) {
+    return { kind: 'text', subtitle: richLabel };
+  }
   const isVideoFilename = /\.(mp4|webm|mov|mkv|avi)$/i.test(raw);
   const isMultiFiles = /^\d+\s+files?$/i.test(raw);
 
@@ -66,15 +75,6 @@ export function parseQuotedSnippet(replied) {
       return { kind: 'mixed', subtitle: raw };
     }
     return { kind: 'photo', subtitle: 'Photo' };
-  }
-  if (mt === 'TODO') {
-    return { kind: 'text', subtitle: 'To-do list' };
-  }
-  if (mt === 'STICKY_NOTE') {
-    return { kind: 'text', subtitle: 'Sticky note' };
-  }
-  if (mt === 'CALLOUT') {
-    return { kind: 'text', subtitle: 'Reminder' };
   }
   return { kind: 'text', subtitle: raw || 'Message' };
 }

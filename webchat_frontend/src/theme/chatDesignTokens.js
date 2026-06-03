@@ -2,8 +2,11 @@
 
 export const CHAT_BG_IMAGE = '/login-bg.png';
 
+/** MUI palette/sx cannot use the CSS keyword `transparent` (throws in getLuminance). */
+export const muiTransparent = 'rgba(0, 0, 0, 0)';
+
 export const chatColors = {
-  navBg: 'transparent',
+  navBg: muiTransparent,
   /** Nav + chat list typography on glass panels. */
   glassPanelText: '#10081a',
   glassPanelTextMuted: 'rgba(16, 8, 26, 0.62)',
@@ -11,7 +14,7 @@ export const chatColors = {
   navIcon: 'rgba(24, 20, 28, 0.65)',
   navIconActive: '#18141c',
   navActiveBg: 'rgba(24, 20, 28, 0.1)',
-  shellBg: 'transparent',
+  shellBg: muiTransparent,
   /** Login-style glass (nav rail). */
   glassNav: 'rgba(255, 255, 255, 0.14)',
   /** More opaque glass for chat list / info panels. */

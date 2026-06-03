@@ -2,11 +2,14 @@
 export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 export const ATTACHMENT_MAX_MB = 10;
 
+export const ATTACHMENT_MAX_FILES = 10;
+
 export const ATTACHMENT_ALLOWED_EXTENSIONS = [
   'jpg',
   'jpeg',
   'png',
   'gif',
+  'webp',
   'pdf',
   'txt',
   'doc',
@@ -21,7 +24,7 @@ const ALLOWED_SET = new Set(ATTACHMENT_ALLOWED_EXTENSIONS);
 export const ATTACHMENT_ALLOWED_LABEL = ATTACHMENT_ALLOWED_EXTENSIONS.join(', ');
 
 export const ATTACHMENT_ACCEPT =
-  '.jpg,.jpeg,.png,.gif,.pdf,.txt,.doc,.docx,.xls,.xlsx,.mp4,image/jpeg,image/png,image/gif,application/pdf,text/plain,video/mp4';
+  '.jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.doc,.docx,.xls,.xlsx,.mp4,image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,video/mp4';
 
 export function getAttachmentExtension(filename) {
   if (!filename || typeof filename !== 'string') return '';
@@ -79,6 +82,13 @@ export function validateAttachmentFiles(files) {
   const list = Array.isArray(files) ? files : [];
   if (list.length === 0) {
     return { ok: false, message: 'No files were selected.' };
+  }
+
+  if (list.length > ATTACHMENT_MAX_FILES) {
+    return {
+      ok: false,
+      message: `You can attach up to ${ATTACHMENT_MAX_FILES} files per message.`,
+    };
   }
 
   const failures = list

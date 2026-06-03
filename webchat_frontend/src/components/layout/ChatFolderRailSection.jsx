@@ -13,7 +13,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import useChatFolderStore from '../../store/useChatFolderStore';
 import useChatStore from '../../store/useChatStore';
 import { isChatDragEvent, readChatDragId } from '../../utils/chatDrag';
-import { chatColors } from '../../theme/chatDesignTokens';
+import { chatColors, muiTransparent } from '../../theme/chatDesignTokens';
 
 const ChatFolderRailSection = ({ activeFolderId, onSelectFolder }) => {
   const folders = useChatFolderStore((s) => s.folders);
@@ -216,7 +216,7 @@ const ChatFolderRailSection = ({ activeFolderId, onSelectFolder }) => {
                           ? 'rgba(123, 97, 255, 0.18)'
                           : active
                             ? chatColors.navActiveBg
-                            : 'transparent',
+                            : muiTransparent,
                         transition: 'background-color 0.15s ease, outline 0.15s ease',
                         '&:hover': {
                           bgcolor: isDropTarget

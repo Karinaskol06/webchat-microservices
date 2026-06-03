@@ -89,6 +89,44 @@ class ChatRoomPermissionServiceTest {
     }
 
     @Test
+    void assertCanManageRoomProfile_allowsChannelOwner() {
+        ChatRoom channel = ChatRoom.builder()
+                .type(ChatType.CHANNEL)
+                .memberIds(Set.of(7L, 8L))
+                .createdBy(7L)
+                .adminIds(new HashSet<>())
+                .build();
+
+        permissionService.assertCanManageRoomProfile(channel, 7L);
+    }
+
+    @Test
+    void assertCanManageRoomProfile_allowsChannelOwnerByCreatedByEvenWithoutAdminIds() {
+        ChatRoom channel = ChatRoom.builder()
+                .type(ChatType.CHANNEL)
+                .memberIds(Set.of(42L))
+                .createdBy(42L)
+                .adminIds(new HashSet<>())
+                .channelPosterIds(new HashSet<>())
+                .build();
+
+        permissionService.assertCanManageRoomProfile(channel, 42L);
+    }
+
+    @Test
+    void assertCanManageRoomProfile_deniesChannelMemberWithoutModeratorRole() {
+        ChatRoom channel = ChatRoom.builder()
+                .type(ChatType.CHANNEL)
+                .memberIds(Set.of(7L, 9L))
+                .createdBy(7L)
+                .adminIds(new HashSet<>())
+                .build();
+
+        assertThatThrownBy(() -> permissionService.assertCanManageRoomProfile(channel, 9L))
+                .isInstanceOf(ForbiddenChatOperationException.class);
+    }
+
+    @Test
     void canEditOrDeleteMessage_allowsGroupAdminForOthersMessages() {
         ChatRoom room = ChatRoom.builder()
                 .type(ChatType.GROUP)

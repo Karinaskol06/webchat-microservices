@@ -6,6 +6,7 @@ import com.project.webchat.shared.dto.ContactStatusDTO;
 import com.project.webchat.shared.dto.UserSearchResultDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.CredentialsDTO;
+import com.project.webchat.shared.dto.ResetPasswordInternalDTO;
 import com.project.webchat.shared.dto.UserCredentialsResponse;
 import com.project.webchat.user.dto.IncomingContactRequestDTO;
 import com.project.webchat.user.dto.UserSearchPageResponse;
@@ -89,6 +90,24 @@ public class UserServiceController {
     public ResponseEntity<Boolean> existsUserByEmail(@PathVariable String email) {
         boolean exists = userService.existsByEmail(email);
         return ResponseEntity.ok(exists);
+    }
+
+    @GetMapping("/by-email")
+    public ResponseEntity<UserDTO> getUserByEmail(@RequestParam("email") String email) {
+        return userService.findUserByEmail(email)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/internal/reset-password")
+    public ResponseEntity<Void> resetPasswordInternal(
+            @Valid @RequestBody ResetPasswordInternalDTO request) {
+        try {
+            userService.resetPassword(request.getUsername(), request.getNewPassword());
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     @GetMapping("/resolve-login/{loginIdentifier}")

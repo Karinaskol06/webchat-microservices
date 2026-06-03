@@ -9,20 +9,19 @@ import {
   subscribeToUserChatEvents,
 } from '../utils/websocket';
 import {
+  WEBCHAT_ACTIVATE_CHAT,
   WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT,
   WEBCHAT_MESSAGES_MARKED_READ,
 } from '../constants/chatEvents';
+import { getMessagePreviewText } from '../utils/personalSpace';
 
 const normalizeWsMessagePayload = (event) =>
   event?.type === 'MESSAGE_SENT' && event.message != null ? event.message : event;
 
 /** Last-line preview — must match sidebar + server fields */
 const getLastMessagePreview = (message) => {
-  const text =
-    message.content ||
-    (message.attachments?.length > 0 ? getAttachmentsPreview(message.attachments) : '') ||
-    'Attachment';
-  return typeof text === 'string' ? text : String(text);
+  const text = getMessagePreviewText(message);
+  return text || 'Attachment';
 };
 
 const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}) => {
@@ -115,10 +114,25 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
             store.mergeChatSenderIntoOtherUser(topicChatId, message.sender);
           }
 
+          const isOwnForward = Boolean(
+            !isIncoming &&
+              (message.forwardedFrom != null || message.forwardedFromUserId != null),
+          );
+
           const isFocused =
             openId != null &&
             openId !== '' &&
             String(openId) === topicChatId;
+
+          if (isOwnForward && !isFocused) {
+            window.dispatchEvent(
+              new CustomEvent(WEBCHAT_ACTIVATE_CHAT, {
+                detail: { chatId: topicChatId, message },
+              }),
+            );
+            return;
+          }
+
           if (isFocused) {
             store.addMessage(message);
             if (isIncoming) {
@@ -242,17 +256,6 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
   }, [user, onRoomMemberInvite]);
 
   return null;
-};
-
-const getAttachmentsPreview = (attachments) => {
-  if (!attachments || attachments.length === 0) return '';
-  if (attachments.length === 1) {
-    const att = attachments[0];
-    if (att.isImage) return 'Image';
-    if (att.fileType === 'VIDEO') return 'Video';
-    return `${att.filename || 'File'}`;
-  }
-  return `${attachments.length} files`;
 };
 
 export default useWebSocket;

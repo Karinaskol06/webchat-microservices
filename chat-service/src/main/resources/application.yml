@@ -8,7 +8,7 @@ spring:
   servlet:
     multipart:
       max-file-size: 10MB
-      max-request-size: 10MB
+      max-request-size: 11MB
       enabled: true
       # Parse multipart only in the controller so JWT / gateway auth runs on the initial request.
       resolve-lazily: true
@@ -74,10 +74,12 @@ app:
   upload:
     dir: ${APP_UPLOAD_DIR:./storage/chat-uploads}
     max-size: 10485760  # 10 MB
-    allowed-extensions: jpg,jpeg,png,gif,pdf,txt,doc,docx,xls,xlsx,mp4
+    allowed-extensions: jpg,jpeg,png,gif,webp,pdf,txt,doc,docx,xls,xlsx,mp4
   kafka:
     topics:
       message-created: ${KAFKA_TOPIC_MESSAGE_CREATED:chat.message.created.v1}
+      message-reaction: ${KAFKA_TOPIC_MESSAGE_REACTION:chat.message.reaction.v1}
+      room-member-invited: ${KAFKA_TOPIC_ROOM_MEMBER_INVITED:chat.room.member.invited.v1}
 
 logging:
   level:
