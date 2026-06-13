@@ -5,6 +5,7 @@ import com.project.webchat.chat.dto.AttachmentDTO;
 import com.project.webchat.chat.dto.ChatMessageDTO;
 import com.project.webchat.chat.dto.ChatRoomDTO;
 import com.project.webchat.chat.dto.CreateGroupChannelRequest;
+import com.project.webchat.chat.dto.CreatePersonalSpaceRequest;
 import com.project.webchat.chat.dto.DiscoverableRoomDTO;
 import com.project.webchat.chat.dto.InvitePayloadDTO;
 import com.project.webchat.chat.dto.MessageReactionDTO;
@@ -44,6 +45,15 @@ public class ChatService {
     @Transactional
     public ChatRoomDTO getOrCreatePersonalSpace(Long userId) {
         return personalSpaceService.getOrCreatePersonalSpace(userId);
+    }
+
+    public List<ChatRoomDTO> listPersonalSpaces(Long userId) {
+        return personalSpaceService.listPersonalSpaces(userId);
+    }
+
+    @Transactional
+    public ChatRoomDTO createPersonalSpace(Long userId, CreatePersonalSpaceRequest request) {
+        return personalSpaceService.createPersonalSpace(userId, request);
     }
 
     @Transactional
@@ -103,6 +113,11 @@ public class ChatService {
     @Transactional
     public ChatMessageDTO editMessage(String messageId, Long actorId, String newContent) {
         return chatMessageCommandService.editMessage(messageId, actorId, newContent);
+    }
+
+    @Transactional
+    public ChatMessageDTO castPollVote(String messageId, Long userId, List<String> optionIds) {
+        return chatMessageCommandService.castPollVote(messageId, userId, optionIds);
     }
 
     @Transactional
@@ -203,6 +218,20 @@ public class ChatService {
     @Transactional
     public void declineRoomMemberInvite(String inviteId, Long inviteeId) {
         chatRoomManagementService.declineRoomMemberInvite(inviteId, inviteeId);
+    }
+
+    @Transactional
+    public ChatRoomDTO banRoomMember(String roomId, Long actorId, Long targetUserId) {
+        return chatRoomManagementService.banRoomMember(roomId, actorId, targetUserId);
+    }
+
+    @Transactional
+    public ChatRoomDTO unbanRoomMember(String roomId, Long actorId, Long targetUserId) {
+        return chatRoomManagementService.unbanRoomMember(roomId, actorId, targetUserId);
+    }
+
+    public List<UserInfoDTO> listBannedRoomMembers(String roomId, Long actorId) {
+        return chatRoomManagementService.listBannedRoomMembers(roomId, actorId);
     }
 
     public boolean isUserChatMember(String chatId, Long userId) {

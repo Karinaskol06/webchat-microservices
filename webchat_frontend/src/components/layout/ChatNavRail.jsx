@@ -36,6 +36,33 @@ const FIND_USERS_ITEM = {
   icon: SearchIcon,
 };
 
+const navRailIconSx = (active, { dropTarget = false } = {}) => ({
+  width: 48,
+  height: 48,
+  mx: 'auto',
+  color: active ? chatColors.navIconActive : chatColors.navIcon,
+  bgcolor: dropTarget
+    ? 'rgba(123, 97, 255, 0.45)'
+    : active
+      ? chatColors.navActiveBg
+      : muiTransparent,
+  outline: dropTarget ? '2px dashed rgba(255,255,255,0.65)' : 'none',
+  outlineOffset: 2,
+  borderRadius: 2,
+  transition: 'background-color 0.15s ease, outline 0.15s ease, box-shadow 0.15s ease',
+  '&:hover': {
+    bgcolor: dropTarget
+      ? 'rgba(123, 97, 255, 0.35)'
+      : active
+        ? chatColors.navActiveBg
+        : 'rgba(24, 20, 28, 0.06)',
+  },
+  '&:focus-visible': {
+    outline: `2px solid ${chatColors.primary}`,
+    outlineOffset: 2,
+  },
+});
+
 const ChatNavRail = ({
   activeFilter,
   activeFolderId,
@@ -106,20 +133,44 @@ const ChatNavRail = ({
           px: 1,
         }}
       >
-        {CHAT_FILTERS.map(({ id, label, icon: Icon }, index) => {
-          const active = !activeFolderId && activeFilter === id;
+        <Tooltip title={FIND_USERS_ITEM.label} placement="right">
+          <IconButton
+            aria-label={FIND_USERS_ITEM.label}
+            aria-pressed={findUsersOpen ? 'true' : undefined}
+            onClick={() => onFindUsers?.()}
+            sx={navRailIconSx(findUsersOpen)}
+          >
+            <Badge
+              badgeContent={
+                pendingRoomInviteCount > 0
+                  ? pendingRoomInviteCount > 9
+                    ? '9+'
+                    : pendingRoomInviteCount
+                  : 0
+              }
+              overlap="circular"
+              invisible={!pendingRoomInviteCount}
+              sx={{
+                '& .MuiBadge-badge': {
+                  bgcolor: chatColors.unreadBadge,
+                  color: chatColors.textOnPrimary,
+                  fontWeight: 700,
+                },
+              }}
+            >
+              <FIND_USERS_ITEM.icon fontSize="small" />
+            </Badge>
+          </IconButton>
+        </Tooltip>
+
+        {CHAT_FILTERS.map(({ id, label, icon: Icon }) => {
+          const active = !personalSpaceActive && !activeFolderId && activeFilter === id;
           const badge = id === 'ALL' ? unreadByFilter.ALL : unreadByFilter[id];
-          const findItem = index === 0 ? FIND_USERS_ITEM : null;
-          const FindIcon = findItem?.icon;
           const isAllChats = id === 'ALL';
           const isAllDropTarget = isAllChats && dragOverFolderId === '__all__';
 
           return (
-            <React.Fragment key={id}>
-              <Tooltip
-                title={isAllChats ? 'All chats — drop here to remove from folder' : label}
-                placement="right"
-              >
+            <Tooltip key={id} title={label} placement="right">
                 <IconButton
                   aria-label={label}
                   aria-current={active ? 'true' : undefined}
@@ -154,28 +205,7 @@ const ChatNavRail = ({
                         }
                       : undefined
                   }
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    mx: 'auto',
-                    color: active ? chatColors.navIconActive : chatColors.navIcon,
-                    bgcolor: isAllDropTarget
-                      ? 'rgba(123, 97, 255, 0.45)'
-                      : active
-                        ? chatColors.navActiveBg
-                        : muiTransparent,
-                    outline: isAllDropTarget ? '2px dashed rgba(255,255,255,0.65)' : 'none',
-                    outlineOffset: 2,
-                    borderRadius: 2,
-                    transition: 'background-color 0.15s ease, outline 0.15s ease',
-                    '&:hover': {
-                      bgcolor: isAllDropTarget
-                        ? 'rgba(123, 97, 255, 0.35)'
-                        : active
-                          ? chatColors.navActiveBg
-                          : 'rgba(24, 20, 28, 0.06)',
-                    },
-                  }}
+                  sx={navRailIconSx(active, { dropTarget: isAllDropTarget })}
                 >
                   <Badge
                     badgeContent={badge > 0 ? (badge > 9 ? '9+' : badge) : 0}
@@ -192,77 +222,39 @@ const ChatNavRail = ({
                     <Icon fontSize="small" />
                   </Badge>
                 </IconButton>
-              </Tooltip>
-              {findItem && FindIcon ? (
-                <Tooltip title={findItem.label} placement="right">
-                  <IconButton
-                    aria-label={findItem.label}
-                    aria-pressed={findUsersOpen ? 'true' : undefined}
-                    onClick={() => onFindUsers?.()}
-                    sx={{
-                      width: 48,
-                      height: 48,
-                      mx: 'auto',
-                      color: findUsersOpen ? chatColors.navIconActive : chatColors.navIcon,
-                      bgcolor: findUsersOpen ? chatColors.navActiveBg : muiTransparent,
-                      '&:hover': {
-                        bgcolor: findUsersOpen ? chatColors.navActiveBg : 'rgba(24, 20, 28, 0.06)',
-                      },
-                    }}
-                  >
-                    <Badge
-                      badgeContent={
-                        pendingRoomInviteCount > 0
-                          ? pendingRoomInviteCount > 9
-                            ? '9+'
-                            : pendingRoomInviteCount
-                          : 0
-                      }
-                      overlap="circular"
-                      invisible={!pendingRoomInviteCount}
-                      sx={{
-                        '& .MuiBadge-badge': {
-                          bgcolor: chatColors.unreadBadge,
-                          color: chatColors.textOnPrimary,
-                          fontWeight: 700,
-                        },
-                      }}
-                    >
-                      <FindIcon fontSize="small" />
-                    </Badge>
-                  </IconButton>
-                </Tooltip>
-              ) : null}
-            </React.Fragment>
+            </Tooltip>
           );
         })}
+
+        <Tooltip title="Personal Space" placement="right">
+          <IconButton
+            aria-label="Personal Space"
+            aria-current={personalSpaceActive ? 'true' : undefined}
+            onClick={() => onPersonalSpaceSelect?.()}
+            sx={navRailIconSx(personalSpaceActive)}
+          >
+            <SpaceDashboardOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Box>
 
-      <Tooltip title="Personal Space" placement="right">
-        <IconButton
-          aria-label="Personal Space"
-          aria-current={personalSpaceActive ? 'true' : undefined}
-          onClick={() => onPersonalSpaceSelect?.()}
-          sx={{
-            width: 48,
-            height: 48,
-            mx: 'auto',
-            color: personalSpaceActive ? chatColors.navIconActive : chatColors.navIcon,
-            bgcolor: personalSpaceActive ? chatColors.navActiveBg : muiTransparent,
-            borderRadius: 2,
-            '&:hover': {
-              bgcolor: personalSpaceActive ? chatColors.navActiveBg : 'rgba(24, 20, 28, 0.06)',
-            },
-          }}
-        >
-          <SpaceDashboardOutlinedIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
-
-      <ChatFolderRailSection
-        activeFolderId={activeFolderId}
-        onSelectFolder={onFolderSelect}
-      />
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          overflow: 'hidden',
+        }}
+      >
+        <ChatFolderRailSection
+          activeFolderId={activeFolderId}
+          personalSpaceActive={personalSpaceActive}
+          onSelectFolder={onFolderSelect}
+        />
+      </Box>
 
       <Box
         sx={{

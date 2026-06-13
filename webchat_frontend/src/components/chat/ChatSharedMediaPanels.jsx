@@ -12,6 +12,7 @@ import AuthenticatedImage from './AuthenticatedImage';
 import { chatColors, chatRadii, muiTransparent } from '../../theme/chatDesignTokens';
 import { formatFileSize } from '../../utils/sharedMedia';
 import { openAttachment } from '../../utils/openAttachment';
+import { openImageLightbox } from '../../utils/openImageLightbox';
 
 const PREVIEW_LIMIT = 9;
 
@@ -43,7 +44,7 @@ const MediaThumbButton = ({ children, label, onClick }) => (
   </Box>
 );
 
-const FileRow = ({ attachment, icon: Icon, onOpen }) => (
+const FileRow = ({ attachment, icon: Icon, onOpen, glassPanel }) => (
   <Box
     component="button"
     type="button"
@@ -60,16 +61,26 @@ const FileRow = ({ attachment, icon: Icon, onOpen }) => (
       py: 0.75,
       px: 0.5,
       borderRadius: 1.5,
-      '&:hover': { bgcolor: 'rgba(123, 97, 255, 0.08)' },
+      color: glassPanel ? chatColors.glassPanelText : 'inherit',
+      '&:hover': { bgcolor: 'rgba(16, 8, 26, 0.06)' },
     }}
   >
-    <Icon sx={{ fontSize: 20, color: chatColors.textSecondary, flexShrink: 0 }} />
+    <Icon
+      sx={{
+        fontSize: 20,
+        color: glassPanel ? chatColors.glassPanelTextMuted : chatColors.textSecondary,
+        flexShrink: 0,
+      }}
+    />
     <Box sx={{ minWidth: 0, flex: 1 }}>
-      <Typography variant="body2" noWrap>
+      <Typography variant="body2" noWrap sx={{ color: glassPanel ? chatColors.glassPanelText : 'inherit' }}>
         {attachment.filename || 'File'}
       </Typography>
       {attachment.size != null ? (
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{ color: glassPanel ? chatColors.glassPanelTextMuted : 'text.secondary' }}
+        >
           {formatFileSize(attachment.size)}
         </Typography>
       ) : null}
@@ -77,15 +88,18 @@ const FileRow = ({ attachment, icon: Icon, onOpen }) => (
   </Box>
 );
 
-const EmptyHint = ({ children }) => (
-  <Typography variant="caption" color="text.secondary">
+const EmptyHint = ({ children, glassPanel }) => (
+  <Typography
+    variant="caption"
+    sx={{ color: glassPanel ? chatColors.glassPanelTextMuted : 'text.secondary' }}
+  >
     {children}
   </Typography>
 );
 
-const PhotosPanel = ({ items }) => {
+const PhotosPanel = ({ items, glassPanel }) => {
   if (items.length === 0) {
-    return <EmptyHint>No photos shared yet.</EmptyHint>;
+    return <EmptyHint glassPanel={glassPanel}>No photos shared yet.</EmptyHint>;
   }
   const shown = items.slice(0, PREVIEW_LIMIT);
   return (
@@ -100,7 +114,7 @@ const PhotosPanel = ({ items }) => {
         <MediaThumbButton
           key={attachment.id}
           label={`Open ${attachment.filename || 'photo'}`}
-          onClick={() => openAttachment(attachment).catch(() => {})}
+          onClick={() => openImageLightbox(attachment, items)}
         >
           <AuthenticatedImage
             attachmentId={attachment.id}
@@ -118,9 +132,9 @@ const PhotosPanel = ({ items }) => {
   );
 };
 
-const VideosPanel = ({ items }) => {
+const VideosPanel = ({ items, glassPanel }) => {
   if (items.length === 0) {
-    return <EmptyHint>No videos shared yet.</EmptyHint>;
+    return <EmptyHint glassPanel={glassPanel}>No videos shared yet.</EmptyHint>;
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -130,15 +144,16 @@ const VideosPanel = ({ items }) => {
           attachment={attachment}
           icon={VideocamOutlinedIcon}
           onOpen={() => openAttachment(attachment).catch(() => {})}
+          glassPanel={glassPanel}
         />
       ))}
     </Box>
   );
 };
 
-const FilesPanel = ({ items }) => {
+const FilesPanel = ({ items, glassPanel }) => {
   if (items.length === 0) {
-    return <EmptyHint>No files shared yet.</EmptyHint>;
+    return <EmptyHint glassPanel={glassPanel}>No documents shared yet.</EmptyHint>;
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
@@ -148,16 +163,19 @@ const FilesPanel = ({ items }) => {
           attachment={attachment}
           icon={InsertDriveFileOutlinedIcon}
           onOpen={() => openAttachment(attachment, { download: true }).catch(() => {})}
+          glassPanel={glassPanel}
         />
       ))}
     </Box>
   );
 };
 
-const AudioPanel = ({ items, voice = false }) => {
+const AudioPanel = ({ items, voice = false, glassPanel }) => {
   if (items.length === 0) {
     return (
-      <EmptyHint>{voice ? 'No voice messages yet.' : 'No audio files yet.'}</EmptyHint>
+      <EmptyHint glassPanel={glassPanel}>
+        {voice ? 'No voice messages yet.' : 'No audio files yet.'}
+      </EmptyHint>
     );
   }
   return (
@@ -168,15 +186,16 @@ const AudioPanel = ({ items, voice = false }) => {
           attachment={attachment}
           icon={AudiotrackOutlinedIcon}
           onOpen={() => openAttachment(attachment).catch(() => {})}
+          glassPanel={glassPanel}
         />
       ))}
     </Box>
   );
 };
 
-const LinksPanel = ({ items }) => {
+const LinksPanel = ({ items, glassPanel }) => {
   if (items.length === 0) {
-    return <EmptyHint>No links shared in messages yet.</EmptyHint>;
+    return <EmptyHint glassPanel={glassPanel}>No links shared in messages yet.</EmptyHint>;
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -200,8 +219,27 @@ const LinksPanel = ({ items }) => {
   );
 };
 
-const ChatSharedMediaPanels = ({ sectionKey, loading, error, media, links }) => {
-  if (loading) {
+const ChatSharedMediaPanels = ({ sectionKey, loading, error, media, links, glassPanel = false }) => {
+  const hasSectionContent = (() => {
+    switch (sectionKey) {
+      case 'photos':
+        return media.photos.length > 0;
+      case 'videos':
+        return media.videos.length > 0;
+      case 'files':
+        return media.files.length > 0;
+      case 'audio':
+        return media.audio.length > 0;
+      case 'voice':
+        return media.voice.length > 0;
+      case 'links':
+        return links.length > 0;
+      default:
+        return false;
+    }
+  })();
+
+  if (loading && !hasSectionContent) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
         <CircularProgress size={22} />
@@ -211,7 +249,10 @@ const ChatSharedMediaPanels = ({ sectionKey, loading, error, media, links }) => 
 
   if (error) {
     return (
-      <Typography variant="caption" color="text.secondary">
+      <Typography
+        variant="caption"
+        sx={{ color: glassPanel ? chatColors.glassPanelTextMuted : 'text.secondary' }}
+      >
         Shared media is unavailable for this room.
       </Typography>
     );
@@ -219,17 +260,17 @@ const ChatSharedMediaPanels = ({ sectionKey, loading, error, media, links }) => 
 
   switch (sectionKey) {
     case 'photos':
-      return <PhotosPanel items={media.photos} />;
+      return <PhotosPanel items={media.photos} glassPanel={glassPanel} />;
     case 'videos':
-      return <VideosPanel items={media.videos} />;
+      return <VideosPanel items={media.videos} glassPanel={glassPanel} />;
     case 'files':
-      return <FilesPanel items={media.files} />;
+      return <FilesPanel items={media.files} glassPanel={glassPanel} />;
     case 'audio':
-      return <AudioPanel items={media.audio} />;
+      return <AudioPanel items={media.audio} glassPanel={glassPanel} />;
     case 'voice':
-      return <AudioPanel items={media.voice} voice />;
+      return <AudioPanel items={media.voice} voice glassPanel={glassPanel} />;
     case 'links':
-      return <LinksPanel items={links} />;
+      return <LinksPanel items={links} glassPanel={glassPanel} />;
     default:
       return null;
   }

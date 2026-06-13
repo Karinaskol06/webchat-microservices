@@ -90,6 +90,13 @@ public class ChatRoomEnrichmentService {
             builder.groupName(chat.getGroupName());
             builder.groupPhoto(chat.getGroupPhoto());
             builder.description(chat.getDescription());
+            boolean canModerateMembers = roomPermissionService.canModerateMembers(chat, currentUserId);
+            builder.currentUserCanModerateMembers(canModerateMembers);
+            if (canModerateMembers && chat.getBannedUserIds() != null && !chat.getBannedUserIds().isEmpty()) {
+                builder.bannedMembers(chat.getBannedUserIds().stream()
+                        .map(id -> chatUserInfoService.getUserInfo(id, useUserCache))
+                        .toList());
+            }
             if (chat.getType() == ChatType.GROUP) {
                 builder.adminUserIds(new ArrayList<>(roomPermissionService.effectiveAdminIds(chat)));
             } else if (chat.getType() == ChatType.CHANNEL) {

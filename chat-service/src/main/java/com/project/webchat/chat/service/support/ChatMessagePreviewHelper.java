@@ -41,7 +41,35 @@ public class ChatMessagePreviewHelper {
             case TODO -> "To-do list";
             case STICKY_NOTE -> "Sticky note";
             case CALLOUT -> "Callout";
+            case POLL -> {
+                String mode = extractPollMode(content);
+                yield "test".equals(mode) ? "Test" : "Poll";
+            }
             default -> null;
         };
+    }
+
+    private String extractPollMode(String content) {
+        if (content == null || content.isBlank()) {
+            return "poll";
+        }
+        try {
+            int modeIdx = content.indexOf("\"mode\"");
+            if (modeIdx < 0) {
+                return "poll";
+            }
+            int colon = content.indexOf(':', modeIdx);
+            if (colon < 0) {
+                return "poll";
+            }
+            int startQuote = content.indexOf('"', colon + 1);
+            int endQuote = content.indexOf('"', startQuote + 1);
+            if (startQuote < 0 || endQuote < 0) {
+                return "poll";
+            }
+            return content.substring(startQuote + 1, endQuote);
+        } catch (Exception e) {
+            return "poll";
+        }
     }
 }

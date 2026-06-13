@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Box, IconButton, TextField, Typography } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { STICKY_NOTE_COLORS, serializePayload } from '../../utils/personalSpace';
+import { clampStickyToContent, getStickyContentBounds } from '../../utils/stickyNoteLayout';
 import { useRichMessageDraft } from '../../hooks/useRichMessageDraft';
 
 const StickyNoteMessage = ({
@@ -10,10 +11,15 @@ const StickyNoteMessage = ({
   onUpdate,
   onDelete,
   floating = false,
+  onDragMove,
   onDragEnd,
   messageId,
+  viewportRef,
+  contentRef,
 }) => {
   const [dragging, setDragging] = useState(false);
+  const rafRef = useRef(null);
+  const pendingMoveRef = useRef(null);
   const color = payload?.color || STICKY_NOTE_COLORS[0];
 
   const {
@@ -29,47 +35,73 @@ const StickyNoteMessage = ({
     onUpdate?.(serializePayload({ ...payload, text: next, color }));
   };
 
+  const getBounds = () =>
+    getStickyContentBounds(viewportRef?.current, contentRef?.current);
+
+  const pointerToContent = (clientX, clientY, offsetX, offsetY) => {
+    const viewport = viewportRef?.current;
+    if (!viewport) {
+      return {
+        x: Number(payload?.x) || 0,
+        y: Number(payload?.y) || 0,
+      };
+    }
+    const rect = viewport.getBoundingClientRect();
+    const x = clientX - rect.left + viewport.scrollLeft - offsetX;
+    const y = clientY - rect.top + viewport.scrollTop - offsetY;
+    return clampStickyToContent(x, y, getBounds());
+  };
+
+  const scheduleDragMove = (position) => {
+    pendingMoveRef.current = position;
+    if (rafRef.current != null) return;
+    rafRef.current = window.requestAnimationFrame(() => {
+      rafRef.current = null;
+      const pending = pendingMoveRef.current;
+      pendingMoveRef.current = null;
+      if (pending) {
+        onDragMove?.({
+          ...payload,
+          text: draftText,
+          color,
+          x: pending.x,
+          y: pending.y,
+        });
+      }
+    });
+  };
+
   const handlePointerDown = (e) => {
     if (!floating || !editable || !onDragEnd) return;
     if (e.target.closest('textarea, input, button')) return;
     e.preventDefault();
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const originX = Number(payload?.x) || 0;
-    const originY = Number(payload?.y) || 0;
+
+    const stickyRect = e.currentTarget.getBoundingClientRect();
+    const offsetX = e.clientX - stickyRect.left;
+    const offsetY = e.clientY - stickyRect.top;
     setDragging(true);
 
     const onMove = (moveEvent) => {
-      const dx = moveEvent.clientX - startX;
-      const dy = moveEvent.clientY - startY;
-      onDragEnd(
-        serializePayload({
-          ...payload,
-          text: draftText,
-          color,
-          x: Math.max(0, originX + dx),
-          y: Math.max(0, originY + dy),
-        }),
-        { live: true },
-      );
+      scheduleDragMove(pointerToContent(moveEvent.clientX, moveEvent.clientY, offsetX, offsetY));
     };
 
     const onUp = (upEvent) => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      if (rafRef.current != null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      pendingMoveRef.current = null;
       setDragging(false);
-      const dx = upEvent.clientX - startX;
-      const dy = upEvent.clientY - startY;
-      onDragEnd(
-        serializePayload({
-          ...payload,
-          text: draftText,
-          color,
-          x: Math.max(0, originX + dx),
-          y: Math.max(0, originY + dy),
-        }),
-        { live: false },
-      );
+      const finalPos = pointerToContent(upEvent.clientX, upEvent.clientY, offsetX, offsetY);
+      onDragEnd?.({
+        ...payload,
+        text: draftText,
+        color,
+        x: finalPos.x,
+        y: finalPos.y,
+      });
     };
 
     window.addEventListener('pointermove', onMove);
@@ -90,9 +122,10 @@ const StickyNoteMessage = ({
           : '0 4px 14px rgba(0,0,0,0.12), 2px 3px 0 rgba(0,0,0,0.06)',
         transform: dragging ? 'rotate(-1deg) scale(1.02)' : 'rotate(-0.5deg)',
         transition: dragging ? 'none' : 'box-shadow 0.2s ease, transform 0.2s ease',
-        cursor: floating && editable ? 'grab' : 'default',
+        cursor: floating && editable ? (dragging ? 'grabbing' : 'grab') : 'default',
         userSelect: dragging ? 'none' : 'auto',
         position: 'relative',
+        touchAction: floating && editable ? 'none' : 'auto',
         '&::after': {
           content: '""',
           position: 'absolute',

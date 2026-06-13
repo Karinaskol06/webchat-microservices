@@ -76,6 +76,7 @@ public class ChatWebSocketController {
         }
     }
 
+    // Sending a typing indicator
     @MessageMapping("/chat.typing")
     public void typing(TypingWsRequest request, Principal principal) {
         Long userId = resolveAuthenticatedUserId(principal);

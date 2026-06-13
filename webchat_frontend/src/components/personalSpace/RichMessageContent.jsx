@@ -5,6 +5,8 @@ import TodoListMessage from './TodoListMessage';
 import StickyNoteMessage from './StickyNoteMessage';
 import CalloutMessage from './CalloutMessage';
 
+import PollMessage from '../chat/PollMessage';
+
 const RichMessageContent = ({
   message,
   editable = false,
@@ -12,6 +14,7 @@ const RichMessageContent = ({
   onDelete,
   floatingSticky = false,
   onStickyDragEnd,
+  currentUserId,
 }) => {
   const { type, data } = useMemo(() => parseRichPayload(message), [message]);
   const messageId = message?.id ?? message?._id;
@@ -42,6 +45,13 @@ const RichMessageContent = ({
         />
       )}
       {type === 'CALLOUT' && <CalloutMessage {...common} />}
+      {type === 'POLL' && (
+        <PollMessage
+          payload={data}
+          messageId={messageId}
+          currentUserId={currentUserId}
+        />
+      )}
     </Box>
   );
 };

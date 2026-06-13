@@ -3,6 +3,7 @@ package com.project.webchat.user.controller;
 import com.project.webchat.shared.dto.RegisterRequestDTO;
 import com.project.webchat.shared.dto.ContactRequestCreateDTO;
 import com.project.webchat.shared.dto.ContactStatusDTO;
+import com.project.webchat.shared.dto.UserBanStatusDTO;
 import com.project.webchat.shared.dto.UserSearchResultDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.CredentialsDTO;
@@ -12,6 +13,7 @@ import com.project.webchat.user.dto.IncomingContactRequestDTO;
 import com.project.webchat.user.dto.UserSearchPageResponse;
 import com.project.webchat.user.entity.FriendRequest;
 import com.project.webchat.user.service.ContactService;
+import com.project.webchat.user.service.UserBanService;
 import com.project.webchat.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +35,7 @@ public class UserServiceController {
 
     private final UserService userService;
     private final ContactService contactService;
+    private final UserBanService userBanService;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequestDTO registerRequestDTO) {
@@ -223,5 +226,46 @@ public class UserServiceController {
             @PathVariable Long otherUserId,
             @RequestHeader("X-User-Id") Long currentUserId) {
         return ResponseEntity.ok(contactService.getContactStatus(currentUserId, otherUserId));
+    }
+
+    @PostMapping("/bans/{targetUserId}")
+    public ResponseEntity<Void> banUser(
+            @PathVariable Long targetUserId,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        userBanService.banUser(currentUserId, targetUserId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/bans/{targetUserId}")
+    public ResponseEntity<Void> unbanUser(
+            @PathVariable Long targetUserId,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        userBanService.unbanUser(currentUserId, targetUserId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/bans")
+    public ResponseEntity<java.util.List<UserDTO>> listBannedUsers(
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        return ResponseEntity.ok(userBanService.listBannedUsers(currentUserId));
+    }
+
+    @GetMapping("/bans/status/{targetUserId}")
+    public ResponseEntity<UserBanStatusDTO> getBanStatus(
+            @PathVariable Long targetUserId,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        return ResponseEntity.ok(userBanService.getBanStatus(currentUserId, targetUserId));
+    }
+
+    @GetMapping("/internal/{userId}/banned-user-ids")
+    public ResponseEntity<java.util.List<Long>> getBannedUserIdsInternal(@PathVariable Long userId) {
+        return ResponseEntity.ok(userBanService.listBannedUserIds(userId));
+    }
+
+    @GetMapping("/internal/{userId}/has-banned/{targetUserId}")
+    public ResponseEntity<Boolean> hasBannedInternal(
+            @PathVariable Long userId,
+            @PathVariable Long targetUserId) {
+        return ResponseEntity.ok(userBanService.hasBanned(userId, targetUserId));
     }
 }

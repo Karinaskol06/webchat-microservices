@@ -3,6 +3,7 @@ package com.project.webchat.chat.service.support;
 import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
+import com.project.webchat.chat.exception.RoomBanException;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
@@ -116,5 +117,40 @@ public class ChatRoomPermissionService {
 
     public boolean sameUserId(Long a, Long b) {
         return a != null && b != null && a.longValue() == b.longValue();
+    }
+
+    public boolean isBanned(ChatRoom room, Long userId) {
+        return room != null && room.isBanned(userId);
+    }
+
+    public void assertNotBanned(ChatRoom room, Long userId) {
+        if (isBanned(room, userId)) {
+            throw new RoomBanException(room.getType(), room.getGroupName());
+        }
+    }
+
+    public boolean canModerateMembers(ChatRoom room, Long actorId) {
+        if (room == null || actorId == null) {
+            return false;
+        }
+        if (room.getType() == ChatType.GROUP) {
+            return hasGroupAdminRights(room, actorId);
+        }
+        if (room.getType() == ChatType.CHANNEL) {
+            return hasChannelModeratorRights(room, actorId);
+        }
+        return false;
+    }
+
+    public void assertCanModerateMembers(ChatRoom room, Long actorId) {
+        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Members can only be moderated in groups or channels");
+        }
+        if (!room.isMember(actorId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        if (!canModerateMembers(room, actorId)) {
+            throw new ForbiddenChatOperationException("You cannot manage members in this room");
+        }
     }
 }

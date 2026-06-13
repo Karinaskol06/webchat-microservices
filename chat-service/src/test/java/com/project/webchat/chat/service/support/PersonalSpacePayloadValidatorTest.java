@@ -8,7 +8,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PersonalSpacePayloadValidatorTest {
 
-    private final PersonalSpacePayloadValidator validator = new PersonalSpacePayloadValidator();
+    private final PollPayloadHelper pollPayloadHelper = new PollPayloadHelper();
+    private final PersonalSpacePayloadValidator validator =
+            new PersonalSpacePayloadValidator(pollPayloadHelper);
 
     @Test
     void validate_acceptsValidTodoPayload() {
@@ -33,8 +35,19 @@ class PersonalSpacePayloadValidatorTest {
     }
 
     @Test
+    void validate_acceptsValidPollPayload() {
+        String json = """
+                {"question":"Pick one","mode":"poll","anonymous":false,"multipleChoice":false,
+                "options":[{"id":"o1","text":"A","correct":false},{"id":"o2","text":"B","correct":false}],
+                "votes":{}}
+                """;
+        validator.validate(MessageType.POLL, json);
+    }
+
+    @Test
     void isRichMessageType_identifiesRichTypes() {
         assertThat(PersonalSpacePayloadValidator.isRichMessageType(MessageType.TODO)).isTrue();
+        assertThat(PersonalSpacePayloadValidator.isRichMessageType(MessageType.POLL)).isTrue();
         assertThat(PersonalSpacePayloadValidator.isRichMessageType(MessageType.TEXT)).isFalse();
     }
 }

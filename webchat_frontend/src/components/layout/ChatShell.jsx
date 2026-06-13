@@ -34,6 +34,7 @@ const ChatShell = ({
   onFolderViewChange,
   personalSpaceActive,
   onPersonalSpaceSelect,
+  onExitPersonalSpaceMode,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -74,13 +75,23 @@ const ChatShell = ({
         <ChatNavRail
           activeFilter={chatFilter}
           activeFolderId={activeFolderId}
-          onFilterChange={setChatFilter}
+          onFilterChange={(filter) => {
+            if (personalSpaceActive) {
+              onExitPersonalSpaceMode?.();
+              setActiveFolderId(null);
+            }
+            setChatFilter(filter);
+          }}
           onFolderSelect={(folderId) => {
+            if (personalSpaceActive) onExitPersonalSpaceMode?.();
             setActiveFolderId(folderId);
             setChatFilter('ALL');
             onFolderViewChange?.();
           }}
-          onAllChatsSelect={() => setActiveFolderId(null)}
+          onAllChatsSelect={() => {
+            if (personalSpaceActive) onExitPersonalSpaceMode?.();
+            setActiveFolderId(null);
+          }}
           onOpenProfile={onOpenProfile}
           onOpenSettings={onOpenSettings}
           settingsOpen={settingsOpen}
@@ -155,7 +166,15 @@ const ChatShell = ({
         )}
 
         {showInfoPanel && !isCompact && infoPanel ? (
-          <Box sx={{ ...panelMotion(0.18), flexShrink: 0, minHeight: 0, alignSelf: 'stretch' }}>
+          <Box
+            sx={{
+              flexShrink: 0,
+              minHeight: 0,
+              alignSelf: 'stretch',
+              display: 'flex',
+              minWidth: 0,
+            }}
+          >
             {infoPanel}
           </Box>
         ) : null}

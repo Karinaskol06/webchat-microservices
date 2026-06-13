@@ -29,23 +29,26 @@ import { resolveRoomAvatarSrc } from '../../utils/userAvatar';
 const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
   const chats = useChatStore((s) => s.chats);
   const [error, setError] = useState('');
-  const [personalSpace, setPersonalSpace] = useState(null);
+  const [personalSpaces, setPersonalSpaces] = useState([]);
 
   useEffect(() => {
     if (!open) {
-      setPersonalSpace(null);
+      setPersonalSpaces([]);
       return undefined;
     }
     let cancelled = false;
     chatService
-      .getPersonalSpace()
-      .then((room) => {
-        if (cancelled || !room?.id) return;
-        useChatStore.getState().upsertChat(room);
-        setPersonalSpace(room);
+      .listPersonalSpaces()
+      .then((list) => {
+        if (cancelled) return;
+        const spaces = Array.isArray(list) ? list : [];
+        spaces.forEach((room) => {
+          if (room?.id) useChatStore.getState().upsertChat(room);
+        });
+        setPersonalSpaces(spaces);
       })
       .catch(() => {
-        if (!cancelled) setPersonalSpace(null);
+        if (!cancelled) setPersonalSpaces([]);
       });
     return () => {
       cancelled = true;
@@ -54,8 +57,16 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
 
   const selectableChats = useMemo(() => {
     const list = Array.isArray(chats) ? chats.filter((c) => c?.id) : [];
-    const psFromStore = list.find((c) => getChatTypeUpper(c) === 'PERSONAL_SPACE');
-    const personal = personalSpace || psFromStore;
+    const psFromStore = list.filter((c) => getChatTypeUpper(c) === 'PERSONAL_SPACE');
+    const personalById = new Map();
+    [...personalSpaces, ...psFromStore].forEach((space) => {
+      if (space?.id) personalById.set(String(space.id), space);
+    });
+    const personalList = [...personalById.values()].sort((a, b) =>
+      getChatDisplayLabel(a).localeCompare(getChatDisplayLabel(b), undefined, {
+        sensitivity: 'base',
+      }),
+    );
     const rest = list
       .filter((c) => getChatTypeUpper(c) !== 'PERSONAL_SPACE')
       .sort((a, b) =>
@@ -63,8 +74,8 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
           sensitivity: 'base',
         }),
       );
-    return personal ? [personal, ...rest] : rest;
-  }, [chats, personalSpace]);
+    return [...personalList, ...rest];
+  }, [chats, personalSpaces]);
 
   const preview = message ? parseQuotedSnippetFromMessage(message) : null;
   const previewAuthor =

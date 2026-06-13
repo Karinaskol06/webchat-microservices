@@ -6,9 +6,12 @@ import com.project.webchat.chat.dto.MessageReactionDTO;
 import com.project.webchat.chat.dto.ReplyPreviewDTO;
 import com.project.webchat.chat.entity.Attachment;
 import com.project.webchat.chat.entity.ChatMessage;
+import com.project.webchat.chat.entity.ChatRoom;
+import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.entity.MessageReaction;
 import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
+import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,7 @@ public class ChatMessageMapper {
 
     private final AttachmentRepository attachmentRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final ChatRoomRepository chatRoomRepository;
     private final ChatUserInfoService chatUserInfoService;
     private final ChatMessagePreviewHelper previewHelper;
 
@@ -90,6 +94,23 @@ public class ChatMessageMapper {
     }
 
     public ForwardOrigin buildForwardOriginFromSource(ChatMessage source) {
+        ChatRoom sourceRoom = null;
+        if (source.getChatId() != null && !source.getChatId().isBlank()) {
+            sourceRoom = chatRoomRepository.findById(source.getChatId()).orElse(null);
+        }
+        if (sourceRoom != null) {
+            ChatType roomType = sourceRoom.getType();
+            if (roomType == ChatType.GROUP || roomType == ChatType.CHANNEL) {
+                String roomName = sourceRoom.getGroupName();
+                if (roomName != null && !roomName.isBlank()) {
+                    Long originAuthorId = source.getForwardedFromUserId() != null
+                            ? source.getForwardedFromUserId()
+                            : source.getSenderId();
+                    return new ForwardOrigin(originAuthorId, roomName.trim());
+                }
+            }
+        }
+
         Long originAuthorId = source.getForwardedFromUserId() != null
                 ? source.getForwardedFromUserId()
                 : source.getSenderId();

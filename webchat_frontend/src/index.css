@@ -15,10 +15,21 @@
   --chat-surface-muted: rgba(255, 255, 255, 0.14);
   --chat-surface-lavender: rgba(255, 255, 255, 0.2);
   --chat-primary: #9b87ff;
-  --chat-conversation-bg: #130c1c;
-  --chat-bubble: #18103D;
-  --chat-bubble-in: #18103D;
-  --chat-bubble-out: #18103D;
+  --chat-primary-dark: #6348e0;
+  --chat-primary-light: #9b87ff;
+  --chat-conversation-bg: #26185a;
+  --chat-detail-page-bg: #281c62;
+  --chat-bubble: #18103d;
+  --chat-bubble-in: #18103d;
+  --chat-bubble-out: #18103d;
+  --chat-composer-input-bg: #18103d;
+  --chat-bg-image: url(/login-bg.png);
+  --chat-glass-modal: rgba(28, 20, 48, 0.88);
+  --chat-glass-modal-border: rgba(255, 255, 255, 0.22);
+  --chat-menu-paper-bg: rgba(14, 8, 34, 0.97);
+  --chat-primary-focus-ring: rgba(123, 97, 255, 0.18);
+  --chat-unread-badge: #7b61ff;
+  --chat-backdrop-bg: rgba(12, 8, 24, 0.55);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;

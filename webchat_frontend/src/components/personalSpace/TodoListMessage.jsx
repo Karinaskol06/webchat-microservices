@@ -9,13 +9,17 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { alpha } from '@mui/material/styles';
-import { chatColors, chatRadii } from '../../theme/chatDesignTokens';
+import { chatColors, chatRadii, themePrimaryAlpha } from '../../theme/chatDesignTokens';
 import { serializePayload } from '../../utils/personalSpace';
+import { useTodoTaskDrafts } from '../../hooks/useTodoTaskDrafts';
 
-const TodoListMessage = ({ payload, editable, onUpdate, onDelete }) => {
+const TodoListMessage = ({ payload, editable, onUpdate, onDelete, messageId }) => {
   const tasks = Array.isArray(payload?.tasks) ? payload.tasks : [];
   const [newTaskText, setNewTaskText] = useState('');
+  const { draftById, setDraft, onFocus, onBlur, mergeDrafts } = useTodoTaskDrafts(
+    messageId ?? 'todo',
+    tasks,
+  );
 
   const persist = useCallback(
     (nextTasks) => {
@@ -24,19 +28,29 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete }) => {
     [onUpdate],
   );
 
+  const flushTask = (id, text) => {
+    const merged = mergeDrafts();
+    const nextTasks = merged.map((t) => (t.id === id ? { ...t, text } : t));
+    const current = tasks.find((t) => t.id === id);
+    if ((current?.text ?? '') === text) {
+      return;
+    }
+    persist(nextTasks);
+  };
+
   const updateTask = (id, patch) => {
-    persist(tasks.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+    persist(mergeDrafts().map((t) => (t.id === id ? { ...t, ...patch } : t)));
   };
 
   const removeTask = (id) => {
-    const next = tasks.filter((t) => t.id !== id);
+    const next = mergeDrafts().filter((t) => t.id !== id);
     persist(next.length ? next : [{ id: crypto.randomUUID(), text: '', done: false }]);
   };
 
   const addTask = () => {
     const text = newTaskText.trim();
     if (!text) return;
-    persist([...tasks, { id: crypto.randomUUID(), text, done: false }]);
+    persist([...mergeDrafts(), { id: crypto.randomUUID(), text, done: false }]);
     setNewTaskText('');
   };
 
@@ -56,8 +70,8 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete }) => {
         boxSizing: 'border-box',
         p: 2,
         borderRadius: `${chatRadii.md}px`,
-        bgcolor: alpha(chatColors.primary, 0.12),
-        border: `1px solid ${alpha(chatColors.primary, 0.28)}`,
+        bgcolor: (theme) => themePrimaryAlpha(theme, 0.12),
+        border: (theme) => `1px solid ${themePrimaryAlpha(theme, 0.28)}`,
       }}
     >
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
@@ -99,12 +113,17 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete }) => {
               maxRows={6}
               size="small"
               variant="standard"
-              value={task.text ?? ''}
-              onChange={(e) => updateTask(task.id, { text: e.target.value })}
+              value={draftById[task.id] ?? task.text ?? ''}
+              onChange={(e) => setDraft(task.id, e.target.value)}
+              onFocus={() => onFocus(task.id)}
               onBlur={() => {
-                if (!String(task.text || '').trim() && tasks.length > 1) {
-                  removeTask(task.id);
-                }
+                onBlur(task.id, (text) => {
+                  if (!String(text || '').trim() && tasks.length > 1) {
+                    removeTask(task.id);
+                    return;
+                  }
+                  flushTask(task.id, text);
+                });
               }}
               placeholder="Task"
               InputProps={{ disableUnderline: false }}

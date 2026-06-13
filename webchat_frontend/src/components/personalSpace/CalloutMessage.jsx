@@ -1,8 +1,7 @@
 import React from 'react';
 import { Box, IconButton, TextField, Typography } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { alpha } from '@mui/material/styles';
-import { chatColors, chatRadii } from '../../theme/chatDesignTokens';
+import { chatColors, chatRadii, themePrimaryAlpha } from '../../theme/chatDesignTokens';
 import { serializePayload } from '../../utils/personalSpace';
 import { useRichMessageDraft } from '../../hooks/useRichMessageDraft';
 
@@ -49,8 +48,8 @@ const CalloutMessage = ({ payload, editable, onUpdate, onDelete, messageId }) =>
         px: 2,
         py: 1.75,
         borderRadius: `${chatRadii.md}px`,
-        bgcolor: alpha(chatColors.primary, 0.12),
-        border: `1px solid ${alpha(chatColors.primary, 0.28)}`,
+        bgcolor: (theme) => themePrimaryAlpha(theme, 0.12),
+        border: (theme) => `1px solid ${themePrimaryAlpha(theme, 0.28)}`,
         boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
       }}
     >

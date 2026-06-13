@@ -3,6 +3,7 @@ package com.project.webchat.chat.service.room;
 import com.project.webchat.chat.dto.*;
 import com.project.webchat.chat.entity.*;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
+import com.project.webchat.chat.exception.RoomBanException;
 import com.project.webchat.chat.feign.UserServiceClient;
 import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
@@ -13,6 +14,7 @@ import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
+import com.project.webchat.chat.service.support.UserBanGuardService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.shared.dto.UserInfoDTO;
@@ -48,14 +50,19 @@ public class ChatRoomManagementService {
     private final ChatRoomEnrichmentService roomEnrichmentService;
     private final ChatRoomPermissionService roomPermissionService;
     private final ChatNotificationEventPublisher chatNotificationEventPublisher;
+    private final PersonalSpaceService personalSpaceService;
+    private final UserBanGuardService userBanGuardService;
 
     public Page<ChatRoomDTO> getAllUserChatsSorted(Long userId, Pageable pageable) {
         Page<ChatRoom> chatPage = chatRoomRepository
                 .findByMemberIdsContainsOrderByLastActivityDesc(userId, pageable);
 
+        var bannedUserIds = userBanGuardService.getBannedUserIds(userId);
+
         List<ChatRoomDTO> chatRooms = chatPage.getContent()
                 .stream()
                 .filter(chat -> chat.getType() != ChatType.PERSONAL_SPACE)
+                .filter(chat -> !userBanGuardService.isPrivateChatHiddenForViewer(chat, userId, bannedUserIds))
                 .map(chat -> roomEnrichmentService.enrichChatWithUserData(
                         chat, userId, roomEnrichmentService.getUnreadCount(chat.getId(), userId), true))
                 .toList();
@@ -111,12 +118,22 @@ public class ChatRoomManagementService {
         if (!room.isMember(userId)) {
             throw new ForbiddenChatOperationException("You are not a member of this chat");
         }
-        // check if user has permission to delete chat
-        boolean canDelete = room.getType() == ChatType.GROUP
-                ? roomPermissionService.hasGroupAdminRights(room, userId)
-                : roomPermissionService.hasChannelModeratorRights(room, userId);
-        if (!canDelete) {
-            throw new ForbiddenChatOperationException("Only the creator or admins can delete this room");
+
+        if (room.getType() == ChatType.PERSONAL_SPACE) {
+            if (room.getCreatedBy() == null || !room.getCreatedBy().equals(userId)) {
+                throw new ForbiddenChatOperationException("Only the owner can delete this personal space");
+            }
+            if (personalSpaceService.countPersonalSpacesForUser(userId) <= 1) {
+                throw new IllegalArgumentException("You must keep at least one personal space");
+            }
+        } else {
+            // check if user has permission to delete chat
+            boolean canDelete = room.getType() == ChatType.GROUP
+                    ? roomPermissionService.hasGroupAdminRights(room, userId)
+                    : roomPermissionService.hasChannelModeratorRights(room, userId);
+            if (!canDelete) {
+                throw new ForbiddenChatOperationException("Only the creator or admins can delete this room");
+            }
         }
 
         // delete attachments, messages, invites and chat
@@ -153,7 +170,11 @@ public class ChatRoomManagementService {
                 regex,
                 currentUserId,
                 pageable);
-        return page.map(DiscoverableRoomDTO::fromRoom);
+        List<DiscoverableRoomDTO> filtered = page.getContent().stream()
+                .filter(room -> !room.isBanned(currentUserId))
+                .map(DiscoverableRoomDTO::fromRoom)
+                .toList();
+        return new PageImpl<>(filtered, pageable, page.getTotalElements());
     }
 
     public Page<DiscoverableRoomDTO> searchMyGroupChannels(Long currentUserId, String q, Pageable pageable) {
@@ -165,8 +186,14 @@ public class ChatRoomManagementService {
 
     public ChatRoomDTO getRoomForMember(String roomId, Long userId) {
         ChatRoom room = loadRoom(roomId);
+        roomPermissionService.assertNotBanned(room, userId);
         if (!room.isMember(userId)) {
             throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        if (room.getType() == ChatType.PRIVATE) {
+            Long otherId = userBanGuardService.getOtherPrivateChatMemberId(room, userId);
+            UserInfoDTO otherUser = otherId != null ? chatUserInfoService.getUserInfo(otherId) : null;
+            userBanGuardService.assertPrivateChatNotBannedByViewer(room, userId, otherUser);
         }
         return roomEnrichmentService.enrichChatWithUserData(
                 room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));
@@ -209,6 +236,7 @@ public class ChatRoomManagementService {
             return roomEnrichmentService.enrichChatWithUserData(
                     room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));
         }
+        roomPermissionService.assertNotBanned(room, userId);
         room.addMember(userId);
         ChatRoom saved = chatRoomRepository.save(room);
         redisService.evictChatParticipants(roomId);
@@ -240,6 +268,7 @@ public class ChatRoomManagementService {
             return roomEnrichmentService.enrichChatWithUserData(
                     room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));
         }
+        roomPermissionService.assertNotBanned(room, userId);
         room.addMember(userId);
         ChatRoom saved = chatRoomRepository.save(room);
         // evict cached chat participants
@@ -313,6 +342,7 @@ public class ChatRoomManagementService {
         }
         ChatRoom room = loadRoom(roomId);
         assertCanInviteMembers(room, actorId);
+        roomPermissionService.assertNotBanned(room, newMemberId);
         if (room.isMember(newMemberId)) {
             return roomEnrichmentService.enrichChatWithUserData(
                     room, actorId, roomEnrichmentService.getUnreadCount(room.getId(), actorId));
@@ -320,6 +350,63 @@ public class ChatRoomManagementService {
         ChatRoom saved = addMemberToRoom(room, newMemberId);
         return roomEnrichmentService.enrichChatWithUserData(
                 saved, actorId, roomEnrichmentService.getUnreadCount(saved.getId(), actorId));
+    }
+
+    @Transactional
+    public ChatRoomDTO banRoomMember(String roomId, Long actorId, Long targetUserId) {
+        if (targetUserId == null) {
+            throw new IllegalArgumentException("User id is required");
+        }
+        ChatRoom room = loadRoom(roomId);
+        roomPermissionService.assertCanModerateMembers(room, actorId);
+        if (roomPermissionService.sameUserId(targetUserId, room.getCreatedBy())) {
+            throw new ForbiddenChatOperationException("You cannot ban the room owner");
+        }
+        if (roomPermissionService.sameUserId(targetUserId, actorId)) {
+            throw new ForbiddenChatOperationException("You cannot ban yourself");
+        }
+        if (room.getBannedUserIds() == null) {
+            room.setBannedUserIds(new HashSet<>());
+        }
+        room.getBannedUserIds().add(targetUserId);
+        cancelPendingInvite(roomId, targetUserId);
+        if (room.isMember(targetUserId)) {
+            removeMemberFromRoom(room, targetUserId);
+        } else {
+            chatRoomRepository.save(room);
+        }
+        ChatRoom saved = chatRoomRepository.findById(roomId).orElse(room);
+        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
+        return roomEnrichmentService.enrichChatWithUserData(
+                saved, actorId, roomEnrichmentService.getUnreadCount(saved.getId(), actorId));
+    }
+
+    @Transactional
+    public ChatRoomDTO unbanRoomMember(String roomId, Long actorId, Long targetUserId) {
+        if (targetUserId == null) {
+            throw new IllegalArgumentException("User id is required");
+        }
+        ChatRoom room = loadRoom(roomId);
+        roomPermissionService.assertCanModerateMembers(room, actorId);
+        if (room.getBannedUserIds() == null || !room.getBannedUserIds().contains(targetUserId)) {
+            throw new IllegalArgumentException("That user is not banned from this room");
+        }
+        room.getBannedUserIds().remove(targetUserId);
+        ChatRoom saved = chatRoomRepository.save(room);
+        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
+        return roomEnrichmentService.enrichChatWithUserData(
+                saved, actorId, roomEnrichmentService.getUnreadCount(saved.getId(), actorId));
+    }
+
+    public List<UserInfoDTO> listBannedRoomMembers(String roomId, Long actorId) {
+        ChatRoom room = loadRoom(roomId);
+        roomPermissionService.assertCanModerateMembers(room, actorId);
+        if (room.getBannedUserIds() == null || room.getBannedUserIds().isEmpty()) {
+            return List.of();
+        }
+        return room.getBannedUserIds().stream()
+                .map(chatUserInfoService::getUserInfo)
+                .toList();
     }
 
     @Transactional
@@ -343,9 +430,6 @@ public class ChatRoomManagementService {
 
         ChatRoom room = loadRoom(roomId);
         roomPermissionService.assertCanManageRoomProfile(room, actorId);
-        if (room.getType() == ChatType.PERSONAL_SPACE && (hasName || hasDescription)) {
-            throw new IllegalArgumentException("Only the personal space avatar can be updated.");
-        }
 
         if (hasName) {
             String name = request.getGroupName().trim();
@@ -391,6 +475,7 @@ public class ChatRoomManagementService {
         if (room.isMember(inviteeId)) {
             throw new IllegalArgumentException("That user is already a member");
         }
+        roomPermissionService.assertNotBanned(room, inviteeId);
         roomMemberInviteRepository
                 .findByRoomIdAndInviteeUserIdAndState(roomId, inviteeId, RoomMemberInviteState.PENDING)
                 .ifPresent(existing -> {
@@ -424,6 +509,7 @@ public class ChatRoomManagementService {
             throw new IllegalArgumentException("Invite is no longer pending");
         }
         ChatRoom room = loadRoom(invite.getRoomId());
+        roomPermissionService.assertNotBanned(room, inviteeId);
         ChatRoom saved = addMemberToRoom(room, inviteeId);
         invite.setState(RoomMemberInviteState.ACCEPTED);
         invite.setRespondedAt(LocalDateTime.now());
@@ -480,6 +566,7 @@ public class ChatRoomManagementService {
                 .createdBy(creatorId)
                 .adminIds(adminIds)
                 .channelPosterIds(new HashSet<>())
+                .bannedUserIds(new HashSet<>())
                 .inviteToken(inviteToken)
                 .lastActivity(LocalDateTime.now())
                 .createdAt(LocalDateTime.now())
@@ -497,10 +584,42 @@ public class ChatRoomManagementService {
                 saved, creatorId, roomEnrichmentService.getUnreadCount(saved.getId(), creatorId));
     }
 
+    private void cancelPendingInvite(String roomId, Long inviteeUserId) {
+        roomMemberInviteRepository
+                .findByRoomIdAndInviteeUserIdAndState(roomId, inviteeUserId, RoomMemberInviteState.PENDING)
+                .ifPresent(invite -> {
+                    invite.setState(RoomMemberInviteState.DECLINED);
+                    invite.setRespondedAt(LocalDateTime.now());
+                    roomMemberInviteRepository.save(invite);
+                });
+    }
+
+    private void removeMemberFromRoom(ChatRoom room, Long userId) {
+        String chatId = room.getId();
+        Set<Long> otherMembers = new HashSet<>(room.getMemberIds());
+        otherMembers.remove(userId);
+        room.getMemberIds().remove(userId);
+        if (room.getAdminIds() != null) {
+            room.getAdminIds().remove(userId);
+        }
+        if (room.getChannelPosterIds() != null) {
+            room.getChannelPosterIds().remove(userId);
+        }
+        chatRoomRepository.save(room);
+        redisService.evictChatParticipants(chatId);
+        if (!otherMembers.isEmpty()) {
+            webSocketService.notifyUserLeftChatForAll(chatId, userId, otherMembers);
+        }
+        webSocketService.notifyChatDeleted(chatId, Set.of(userId));
+        redisService.markUserOffline(userId);
+        webSocketService.notifyUserLeftChat(chatId, userId);
+    }
+
     private ChatRoom addMemberToRoom(ChatRoom room, Long newMemberId) {
         if (room.isMember(newMemberId)) {
             return room;
         }
+        roomPermissionService.assertNotBanned(room, newMemberId);
         room.addMember(newMemberId);
         ChatRoom saved = chatRoomRepository.save(room);
         redisService.evictChatParticipants(saved.getId());

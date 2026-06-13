@@ -3,12 +3,15 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Box, CircularProgress, Typography, Button } from "@mui/material";
 import chatService from "../services/chatService";
 import useChatStore from "../store/useChatStore";
+import RoomBanDialog from "../components/chat/RoomBanDialog";
+import { parseRoomBanError } from "../utils/roomBanError";
 
 const JoinInvitePage = () => {
   const { token } = useParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
+  const [banDialog, setBanDialog] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +32,12 @@ const JoinInvitePage = () => {
         navigate(id ? `/chat?chatId=${id}` : "/chat", { replace: true });
       } catch (e) {
         if (cancelled) return;
+        const ban = parseRoomBanError(e);
+        if (ban) {
+          setBanDialog(ban);
+          setStatus("banned");
+          return;
+        }
         setStatus("error");
         const body = typeof e === "object" && e !== null ? e : {};
         setMessage(
@@ -43,6 +52,38 @@ const JoinInvitePage = () => {
       cancelled = true;
     };
   }, [token, navigate]);
+
+  if (status === "banned") {
+    return (
+      <>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 2,
+            p: 4,
+            minHeight: 240,
+          }}
+        >
+          <Typography color="text.secondary" textAlign="center">
+            This invite cannot be used.
+          </Typography>
+          <Button variant="contained" onClick={() => navigate("/chat", { replace: true })}>
+            Back to chats
+          </Button>
+        </Box>
+        <RoomBanDialog
+          open={Boolean(banDialog)}
+          onClose={() => navigate("/chat", { replace: true })}
+          message={banDialog?.message}
+          roomName={banDialog?.roomName}
+          roomType={banDialog?.roomType}
+        />
+      </>
+    );
+  }
 
   if (status === "error") {
     return (

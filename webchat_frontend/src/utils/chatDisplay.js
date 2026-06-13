@@ -33,3 +33,12 @@ export const getChatDisplaySecondary = (chat) => {
   const username = chat?.otherUser?.username;
   return username ? `@${username}` : undefined;
 };
+
+/** True when the message is only emoji (optional whitespace) — show larger in the bubble. */
+export function isEmojiOnlyMessage(text) {
+  const value = String(text ?? '').trim();
+  if (!value) return false;
+  const compact = value.replace(/\s/g, '');
+  if (!compact) return false;
+  return /^[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200D\uFE0F]+$/u.test(compact);
+}

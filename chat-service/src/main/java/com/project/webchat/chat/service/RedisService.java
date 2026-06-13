@@ -27,7 +27,7 @@ public class RedisService {
     //redis set per chat for storing online users in that chat
     private static final String CHAT_ONLINE_USERS_PREFIX = "chat_online_users:";
 
-    //which specific chat user is viewing (naming convention)
+    //which specific chat user is viewing
     private static final String USER_CHAT_KEY_PREFIX = "user_chat:";
     private static final String AFK_CHAT_PREFIX = "AFK:";
     private static final String LAST_SEEN_PREFIX = "last_seen:";

@@ -36,7 +36,14 @@ import { getApiErrorMessage } from '../../services/api';
 import useChatStore from '../../store/useChatStore';
 import useAuthStore from '../../store/useAuthStore';
 import { fileToRoomPhotoDataUrl, ROOM_PHOTO_ACCEPT } from '../../utils/roomPhoto';
-import { chatHideScrollbarSx } from '../../theme/chatDesignTokens';
+import { chatColors, chatHideScrollbarSx } from '../../theme/chatDesignTokens';
+
+const detailDialogPaperSx = {
+  bgcolor: chatColors.detailPageBg,
+  background: chatColors.detailPageBg,
+  backgroundImage: 'none',
+  border: `1px solid ${chatColors.borderSubtle}`,
+};
 
 const displayName = (u) => {
   if (!u) return 'Unknown';
@@ -257,7 +264,6 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
 
   const handleSaveProfile = async () => {
     if (!room?.id) return;
-    if (String(room?.type || '').toUpperCase() === 'PERSONAL_SPACE') return;
     const name = String(editName || '').trim();
     if (!name) {
       setActionError('Room name is required.');
@@ -305,7 +311,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
         ? myId != null && Number(room.createdBy) === myId
         : canEditRoomProfile(room, myId)),
   );
-  const canEditProfileDetails = canModerateRoom && !isPersonalSpace;
+  const canEditProfileDetails = canModerateRoom;
 
   const title = room?.groupName || (isPersonalSpace ? 'Personal Space' : isChannel ? 'Channel' : isGroup ? 'Group' : 'Room');
   const profileBusy = profileSaving || photoUploading || actionBusy;
@@ -318,6 +324,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
       fullWidth
       maxWidth="sm"
       aria-labelledby="room-profile-title"
+      slotProps={{ paper: { sx: detailDialogPaperSx } }}
     >
       <DialogTitle
         id="room-profile-title"
@@ -459,16 +466,25 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                 </Box>
                 <Box sx={{ minWidth: 0, flex: 1, pt: 0.5 }}>
                   {editingProfile && canEditProfileDetails ? (
-                    <TextField
-                      label={isPersonalSpace ? 'Space name' : 'Room name'}
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      fullWidth
-                      required
-                      disabled={profileBusy}
-                      inputProps={{ maxLength: 100, 'aria-label': 'Room name' }}
-                      sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
-                    />
+                    <>
+                      <Typography
+                        component="label"
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ display: 'block', mb: 0.75, fontWeight: 500 }}
+                      >
+                        {isPersonalSpace ? 'Space name' : 'Room name'} *
+                      </Typography>
+                      <TextField
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        fullWidth
+                        required
+                        disabled={profileBusy}
+                        inputProps={{ maxLength: 100, 'aria-label': isPersonalSpace ? 'Space name' : 'Room name' }}
+                        sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
+                      />
+                    </>
                   ) : (
                     <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1.2, letterSpacing: -0.02 }}>
                       {title}

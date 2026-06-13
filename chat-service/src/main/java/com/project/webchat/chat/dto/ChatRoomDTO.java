@@ -51,6 +51,10 @@ public class ChatRoomDTO {
     /** CHANNEL only: user ids with posting permission without being a channel admin. */
     private List<Long> channelPosterUserIds = new ArrayList<>();
     private List<UserInfoDTO> members;
+    /** Present for moderators on GROUP / CHANNEL rooms. */
+    private List<UserInfoDTO> bannedMembers;
+    @JsonProperty("isCurrentUserCanModerateMembers")
+    private boolean currentUserCanModerateMembers;
 
     public static ChatRoomDTO toDTO(ChatRoom chatRoom, Integer unreadCount) {
         ChatRoomDTOBuilder builder = ChatRoomDTO.builder()

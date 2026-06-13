@@ -6,12 +6,14 @@ import com.project.webchat.chat.dto.ChatMessageDTO;
 import com.project.webchat.chat.dto.ChatRoomDTO;
 import com.project.webchat.chat.dto.CreateChatRequest;
 import com.project.webchat.chat.dto.CreateGroupChannelRequest;
+import com.project.webchat.chat.dto.CreatePersonalSpaceRequest;
 import com.project.webchat.chat.dto.DiscoverableRoomDTO;
 import com.project.webchat.chat.dto.EditMessageRequest;
 import com.project.webchat.chat.dto.MessageReactionDTO;
 import com.project.webchat.chat.dto.ToggleReactionRequest;
 import com.project.webchat.chat.dto.InvitePayloadDTO;
 import com.project.webchat.chat.dto.InviteMemberByUsernameRequest;
+import com.project.webchat.chat.dto.PollVoteRequest;
 import com.project.webchat.chat.dto.JoinInviteRequest;
 import com.project.webchat.chat.dto.RoomMemberInviteDTO;
 import com.project.webchat.chat.dto.SendRichMessageRequest;
@@ -68,6 +70,20 @@ public class ChatController {
     public ResponseEntity<ChatRoomDTO> getPersonalSpace(
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         return ResponseEntity.ok(chatService.getOrCreatePersonalSpace(currentUser.getId()));
+    }
+
+    @GetMapping("/personal-spaces")
+    public ResponseEntity<List<ChatRoomDTO>> listPersonalSpaces(
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        return ResponseEntity.ok(chatService.listPersonalSpaces(currentUser.getId()));
+    }
+
+    @PostMapping("/personal-spaces")
+    public ResponseEntity<ChatRoomDTO> createPersonalSpace(
+            @RequestBody @jakarta.validation.Valid CreatePersonalSpaceRequest request,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        ChatRoomDTO created = chatService.createPersonalSpace(currentUser.getId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @PostMapping("/{chatId}/rich-messages")
@@ -185,6 +201,18 @@ public class ChatController {
         log.info("User {} is editing message {}", currentUser.getId(), messageId);
         ChatMessageDTO updatedMessage = chatService.editMessage(messageId, currentUser.getId(), request.getContent());
         return ResponseEntity.ok(updatedMessage);
+    }
+
+    @PostMapping("/messages/{messageId}/poll-vote")
+    public ResponseEntity<ChatMessageDTO> castPollVote(
+            @PathVariable String messageId,
+            @RequestBody @jakarta.validation.Valid PollVoteRequest request,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+
+        log.debug("User {} voting on poll message {}", currentUser.getId(), messageId);
+        ChatMessageDTO updated = chatService.castPollVote(
+                messageId, currentUser.getId(), request.getOptionIds());
+        return ResponseEntity.ok(updated);
     }
 
     @PostMapping("/{chatId}/messages/{messageId}/reactions")
@@ -383,6 +411,31 @@ public class ChatController {
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         chatService.declineRoomMemberInvite(inviteId, currentUser.getId());
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/rooms/{id}/members/{userId}/ban")
+    public ResponseEntity<ChatRoomDTO> banRoomMember(
+            @PathVariable String id,
+            @PathVariable Long userId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        ChatRoomDTO dto = chatService.banRoomMember(id, currentUser.getId(), userId);
+        return ResponseEntity.ok(dto);
+    }
+
+    @DeleteMapping("/rooms/{id}/bans/{userId}")
+    public ResponseEntity<ChatRoomDTO> unbanRoomMember(
+            @PathVariable String id,
+            @PathVariable Long userId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        ChatRoomDTO dto = chatService.unbanRoomMember(id, currentUser.getId(), userId);
+        return ResponseEntity.ok(dto);
+    }
+
+    @GetMapping("/rooms/{id}/bans")
+    public ResponseEntity<List<UserInfoDTO>> listBannedRoomMembers(
+            @PathVariable String id,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        return ResponseEntity.ok(chatService.listBannedRoomMembers(id, currentUser.getId()));
     }
 
 }

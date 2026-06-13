@@ -40,4 +40,12 @@ public interface ChatRoomRepository extends MongoRepository<ChatRoom, String> {
                                                String nameRegex, Pageable pageable);
 
     Optional<ChatRoom> findByTypeAndCreatedBy(ChatType type, Long createdBy);
+
+    List<ChatRoom> findByTypeAndCreatedByOrderByLastActivityDesc(ChatType type, Long createdBy);
+
+    long countByTypeAndCreatedBy(ChatType type, Long createdBy);
+
+    List<ChatRoom> findByTypeAndMemberIdsContainsOrderByLastActivityDesc(ChatType type, Long memberId);
+
+    long countByTypeAndMemberIdsContains(ChatType type, Long memberId);
 }

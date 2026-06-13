@@ -52,7 +52,17 @@ const ensureSubscriptionImpl = async () => {
   }
 
   console.info('[push] step 4/7 fetching VAPID public key');
-  const vapidResponse = await api.get(VAPID_KEY_URL);
+  let vapidResponse;
+  try {
+    vapidResponse = await api.get(VAPID_KEY_URL);
+  } catch (err) {
+    const status = err?.response?.status;
+    if (status === 503 || status === 502 || status === 504) {
+      console.warn('[push] notification service unavailable; skipping web push setup');
+      return;
+    }
+    throw err;
+  }
   const publicKey = vapidResponse?.data?.publicKey;
   if (!publicKey) {
     console.warn('[push] backend did not return a VAPID public key');

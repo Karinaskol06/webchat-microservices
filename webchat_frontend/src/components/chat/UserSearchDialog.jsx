@@ -22,6 +22,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import SearchIcon from "@mui/icons-material/Search";
 import userService from "../../services/userService";
 import chatService from "../../services/chatService";
+import RoomBanDialog from "./RoomBanDialog";
+import { parseRoomBanError } from "../../utils/roomBanError";
 
 const TAB_USERS = 0;
 const TAB_ROOMS = 1;
@@ -57,6 +59,7 @@ const UserSearchDialog = ({
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState(null);
+  const [banDialog, setBanDialog] = useState(null);
 
   const canSearchUsers = useMemo(() => query.trim().length >= 2, [query]);
   const canSearchRooms = useMemo(() => query.trim().length >= 1, [query]);
@@ -188,6 +191,11 @@ const UserSearchDialog = ({
       onJoinedRoom?.(dto);
       handleClose();
     } catch (e) {
+      const ban = parseRoomBanError(e);
+      if (ban) {
+        setBanDialog(ban);
+        return;
+      }
       const msg =
         e?.response?.data?.message ||
         e?.message ||
@@ -223,6 +231,7 @@ const UserSearchDialog = ({
     String(selectedRoom.visibility || "").toUpperCase() === "PUBLIC";
 
   return (
+    <>
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
       <DialogTitle sx={{ display: "flex", alignItems: "center", pr: 1 }}>
         Find users & rooms
@@ -410,6 +419,14 @@ const UserSearchDialog = ({
         )}
       </DialogContent>
     </Dialog>
+    <RoomBanDialog
+      open={Boolean(banDialog)}
+      onClose={() => setBanDialog(null)}
+      message={banDialog?.message}
+      roomName={banDialog?.roomName}
+      roomType={banDialog?.roomType}
+    />
+  </>
   );
 };
 

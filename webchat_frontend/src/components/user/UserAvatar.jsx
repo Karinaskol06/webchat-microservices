@@ -37,7 +37,7 @@ const UserAvatar = ({
     cacheKey ?? user?.avatarRevision ?? user?.groupPhotoRevision ?? null;
 
   const fetchedSrc = useFreshMediaSrc(rawSrc, mediaCacheKey, disableMediaCache);
-  const resolvedSrc = fetchedSrc ?? rawSrc;
+  const resolvedSrc = disableMediaCache ? (fetchedSrc ?? rawSrc) : fetchedSrc;
   const letter = (letterOverride ?? getUserAvatarLetter(user)).toUpperCase();
   const [imageFailed, setImageFailed] = useState(false);
 

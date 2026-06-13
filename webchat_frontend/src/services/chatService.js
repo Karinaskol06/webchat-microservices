@@ -2,12 +2,22 @@ import api, { getApiErrorMessage } from "./api";
 
 const chatService = {
   getPersonalSpace: async () => {
-    try {
-      const response = await api.get('/api/chat/personal-space');
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error.message;
-    }
+    const response = await api.get('/api/chat/personal-space');
+    return response.data;
+  },
+
+  listPersonalSpaces: async () => {
+    const response = await api.get('/api/chat/personal-spaces');
+    return response.data;
+  },
+
+  createPersonalSpace: async ({ name, description, groupPhoto } = {}) => {
+    const response = await api.post('/api/chat/personal-spaces', {
+      name,
+      ...(description ? { description } : {}),
+      ...(groupPhoto ? { groupPhoto } : {}),
+    });
+    return response.data;
   },
 
   sendRichMessage: async (chatId, type, content, replyToMessageId = null) => {
@@ -108,6 +118,39 @@ const chatService = {
         { userId },
       );
       return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  banRoomMember: async (roomId, userId) => {
+    try {
+      const response = await api.post(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/members/${encodeURIComponent(userId)}/ban`,
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  unbanRoomMember: async (roomId, userId) => {
+    try {
+      const response = await api.delete(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/bans/${encodeURIComponent(userId)}`,
+      );
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  listBannedRoomMembers: async (roomId) => {
+    try {
+      const response = await api.get(
+        `/api/chat/rooms/${encodeURIComponent(roomId)}/bans`,
+      );
+      return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       throw error.response?.data || error.message;
     }
@@ -373,6 +416,17 @@ const chatService = {
   editMessage: async (messageId, content) => {
     try {
       const response = await api.put(`/api/chat/messages/${messageId}`, { content });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  castPollVote: async (messageId, optionIds) => {
+    try {
+      const response = await api.post(`/api/chat/messages/${messageId}/poll-vote`, {
+        optionIds: Array.isArray(optionIds) ? optionIds : [],
+      });
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;

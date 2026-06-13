@@ -57,6 +57,8 @@ class ChatNotificationKafkaIntegrationTest {
     @Autowired
     private MessageEventPublisher messageEventPublisher;
 
+    /** Registered at runtime by {@link EmbeddedKafka}; IDE inspection may not see the bean. */
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     @Autowired
     private EmbeddedKafkaBroker embeddedKafkaBroker;
 

@@ -1,14 +1,15 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import StickyNoteMessage from './StickyNoteMessage';
-import { parseRichPayload } from '../../utils/personalSpace';
+import { parseRichPayload, serializePayload } from '../../utils/personalSpace';
+import { clampStickyToContent, getStickyContentBounds } from '../../utils/stickyNoteLayout';
 import chatService from '../../services/chatService';
 import useChatStore from '../../store/useChatStore';
 
-const PersonalSpaceStickyLayer = ({ messages, currentUserId }) => {
-  const layerRef = useRef(null);
+const PersonalSpaceStickyLayer = ({ messages, currentUserId, viewportRef, contentRef }) => {
   const updateMessageContent = useChatStore((s) => s.updateMessageContent);
   const removeMessage = useChatStore((s) => s.removeMessage);
+  const [dragPositions, setDragPositions] = useState({});
 
   const stickies = useMemo(
     () =>
@@ -19,27 +20,62 @@ const PersonalSpaceStickyLayer = ({ messages, currentUserId }) => {
     [messages],
   );
 
+  const getBounds = useCallback(
+    () => getStickyContentBounds(viewportRef?.current, contentRef?.current),
+    [viewportRef, contentRef],
+  );
+
   const persistSticky = useCallback(
-    async (messageId, content, { live } = {}) => {
-      if (live) {
-        updateMessageContent(messageId, content);
-        return;
-      }
+    async (messageId, content) => {
       try {
         const updated = await chatService.editMessage(messageId, content);
         updateMessageContent(messageId, updated.content ?? content);
       } catch (e) {
-        console.error('Failed to save sticky position', e);
+        console.error('Failed to save sticky note', e);
       }
     },
     [updateMessageContent],
+  );
+
+  const handleDragMove = useCallback(
+    (messageId, payload) => {
+      const clamped = clampStickyToContent(
+        Number(payload?.x) || 0,
+        Number(payload?.y) || 0,
+        getBounds(),
+      );
+      setDragPositions((prev) => ({
+        ...prev,
+        [String(messageId)]: clamped,
+      }));
+    },
+    [getBounds],
+  );
+
+  const handleDragEnd = useCallback(
+    (messageId, payload) => {
+      const key = String(messageId);
+      const clamped = clampStickyToContent(
+        Number(payload?.x) || 0,
+        Number(payload?.y) || 0,
+        getBounds(),
+      );
+      const serialized = serializePayload({ ...payload, ...clamped });
+      updateMessageContent(messageId, serialized);
+      setDragPositions((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      void persistSticky(messageId, serialized);
+    },
+    [getBounds, persistSticky, updateMessageContent],
   );
 
   if (!stickies.length) return null;
 
   return (
     <Box
-      ref={layerRef}
       aria-hidden={false}
       sx={{
         position: 'absolute',
@@ -52,9 +88,12 @@ const PersonalSpaceStickyLayer = ({ messages, currentUserId }) => {
       {stickies.map((message) => {
         const { data } = parseRichPayload(message);
         const isOwn = Number(message.senderId ?? message.sender?.id) === Number(currentUserId);
-        const x = Number(data?.x) || 24;
-        const y = Number(data?.y) || 24;
         const messageId = message.id ?? message._id;
+        const dragKey = String(messageId);
+        const dragOverride = dragPositions[dragKey];
+        const x = dragOverride?.x ?? (Number(data?.x) || 24);
+        const y = dragOverride?.y ?? (Number(data?.y) || 24);
+        const displayPayload = { ...data, x, y };
 
         return (
           <Box
@@ -68,7 +107,7 @@ const PersonalSpaceStickyLayer = ({ messages, currentUserId }) => {
           >
             <StickyNoteMessage
               messageId={messageId}
-              payload={data}
+              payload={displayPayload}
               editable={isOwn}
               onUpdate={(content) => persistSticky(messageId, content)}
               onDelete={
@@ -81,7 +120,10 @@ const PersonalSpaceStickyLayer = ({ messages, currentUserId }) => {
                   : undefined
               }
               floating
-              onDragEnd={(content, opts) => persistSticky(messageId, content, opts)}
+              viewportRef={viewportRef}
+              contentRef={contentRef}
+              onDragMove={(payload) => handleDragMove(messageId, payload)}
+              onDragEnd={(payload) => handleDragEnd(messageId, payload)}
             />
           </Box>
         );

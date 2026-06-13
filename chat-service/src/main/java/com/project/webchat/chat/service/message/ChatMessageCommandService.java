@@ -7,6 +7,7 @@ import com.project.webchat.chat.dto.SendMessageRequest;
 import com.project.webchat.chat.entity.Attachment;
 import com.project.webchat.chat.entity.ChatMessage;
 import com.project.webchat.chat.entity.ChatRoom;
+import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.entity.MessageType;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import com.project.webchat.chat.repository.AttachmentRepository;
@@ -21,6 +22,9 @@ import com.project.webchat.chat.service.support.ChatMessagePreviewHelper;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.support.PersonalSpacePayloadValidator;
+import com.project.webchat.chat.service.support.PollPayloadHelper;
+import com.project.webchat.chat.service.support.SharedPollService;
+import com.project.webchat.chat.service.support.UserBanGuardService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.shared.dto.UserInfoDTO;
 import com.project.webchat.shared.events.v1.MessageCreatedEventV1;
@@ -60,6 +64,9 @@ public class ChatMessageCommandService {
     private final ChatRoomPermissionService roomPermissionService;
     private final ChatRoomEnrichmentService roomEnrichmentService;
     private final PersonalSpacePayloadValidator personalSpacePayloadValidator;
+    private final PollPayloadHelper pollPayloadHelper;
+    private final SharedPollService sharedPollService;
+    private final UserBanGuardService userBanGuardService;
 
     @Transactional
     public ChatMessageDTO sendRichMessage(Long senderId, String chatId, MessageType type,
@@ -68,6 +75,9 @@ public class ChatMessageCommandService {
             throw new IllegalArgumentException("Unsupported rich message type.");
         }
         String normalized = content == null ? "" : content.trim();
+        if (type == MessageType.POLL) {
+            normalized = pollPayloadHelper.ensurePollId(normalized, null);
+        }
         personalSpacePayloadValidator.validate(type, normalized);
 
         if (!isUserChatMember(chatId, senderId)) {
@@ -75,6 +85,9 @@ public class ChatMessageCommandService {
         }
         ChatRoom room = chatRoomRepository.findById(chatId)
                 .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
+        if (type == MessageType.POLL) {
+            assertPollAllowedInRoom(room);
+        }
         roomPermissionService.assertCanPostMessage(room, senderId);
 
         UserInfoDTO senderInfo = chatUserInfoService.getUserInfo(senderId);
@@ -176,11 +189,15 @@ public class ChatMessageCommandService {
 
         UserInfoDTO senderInfo = chatUserInfoService.getUserInfo(senderId);
         ChatMessageMapper.ForwardOrigin forwardOrigin = chatMessageMapper.buildForwardOriginFromSource(source);
+        String contentToSave = hasText ? rawContent : null;
+        if (type == MessageType.POLL && contentToSave != null) {
+            contentToSave = sharedPollService.prepareForwardPollContent(source);
+        }
         ChatMessage saved = chatMessageRepository.save(ChatMessage.builder()
                 .chatId(targetChatId)
                 .senderId(senderId)
                 .senderName(senderInfo.getDisplayName())
-                .content(hasText ? rawContent : null)
+                .content(contentToSave)
                 .replyToMessageId(null)
                 .messageType(type)
                 .timestamp(LocalDateTime.now())
@@ -362,6 +379,9 @@ public class ChatMessageCommandService {
         }
 
         MessageType messageType = message.getMessageType() != null ? message.getMessageType() : MessageType.TEXT;
+        if (messageType == MessageType.POLL) {
+            throw new IllegalArgumentException("Poll messages cannot be edited directly.");
+        }
         boolean isRich = PersonalSpacePayloadValidator.isRichMessageType(messageType);
         if (!isRich
                 && messageType != MessageType.TEXT
@@ -408,6 +428,57 @@ public class ChatMessageCommandService {
                 chatUserInfoService.getUserInfo(updatedMessage.getSenderId()), actorId);
     }
 
+    @Transactional
+    public ChatMessageDTO castPollVote(String messageId, Long userId, List<String> optionIds) {
+        ChatMessage message = chatMessageRepository.findById(messageId)
+                .orElseThrow(() -> new IllegalArgumentException("Message not found"));
+        MessageType messageType = message.getMessageType() != null ? message.getMessageType() : MessageType.TEXT;
+        if (messageType != MessageType.POLL) {
+            throw new IllegalArgumentException("This message is not a poll.");
+        }
+        if (!isUserChatMember(message.getChatId(), userId)) {
+            throw new IllegalArgumentException("User is not a member of this chat.");
+        }
+
+        UserInfoDTO voterInfo = chatUserInfoService.getUserInfo(userId);
+        String contentWithId = pollPayloadHelper.ensurePollId(message.getContent(), message.getId());
+        if (!contentWithId.equals(message.getContent())) {
+            message.setContent(contentWithId);
+            chatMessageRepository.save(message);
+        }
+        String updatedContent = pollPayloadHelper.applyVote(
+                contentWithId,
+                userId,
+                voterInfo.getDisplayName(),
+                optionIds);
+        personalSpacePayloadValidator.validate(MessageType.POLL, updatedContent);
+
+        String pollId = pollPayloadHelper.extractPollId(updatedContent);
+        if (pollId != null) {
+            sharedPollService.propagatePollUpdate(pollId, updatedContent, userId);
+        } else {
+            message.setContent(updatedContent);
+            ChatMessage saved = chatMessageRepository.save(message);
+            webSocketService.notifyMessageEdited(
+                    saved.getId(),
+                    saved.getChatId(),
+                    saved.getContent(),
+                    userId,
+                    null,
+                    saved.getMessageType());
+        }
+
+        message.setContent(updatedContent);
+        return chatMessageMapper.toMessageDTO(message, voterInfo, userId);
+    }
+
+    private void assertPollAllowedInRoom(ChatRoom room) {
+        ChatType chatType = room.getType();
+        if (chatType != ChatType.GROUP && chatType != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Polls are only allowed in groups and channels.");
+        }
+    }
+
     public List<AttachmentDTO> listChatAttachmentsForRoom(String chatId) {
         return attachmentRepository.findByChatId(chatId).stream()
                 .filter(a -> a.getMessageId() != null && !a.getMessageId().isBlank())
@@ -422,7 +493,18 @@ public class ChatMessageCommandService {
         if (chatId == null || chatId.isBlank() || userId == null) {
             return false;
         }
-        return chatRoomRepository.existsByIdAndMemberIdsContains(chatId, userId);
+        return chatRoomRepository.findById(chatId)
+                .map(room -> {
+                    if (!room.isMember(userId) || room.isBanned(userId)) {
+                        return false;
+                    }
+                    if (room.getType() == ChatType.PRIVATE) {
+                        Long otherId = userBanGuardService.getOtherPrivateChatMemberId(room, userId);
+                        return otherId == null || !userBanGuardService.hasBanned(userId, otherId);
+                    }
+                    return true;
+                })
+                .orElse(false);
     }
 
     private List<Attachment> linkAttachments(List<String> attachmentIds, ChatMessage savedMessage) {

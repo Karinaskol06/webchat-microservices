@@ -52,6 +52,7 @@ class MessageEventPublisherKafkaIntegrationTest {
     @Autowired
     private MessageEventPublisher messageEventPublisher;
 
+    @SuppressWarnings("SpringJavaInjectionPointsAutowiringInspection")
     @Autowired
     private EmbeddedKafkaBroker embeddedKafkaBroker;
 
@@ -91,7 +92,7 @@ class MessageEventPublisherKafkaIntegrationTest {
                 .chatId("chat-42")
                 .messageId("msg-100")
                 .senderId(7L)
-                .senderDisplayName("Karin")
+                .senderDisplayName("Karina")
                 .senderAvatarUrl("/api/users/7/avatar")
                 .recipientUserIds(List.of(9L, 11L))
                 .previewText("Hello team")

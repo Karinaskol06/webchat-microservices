@@ -7,6 +7,7 @@ import { getAttachmentUploadErrorMessage } from '../utils/attachmentUploadErrors
 import { isChatAttachmentUploadUrl, validateAttachmentFiles } from '../utils/attachmentConstraints';
 import { WEBCHAT_MESSAGES_MARKED_READ } from '../constants/chatEvents';
 import { canPostInChannel } from '../utils/channelPermissions';
+import { parseUserBanError } from '../utils/userBanError';
 
 const useMessages = (currentChat, composerRef) => {
   const { messages, setMessages } = useChatStore(
@@ -19,13 +20,14 @@ const useMessages = (currentChat, composerRef) => {
   const setChats = useChatStore((state) => state.setChats);
   const upsertChat = useChatStore((state) => state.upsertChat);
 
-  const [loading, setLoading] = useState(false); // eslint-disable-line no-unused-vars
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [selectedAttachments, setSelectedAttachments] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [composerError, setComposerError] = useState('');
   const [replyToMessage, setReplyToMessage] = useState(null);
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const messagesLoadGenerationRef = useRef(0);
   // Load messages when chat changes
   useEffect(() => {
     setReplyToMessage(null);
@@ -46,11 +48,17 @@ const useMessages = (currentChat, composerRef) => {
     const chatId = currentChat?.id;
     let cancelled = false;
 
-    const loadMessages = async () => {
-      if (!chatId) return;
+    if (!chatId) {
+      setMessages([]);
+      setMessagesLoading(false);
+      return undefined;
+    }
 
+    const loadGeneration = ++messagesLoadGenerationRef.current;
+    setMessagesLoading(true);
+
+    const loadMessages = async () => {
       try {
-        setLoading(true);
         const data = await chatService.getMessages(chatId);
         if (cancelled) return;
 
@@ -75,7 +83,10 @@ const useMessages = (currentChat, composerRef) => {
           );
           for (const m of state.messages) {
             const mid = String(m.id ?? m._id);
-            if (!byId.has(mid)) byId.set(mid, m);
+            if (byId.has(mid)) continue;
+            const msgChatId = m.chatId ?? m.chat_id;
+            if (msgChatId != null && String(msgChatId) !== String(chatId)) continue;
+            byId.set(mid, normalize(m));
           }
           const merged = [...byId.values()].sort(
             (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
@@ -107,8 +118,11 @@ const useMessages = (currentChat, composerRef) => {
           return { messages: [] };
         });
       } finally {
-        if (!cancelled) {
-          setLoading(false);
+        if (
+          !cancelled &&
+          loadGeneration === messagesLoadGenerationRef.current
+        ) {
+          setMessagesLoading(false);
         }
       }
     };
@@ -117,7 +131,7 @@ const useMessages = (currentChat, composerRef) => {
     return () => {
       cancelled = true;
     };
-  }, [currentChat?.id]);
+  }, [currentChat?.id, setMessages]);
 
   const handleSendMessage = async (messageText) => {
     if (!currentChat || isSending) return;
@@ -206,10 +220,13 @@ const useMessages = (currentChat, composerRef) => {
       setSelectedAttachments(previousAttachments);
       setReplyToMessage(previousReply);
       console.error('Failed to send message:', error);
+      const userBan = parseUserBanError(error);
       const isUploadFailure =
         previousAttachments.length > 0 &&
         isChatAttachmentUploadUrl(error?.config?.url);
-      const message = isUploadFailure
+      const message = userBan?.message
+        ? userBan.message
+        : isUploadFailure
         ? getAttachmentUploadErrorMessage(error, 'Could not upload the file. Please try again.')
         : error?.message === 'WebSocket is not connected'
           ? 'Not connected. Wait for the connection to recover, then try again.'
@@ -273,6 +290,7 @@ const useMessages = (currentChat, composerRef) => {
     messagesEndRef,
     replyToMessage,
     setReplyToMessage,
+    messagesLoading,
   };
 };
 

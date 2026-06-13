@@ -48,6 +48,9 @@ const useChatStore = create((set, get) => ({
     if (typeof m.read === 'boolean' && typeof m.isRead !== 'boolean') {
       next.isRead = m.read;
     }
+    if (m.message_type && !m.messageType) {
+      next.messageType = m.message_type;
+    }
     const replyId =
       m.replyToMessageId ?? m.reply_to_message_id ?? m.replyToMessageID;
     if (replyId != null && replyId !== '' && !next.replyToMessageId) {
@@ -209,7 +212,10 @@ const useChatStore = create((set, get) => ({
         nextId != null &&
         String(prevId) === String(nextId)
       ) {
-        return state;
+        return {
+          ...state,
+          currentChat: mergeChatRecord(state.currentChat, chat),
+        };
       }
       return {
         currentChat: chat,
@@ -313,22 +319,39 @@ const useChatStore = create((set, get) => ({
     return chat?.unreadCount || 0;
   },
 
-  updateChatLastMessage: (chatId, { content, timestamp, senderId }) => {
+  updateChatLastMessage: (chatId, { content, timestamp, senderId, messageType }) => {
     if (!chatId) return;
     const key = typeof chatId === 'string' ? chatId : String(chatId);
     set((state) => {
-      const next = state.chats.map((chat) => {
+      const nextPreview = typeof content === 'string' ? content : String(content ?? '');
+      const patch = {
+        lastMessage: nextPreview,
+        lastMessageContent: nextPreview,
+        lastMessageTime: timestamp,
+        lastMessageSenderId: senderId,
+        ...(messageType != null && messageType !== ''
+          ? { lastMessageType: String(messageType).toUpperCase() }
+          : {}),
+      };
+
+      let found = false;
+      const nextChats = state.chats.map((chat) => {
         if (String(chat.id) !== key) return chat;
-        const nextPreview = typeof content === 'string' ? content : String(content ?? '');
-        return {
-          ...chat,
-          lastMessage: nextPreview,
-          lastMessageContent: nextPreview,
-          lastMessageTime: timestamp,
-          lastMessageSenderId: senderId,
-        };
+        found = true;
+        return { ...chat, ...patch };
       });
-      return { chats: reorderChatsByRecent(next) };
+
+      const chats = found
+        ? reorderChatsByRecent(nextChats)
+        : state.currentChat && String(state.currentChat.id) === key
+          ? reorderChatsByRecent([{ ...state.currentChat, ...patch }, ...state.chats])
+          : state.chats;
+
+      const next = { chats };
+      if (state.currentChat && String(state.currentChat.id) === key) {
+        next.currentChat = { ...state.currentChat, ...patch };
+      }
+      return next;
     });
   },
 
@@ -364,15 +387,17 @@ const useChatStore = create((set, get) => ({
   },
 
   // updating message text (and optional messageType after caption edits)
-  updateMessageContent: (messageId, newContent, editedAt = new Date().toISOString(), messageType) => {
+  updateMessageContent: (messageId, newContent, editedAt, messageType) => {
+    const key = String(messageId);
     set((state) => ({
       messages: state.messages.map(msg =>
-          msg.id === messageId
+          String(msg.id ?? msg._id) === key
               ? {
                   ...msg,
                   content: newContent ?? '',
-                  isEdited: true,
-                  editedAt,
+                  ...(editedAt != null && editedAt !== ''
+                    ? { isEdited: true, editedAt }
+                    : {}),
                   ...(messageType != null ? { messageType } : {}),
                 }
               : msg

@@ -16,7 +16,10 @@ import {
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import BlockIcon from '@mui/icons-material/Block';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import userService from "../../services/userService";
+import userBanService from "../../services/userBanService";
 import { getApiErrorMessage } from "../../services/api";
 import useAuthStore from "../../store/useAuthStore";
 import PhoneCountryField from "../common/PhoneCountryField";
@@ -29,7 +32,14 @@ import {
   validateProfileImageFile,
 } from "../../utils/profileImageConstraints";
 import { getProfileImageUploadErrorMessage } from "../../utils/profileUploadErrors";
-import { chatHideScrollbarSx } from "../../theme/chatDesignTokens";
+import { chatHideScrollbarSx, chatColors } from "../../theme/chatDesignTokens";
+
+const detailDialogPaperSx = {
+  bgcolor: chatColors.detailPageBg,
+  background: chatColors.detailPageBg,
+  backgroundImage: 'none',
+  border: `1px solid ${chatColors.borderSubtle}`,
+};
 
 const toInputDate = (value) => (value ? new Date(value) : null);
 const toIsoDate = (value) => (value ? value.toISOString().slice(0, 10) : null);
@@ -53,7 +63,14 @@ const userToProfileShape = (u) => ({
   backgroundPicture: u?.backgroundPicture || null,
 });
 
-const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
+const UserProfileDialog = ({
+  open,
+  onClose,
+  user,
+  editable = false,
+  currentUserId,
+  onBanStateChange,
+}) => {
   const setUser = useAuthStore((state) => state.setUser);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -63,8 +80,17 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
   const [snackbar, setSnackbar] = useState("");
   const [profile, setProfile] = useState(null);
   const [initialProfile, setInitialProfile] = useState(null);
+  const [isBanned, setIsBanned] = useState(false);
+  const [banLoading, setBanLoading] = useState(false);
+  const [banConfirmOpen, setBanConfirmOpen] = useState(false);
   const avatarInputRef = useRef(null);
   const backgroundInputRef = useRef(null);
+
+  const canModerateBan =
+    !editable &&
+    currentUserId != null &&
+    user?.id != null &&
+    Number(currentUserId) !== Number(user.id);
 
   useEffect(() => {
     if (!open || !user?.id) {
@@ -87,6 +113,7 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
     });
 
     setFetchLoading(true);
+    setIsBanned(false);
     userService
       .getUserById(user.id)
       .then((full) => {
@@ -116,10 +143,21 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
         }
       });
 
+    if (canModerateBan) {
+      userBanService
+        .getBanStatus(user.id, currentUserId)
+        .then((banned) => {
+          if (!cancelled) setIsBanned(banned);
+        })
+        .catch(() => {
+          if (!cancelled) setIsBanned(false);
+        });
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [open, user?.id]);
+  }, [open, user?.id, currentUserId, editable]);
 
   const displayName = useMemo(() => {
     if (!profile) return "";
@@ -274,12 +312,51 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
     }
   };
 
+  const handleBanUser = async () => {
+    if (!canModerateBan || !user?.id) return;
+    setBanLoading(true);
+    setError("");
+    try {
+      await userBanService.banUser(user.id, currentUserId);
+      setIsBanned(true);
+      setBanConfirmOpen(false);
+      setSnackbar("User banned. Your private chat is hidden until you unban them.");
+      onBanStateChange?.({ userId: user.id, banned: true });
+    } catch (banError) {
+      setError(getApiErrorMessage(banError, "Could not ban this user."));
+    } finally {
+      setBanLoading(false);
+    }
+  };
+
+  const handleUnbanUser = async () => {
+    if (!canModerateBan || !user?.id) return;
+    setBanLoading(true);
+    setError("");
+    try {
+      await userBanService.unbanUser(user.id, currentUserId);
+      setIsBanned(false);
+      setSnackbar("User unbanned. Your private chat is available again.");
+      onBanStateChange?.({ userId: user.id, banned: false });
+    } catch (unbanError) {
+      setError(getApiErrorMessage(unbanError, "Could not unban this user."));
+    } finally {
+      setBanLoading(false);
+    }
+  };
+
   if (!user || !profile) {
     return null;
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="sm"
+      slotProps={{ paper: { sx: detailDialogPaperSx } }}
+    >
       <DialogTitle>{editable ? "My profile" : "User profile"}</DialogTitle>
       <DialogContent
         sx={{
@@ -416,6 +493,27 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
         />
       </DialogContent>
       <DialogActions>
+        {canModerateBan ? (
+          isBanned ? (
+            <Button
+              color="success"
+              startIcon={<CheckCircleOutlineIcon />}
+              onClick={handleUnbanUser}
+              disabled={banLoading}
+            >
+              Unban user
+            </Button>
+          ) : (
+            <Button
+              color="error"
+              startIcon={<BlockIcon />}
+              onClick={() => setBanConfirmOpen(true)}
+              disabled={banLoading}
+            >
+              Ban user
+            </Button>
+          )
+        ) : null}
         {editable && !isEditing ? <Button onClick={() => setIsEditing(true)}>Edit</Button> : null}
         {editable && isEditing ? (
           <>
@@ -435,6 +533,23 @@ const UserProfileDialog = ({ open, onClose, user, editable = false }) => {
         onClose={() => setSnackbar("")}
         message={snackbar}
       />
+      <Dialog open={banConfirmOpen} onClose={() => !banLoading && setBanConfirmOpen(false)}>
+        <DialogTitle>Ban this user?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Your private chat with {displayName} will be hidden and frozen until you unban them.
+            You will still see their messages in groups and channels you share.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBanConfirmOpen(false)} disabled={banLoading}>
+            Cancel
+          </Button>
+          <Button color="error" variant="contained" onClick={handleBanUser} disabled={banLoading}>
+            Ban user
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };

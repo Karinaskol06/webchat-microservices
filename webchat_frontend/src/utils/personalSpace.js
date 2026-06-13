@@ -4,7 +4,7 @@
 /** @typedef {{ icon?: string, text: string }} CalloutPayload */
 /** @typedef {{ label?: string }} DividerPayload */
 
-export const RICH_MESSAGE_TYPES = new Set(['TODO', 'STICKY_NOTE', 'CALLOUT']);
+export const RICH_MESSAGE_TYPES = new Set(['TODO', 'STICKY_NOTE', 'CALLOUT', 'POLL']);
 
 export const isRichMessageType = (type) =>
   RICH_MESSAGE_TYPES.has(String(type || '').toUpperCase());
@@ -43,9 +43,36 @@ export const createCalloutPayload = () => ({
   text: '',
 });
 
+export const createPollPayload = ({
+  question = '',
+  mode = 'poll',
+  anonymous = false,
+  multipleChoice = false,
+  maxAttempts = 1,
+  showCorrectAfterAnswer = true,
+  explanation = '',
+  options = [],
+} = {}) => ({
+  question,
+  mode: mode === 'test' ? 'test' : 'poll',
+  anonymous: Boolean(anonymous),
+  multipleChoice: Boolean(multipleChoice),
+  maxAttempts: mode === 'test' ? Math.max(1, Number(maxAttempts) || 1) : 1,
+  showCorrectAfterAnswer: mode === 'test' ? Boolean(showCorrectAfterAnswer) : false,
+  explanation: explanation || '',
+  options: options.map((o) => ({
+    id: o.id || crypto.randomUUID(),
+    text: o.text || '',
+    ...(mode === 'test' ? { correct: Boolean(o.correct) } : {}),
+  })),
+  pollId: crypto.randomUUID(),
+  votes: {},
+});
+
 export const inferRichMessageTypeFromPayload = (data) => {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
   if (Array.isArray(data.tasks)) return 'TODO';
+  if (Array.isArray(data.options) && typeof data.question === 'string') return 'POLL';
   if ('icon' in data && typeof data.text === 'string') return 'CALLOUT';
   if (
     typeof data.text === 'string' &&
@@ -79,6 +106,8 @@ export const richPreviewLabelForType = (type) => {
       return 'Sticky note';
     case 'CALLOUT':
       return 'Callout';
+    case 'POLL':
+      return 'Poll';
     default:
       return null;
   }
@@ -139,6 +168,9 @@ const richPayloadCopyText = (type, data) => {
   if (upper === 'CALLOUT' && data?.text != null) {
     const icon = data.icon ? `${data.icon} ` : '';
     return `${icon}${String(data.text).trim()}`.trim();
+  }
+  if (upper === 'POLL' && data?.question != null) {
+    return String(data.question).trim();
   }
   return '';
 };

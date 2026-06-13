@@ -24,10 +24,14 @@ import LinkIcon from '@mui/icons-material/Link';
 import ContactsOutlinedIcon from '@mui/icons-material/ContactsOutlined';
 import PersonAddAlt1OutlinedIcon from '@mui/icons-material/PersonAddAlt1Outlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
+import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
 import AccountCredentialsPanel from '../settings/AccountCredentialsPanel';
+import ThemePickerDialog from '../settings/ThemePickerDialog';
 import chatService from '../../services/chatService';
 import contactsService from '../../services/contactsService';
 import { joinInviteErrorMessage, parseInviteToken } from '../../utils/inviteLink';
+import { parseRoomBanError } from '../../utils/roomBanError';
+import RoomBanDialog from './RoomBanDialog';
 import { getApiErrorMessage } from '../../services/api';
 import UserAvatar from '../user/UserAvatar';
 
@@ -35,6 +39,7 @@ const VIEW_MENU = 'menu';
 const VIEW_INVITE = 'invite';
 const VIEW_CONTACTS = 'contacts';
 const VIEW_ACCOUNT = 'account';
+const VIEW_THEMES = 'themes';
 
 const displayName = (user) => {
   if (!user) return 'Unknown user';
@@ -67,6 +72,8 @@ const ChatSettingsDialog = ({
   const [contacts, setContacts] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [requestBusyId, setRequestBusyId] = useState(null);
+  const [themesOpen, setThemesOpen] = useState(false);
+  const [banDialog, setBanDialog] = useState(null);
 
   const menuItems = useMemo(
     () => [
@@ -88,6 +95,12 @@ const ChatSettingsDialog = ({
         primary: 'Change username or password',
         secondary: 'Update sign-in username, email, or password',
       },
+      {
+        key: VIEW_THEMES,
+        icon: PaletteOutlinedIcon,
+        primary: 'Themes',
+        secondary: 'Browse system themes and pick your favorite look',
+      },
     ],
     [],
   );
@@ -103,6 +116,7 @@ const ChatSettingsDialog = ({
       setContactsError('');
       setContactsBusy(false);
       setRequestBusyId(null);
+      setThemesOpen(false);
       return;
     }
     setView(joinOnly ? VIEW_INVITE : VIEW_MENU);
@@ -161,6 +175,11 @@ const ChatSettingsDialog = ({
       onJoinedRoom?.(dto);
       handleClose();
     } catch (err) {
+      const ban = parseRoomBanError(err);
+      if (ban) {
+        setBanDialog(ban);
+        return;
+      }
       setInviteError(joinInviteErrorMessage(err));
     } finally {
       setInviteBusy(false);
@@ -211,6 +230,7 @@ const ChatSettingsDialog = ({
   };
 
   return (
+    <>
     <Dialog
       open={open}
       onClose={handleClose}
@@ -246,7 +266,10 @@ const ChatSettingsDialog = ({
         {view === VIEW_MENU ? (
           <List disablePadding>
             {menuItems.map(({ key, icon: Icon, primary, secondary }) => (
-              <ListItemButton key={key} onClick={() => setView(key)}>
+              <ListItemButton
+                key={key}
+                onClick={() => (key === VIEW_THEMES ? setThemesOpen(true) : setView(key))}
+              >
                 <ListItemIcon sx={{ minWidth: 40 }}>
                   <Icon color="primary" />
                 </ListItemIcon>
@@ -421,7 +444,16 @@ const ChatSettingsDialog = ({
           </Stack>
         )}
       </DialogContent>
+      <ThemePickerDialog open={themesOpen} onClose={() => setThemesOpen(false)} />
     </Dialog>
+    <RoomBanDialog
+      open={Boolean(banDialog)}
+      onClose={() => setBanDialog(null)}
+      message={banDialog?.message}
+      roomName={banDialog?.roomName}
+      roomType={banDialog?.roomType}
+    />
+    </>
   );
 };
 

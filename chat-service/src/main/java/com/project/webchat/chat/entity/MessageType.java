@@ -7,5 +7,7 @@ public enum MessageType {
     /** Sticky note card; JSON may include position for personal-space layout. */
     STICKY_NOTE,
     /** Notion-style callout block. */
-    CALLOUT
+    CALLOUT,
+    /** Group/channel poll or quiz; JSON in {@code content}. */
+    POLL
 }

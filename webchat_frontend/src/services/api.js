@@ -23,7 +23,26 @@ const shouldSkip401AutoLogout = (url = "") =>
   url.startsWith("/api/auth/reset-password") ||
   url.startsWith("/api/notifications/");
 
+const readPayloadMessage = (payload) => {
+  if (typeof payload === "string" && payload.trim()) {
+    return payload.trim();
+  }
+  if (payload && typeof payload === "object") {
+    if (typeof payload.message === "string" && payload.message.trim()) {
+      return payload.message.trim();
+    }
+    if (typeof payload.error === "string" && payload.error.trim()) {
+      return payload.error.trim();
+    }
+  }
+  return null;
+};
+
 export const getApiErrorMessage = (error, fallbackMessage = "Request failed") => {
+  if (error == null) {
+    return fallbackMessage;
+  }
+
   const headers = error?.response?.headers ?? {};
   const gatewayMessage =
     headers["x-error-message"] ?? headers["X-Error-Message"];
@@ -31,20 +50,14 @@ export const getApiErrorMessage = (error, fallbackMessage = "Request failed") =>
     return gatewayMessage.trim();
   }
 
-  const payload = error?.response?.data;
-  if (typeof payload === "string" && payload.trim()) {
-    return payload;
+  const payload = error?.response?.data ?? (error?.response ? undefined : error);
+  const payloadMessage = readPayloadMessage(payload);
+  if (payloadMessage) {
+    return payloadMessage;
   }
-  if (payload && typeof payload === "object") {
-    if (typeof payload.message === "string" && payload.message.trim()) {
-      return payload.message;
-    }
-    if (typeof payload.error === "string" && payload.error.trim()) {
-      return payload.error;
-    }
-  }
+
   if (typeof error?.message === "string" && error.message.trim()) {
-    return error.message;
+    return error.message.trim();
   }
   return fallbackMessage;
 };

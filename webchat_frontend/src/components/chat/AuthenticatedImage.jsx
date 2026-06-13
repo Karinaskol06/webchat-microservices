@@ -78,6 +78,8 @@ const AuthenticatedImage = ({ attachmentId, alt, onLoad, ...props }) => {
             onLoad={onLoad}
             onError={() => setError(true)}
             {...props}
+            draggable={false}
+            onDragStart={(event) => event.preventDefault()}
         />
     );
 };

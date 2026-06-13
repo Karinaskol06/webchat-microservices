@@ -1,9 +1,14 @@
 /** Design tokens for glass chat workspace + dark conversation area. */
 
-export const CHAT_BG_IMAGE = '/login-bg.png';
+import { alpha } from '@mui/material/styles';
 
 /** MUI palette/sx cannot use the CSS keyword `transparent` (throws in getLuminance). */
 export const muiTransparent = 'rgba(0, 0, 0, 0)';
+
+/** MUI alpha/lighten need resolved hex — use inside sx `(theme) => ...` callbacks. */
+export function themePrimaryAlpha(theme, opacity) {
+  return alpha(theme.palette.primary.main, opacity);
+}
 
 export const chatColors = {
   navBg: muiTransparent,
@@ -22,26 +27,28 @@ export const chatColors = {
   surface: 'rgba(255, 255, 255, 0.35)',
   surfaceMuted: 'rgba(24, 20, 28, 0.08)',
   surfaceLavender: 'rgba(255, 255, 255, 0.22)',
-  primary: '#7B61FF',
-  primaryDark: '#6348E0',
-  primaryLight: '#9B87FF',
+  primary: 'var(--chat-primary, #7B61FF)',
+  primaryDark: 'var(--chat-primary-dark, #6348E0)',
+  primaryLight: 'var(--chat-primary-light, #9B87FF)',
   /** Conversation column (messages, header, composer). */
   textPrimary: '#FFFFFF',
   textSecondary: 'rgba(255, 255, 255, 0.72)',
   textOnPrimary: '#FFFFFF',
   borderSubtle: 'rgba(255, 255, 255, 0.14)',
   borderGlass: 'rgba(255, 255, 255, 0.32)',
-  conversationBg: '#26185A',
+  conversationBg: 'var(--chat-conversation-bg, #26185A)',
+  /** Room profile + my profile dialog surfaces. */
+  detailPageBg: 'var(--chat-detail-page-bg, #1C1430)',
   /** Darkened, less transparent glass for dialogs. */
-  glassModal: 'rgba(28, 20, 48, 0.88)',
-  glassModalBorder: 'rgba(255, 255, 255, 0.22)',
-  bubbleIncoming: '#18103D',
-  bubbleOutgoing: '#18103D',
-  composerInputBg: '#18103D',
+  glassModal: 'var(--chat-glass-modal, rgba(28, 20, 48, 0.88))',
+  glassModalBorder: 'var(--chat-glass-modal-border, rgba(255, 255, 255, 0.22))',
+  bubbleIncoming: 'var(--chat-bubble-in, #18103D)',
+  bubbleOutgoing: 'var(--chat-bubble-out, #18103D)',
+  composerInputBg: 'var(--chat-composer-input-bg, #18103D)',
   bubbleText: '#FFFFFF',
   accentOrange: '#FF8A4C',
   accentBlue: '#4C8DFF',
-  unreadBadge: '#7B61FF',
+  unreadBadge: 'var(--chat-unread-badge, #7B61FF)',
 };
 
 export const chatRadii = {
@@ -98,7 +105,7 @@ export const chatGlassListSx = {
   background: chatColors.glassList,
 };
 
-/** Group/channel side panels — same glass as chat list (side menu). */
+/** Group/channel side panels — same frosted glass as chat list. */
 export const chatGlassRoomSideSx = {
   ...chatGlassListSx,
 };
@@ -132,7 +139,7 @@ export const chatShellBgLayerSx = {
   inset: 0,
   zIndex: 0,
   pointerEvents: 'none',
-  backgroundImage: `url(${CHAT_BG_IMAGE})`,
+  backgroundImage: 'var(--chat-bg-image, url(/login-bg.png))',
   backgroundSize: 'cover',
   backgroundPosition: 'center',
   backgroundRepeat: 'no-repeat',
@@ -151,7 +158,7 @@ export const chatGlassFieldPanelSx = {
     },
     '&:hover fieldset': { borderColor: 'rgba(16, 8, 26, 0.22)' },
     '&.Mui-focused': {
-      boxShadow: '0 0 0 3px rgba(123, 97, 255, 0.18)',
+      boxShadow: '0 0 0 3px var(--chat-primary-focus-ring, rgba(123, 97, 255, 0.18))',
     },
     '&.Mui-focused fieldset': { borderColor: chatColors.primary },
   },
@@ -194,7 +201,7 @@ export const chatGlassFieldSx = {
 export const chatMenuPaperSx = {
   borderRadius: `${chatRadii.panel}px`,
   border: `1px solid rgba(255, 255, 255, 0.16)`,
-  background: 'rgba(14, 8, 34, 0.97)',
+  background: 'var(--chat-menu-paper-bg, rgba(14, 8, 34, 0.97))',
   backdropFilter: 'blur(22px)',
   WebkitBackdropFilter: 'blur(22px)',
   boxShadow: '0 16px 48px rgba(8, 4, 22, 0.58)',

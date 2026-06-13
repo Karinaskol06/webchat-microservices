@@ -42,6 +42,33 @@ public class ChatApiExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(UserBanException.class)
+    public ResponseEntity<Map<String, String>> handleUserBan(UserBanException e) {
+        log.warn("Banned user attempted private chat access: {}", e.getMessage());
+        String msg = e.getMessage() != null ? e.getMessage() : "This private chat is unavailable";
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of(
+                        "message", msg,
+                        "error", msg,
+                        "code", UserBanException.CODE,
+                        "displayName", e.getDisplayName()
+                ));
+    }
+
+    @ExceptionHandler(RoomBanException.class)
+    public ResponseEntity<Map<String, String>> handleRoomBan(RoomBanException e) {
+        log.warn("Banned user attempted room access: {}", e.getMessage());
+        String msg = e.getMessage() != null ? e.getMessage() : "You have been banned from this room";
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of(
+                        "message", msg,
+                        "error", msg,
+                        "code", RoomBanException.CODE,
+                        "roomName", e.getRoomName(),
+                        "roomType", e.getRoomType()
+                ));
+    }
+
     @ExceptionHandler(ForbiddenChatOperationException.class)
     public ResponseEntity<Map<String, String>> handleForbiddenChat(ForbiddenChatOperationException e) {
         log.warn("Forbidden chat operation: {}", e.getMessage());

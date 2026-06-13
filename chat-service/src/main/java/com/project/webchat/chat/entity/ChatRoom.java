@@ -45,6 +45,10 @@ public class ChatRoom {
     @Builder.Default
     private Set<Long> channelPosterIds = new HashSet<>();
 
+    /** GROUP / CHANNEL: users blocked from joining or rejoining. */
+    @Builder.Default
+    private Set<Long> bannedUserIds = new HashSet<>();
+
     /**
      * Opaque invite token for private GROUP / CHANNEL rooms.
      */
@@ -75,6 +79,15 @@ public class ChatRoom {
             return false;
         }
         return memberIds.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(id -> id.longValue() == userId.longValue());
+    }
+
+    public boolean isBanned(Long userId) {
+        if (userId == null || bannedUserIds == null || bannedUserIds.isEmpty()) {
+            return false;
+        }
+        return bannedUserIds.stream()
                 .filter(Objects::nonNull)
                 .anyMatch(id -> id.longValue() == userId.longValue());
     }

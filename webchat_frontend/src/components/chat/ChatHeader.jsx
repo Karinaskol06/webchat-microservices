@@ -13,6 +13,8 @@ import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import LinkIcon from '@mui/icons-material/Link';
 import SearchIcon from '@mui/icons-material/Search';
+import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import ExitToAppOutlinedIcon from '@mui/icons-material/ExitToAppOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { getPresenceLabel } from '../../utils/presence';
@@ -44,6 +46,13 @@ const ChatHeader = ({
   onRequestDeleteRoom,
   inChatSearchOpen = false,
   onToggleInChatSearch,
+  showGroupInfoToggle = false,
+  groupInfoPanelOpen = false,
+  onToggleGroupInfoPanel,
+  showMembersPanelToggle = false,
+  membersPanelOpen = false,
+  onToggleMembersPanel,
+  groupInfoToggleLabel = 'Group info',
 }) => {
   const [menuAnchor, setMenuAnchor] = useState(null);
 
@@ -100,43 +109,61 @@ const ChatHeader = ({
     />
   );
 
-  return (
-    <Box display="flex" alignItems="center" gap={1} minWidth={0}>
-      {avatarInteractive ? <Tooltip title={avatarTooltip}>{avatarEl}</Tooltip> : avatarEl}
-      <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography
-          variant="h6"
-          noWrap
-          sx={{ fontWeight: 700, lineHeight: 1.25, color: chatColors.textPrimary }}
-        >
-          {title}
-        </Typography>
-        <Typography
-          variant="body2"
-          noWrap
-          display="block"
-          sx={{ color: chatColors.textSecondary }}
-        >
-          {subtitle}
-        </Typography>
-      </Box>
+  const headerIconButtonSx = {
+    flexShrink: 0,
+    color: chatColors.textPrimary,
+  };
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
-        {onToggleInChatSearch ? (
-          <Tooltip title={inChatSearchOpen ? 'Close search' : 'Search in chat'}>
-            <IconButton
-              aria-label="Search in chat"
-              aria-pressed={inChatSearchOpen}
-              size="small"
-              onClick={onToggleInChatSearch}
-              sx={{ color: inChatSearchOpen ? chatColors.primary : chatColors.textPrimary }}
-            >
-              <SearchIcon />
-            </IconButton>
-          </Tooltip>
-        ) : null}
-      </Box>
-
+  const headerActions = (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
+      {showGroupInfoToggle && onToggleGroupInfoPanel ? (
+        <Tooltip title={groupInfoPanelOpen ? `Hide ${groupInfoToggleLabel}` : `Show ${groupInfoToggleLabel}`}>
+          <IconButton
+            aria-label={groupInfoPanelOpen ? `Hide ${groupInfoToggleLabel}` : `Show ${groupInfoToggleLabel}`}
+            aria-pressed={groupInfoPanelOpen}
+            size="small"
+            onClick={onToggleGroupInfoPanel}
+            sx={{
+              ...headerIconButtonSx,
+              color: groupInfoPanelOpen ? chatColors.primary : chatColors.textPrimary,
+            }}
+          >
+            <CollectionsOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+      {showMembersPanelToggle && onToggleMembersPanel ? (
+        <Tooltip title={membersPanelOpen ? 'Hide members' : 'Show members'}>
+          <IconButton
+            aria-label={membersPanelOpen ? 'Hide members panel' : 'Show members panel'}
+            aria-pressed={membersPanelOpen}
+            size="small"
+            onClick={onToggleMembersPanel}
+            sx={{
+              ...headerIconButtonSx,
+              color: membersPanelOpen ? chatColors.primary : chatColors.textPrimary,
+            }}
+          >
+            <GroupsOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+      {onToggleInChatSearch ? (
+        <Tooltip title={inChatSearchOpen ? 'Close search' : 'Search in chat'}>
+          <IconButton
+            aria-label="Search in chat"
+            aria-pressed={inChatSearchOpen}
+            size="small"
+            onClick={onToggleInChatSearch}
+            sx={{
+              ...headerIconButtonSx,
+              color: inChatSearchOpen ? chatColors.primary : chatColors.textPrimary,
+            }}
+          >
+            <SearchIcon />
+          </IconButton>
+        </Tooltip>
+      ) : null}
       {isGroupOrChannel && hasRoomMenuItems ? (
         <>
           <Tooltip title="Room options">
@@ -144,7 +171,7 @@ const ChatHeader = ({
               aria-label="Room options"
               onClick={(e) => setMenuAnchor(e.currentTarget)}
               size="small"
-              sx={{ flexShrink: 0, color: chatColors.textPrimary }}
+              sx={headerIconButtonSx}
             >
               <MoreVertIcon />
             </IconButton>
@@ -195,16 +222,42 @@ const ChatHeader = ({
           </Menu>
         </>
       ) : null}
+      {!emojiSidebarOpen && onShowEmojiSidebar ? (
+        <Tooltip title="Show emoji sidebar">
+          <IconButton
+            size="small"
+            onClick={onShowEmojiSidebar}
+            sx={headerIconButtonSx}
+          >
+            <EmojiEmotionsOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+    </Box>
+  );
 
-      {!emojiSidebarOpen && (
-        <Box sx={{ ml: 'auto', flexShrink: 0 }}>
-          <Tooltip title="Show emoji sidebar">
-            <IconButton onClick={onShowEmojiSidebar} sx={{ color: chatColors.textPrimary }}>
-              <EmojiEmotionsOutlinedIcon />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      )}
+  return (
+    <Box display="flex" alignItems="center" gap={1} minWidth={0}>
+      {avatarInteractive ? <Tooltip title={avatarTooltip}>{avatarEl}</Tooltip> : avatarEl}
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        <Typography
+          variant="h6"
+          noWrap
+          sx={{ fontWeight: 700, lineHeight: 1.25, color: chatColors.textPrimary }}
+        >
+          {title}
+        </Typography>
+        <Typography
+          variant="body2"
+          noWrap
+          display="block"
+          sx={{ color: chatColors.textSecondary }}
+        >
+          {subtitle}
+        </Typography>
+      </Box>
+
+      {headerActions}
     </Box>
   );
 };

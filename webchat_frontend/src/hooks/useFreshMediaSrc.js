@@ -7,7 +7,9 @@ import { isApiUserAvatarUrl } from '../utils/userAvatar';
  * When disableCache is true (chat list), skips the in-memory blob cache.
  */
 export function useFreshMediaSrc(src, cacheKey, disableCache = false) {
-  const [resolved, setResolved] = useState(src);
+  const [resolved, setResolved] = useState(() =>
+    !src || disableCache || !isApiUserAvatarUrl(src) ? src : undefined,
+  );
   const activeBlobRef = useRef(null);
 
   useEffect(() => {
@@ -31,7 +33,6 @@ export function useFreshMediaSrc(src, cacheKey, disableCache = false) {
     }
 
     let cancelled = false;
-    revokeActiveBlob();
     setResolved(undefined);
 
     const run = async () => {
@@ -43,11 +44,15 @@ export function useFreshMediaSrc(src, cacheKey, disableCache = false) {
           URL.revokeObjectURL(blobUrl);
           return;
         }
+        const previousBlob = activeBlobRef.current;
         activeBlobRef.current = blobUrl;
         setResolved(blobUrl);
+        if (previousBlob && previousBlob !== blobUrl) {
+          URL.revokeObjectURL(previousBlob);
+        }
       } catch {
         if (!cancelled) {
-          setResolved(src);
+          setResolved(undefined);
         }
       }
     };
@@ -56,8 +61,10 @@ export function useFreshMediaSrc(src, cacheKey, disableCache = false) {
 
     return () => {
       cancelled = true;
-      revokeActiveBlob();
-      setResolved(undefined);
+      if (activeBlobRef.current) {
+        URL.revokeObjectURL(activeBlobRef.current);
+        activeBlobRef.current = null;
+      }
     };
   }, [src, cacheKey, disableCache]);
 
@@ -65,5 +72,9 @@ export function useFreshMediaSrc(src, cacheKey, disableCache = false) {
     return src;
   }
 
-  return resolved ?? src;
+  if (!isApiUserAvatarUrl(src)) {
+    return resolved ?? src;
+  }
+
+  return resolved;
 }

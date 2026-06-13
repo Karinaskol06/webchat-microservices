@@ -27,4 +27,7 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
     Long countByChatId(String chatId);
 
     void deleteByChatId(String chatId);
+
+    @Query("{ 'messageType': 'POLL', 'content': { $regex: ?0 } }")
+    List<ChatMessage> findPollMessagesByPollIdPattern(String pollIdPattern);
 }

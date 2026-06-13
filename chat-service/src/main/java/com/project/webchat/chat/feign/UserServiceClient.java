@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
+import java.util.List;
+
 @FeignClient(name = "user-service", url = "${feign.client.user-service.url:}")
 public interface UserServiceClient {
 
@@ -40,4 +42,12 @@ public interface UserServiceClient {
 
     @PostMapping("/api/users/internal/contacts/requests")
     ResponseEntity<Void> createContactRequestIfEligible(@RequestBody ContactRequestCreateDTO requestDTO);
+
+    @GetMapping("/api/users/internal/{userId}/banned-user-ids")
+    List<Long> getBannedUserIds(@PathVariable("userId") Long userId);
+
+    @GetMapping("/api/users/internal/{userId}/has-banned/{targetUserId}")
+    Boolean hasBanned(
+            @PathVariable("userId") Long userId,
+            @PathVariable("targetUserId") Long targetUserId);
 }

@@ -22,6 +22,10 @@ export const chatMotionKeyframes = {
     from: { opacity: 0, transform: 'translate3d(-8px, 0, 0)' },
     to: { opacity: 1, transform: 'translate3d(0, 0, 0)' },
   },
+  '@keyframes chatHeaderSwitch': {
+    from: { opacity: 0, transform: 'translate3d(0, -6px, 0)' },
+    to: { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+  },
 };
 
 export const withChatReducedMotion = (motionSx, staticSx = {}) => ({
@@ -51,3 +55,30 @@ export const chatListItemEnterSx = (index = 0) =>
   withChatReducedMotion({
     animation: `chatListItemIn 0.35s ${CHAT_EASE_OUT} ${chatStaggerDelay(index, 0.035)} both`,
   });
+
+/** Optimistic chat switch — header updates immediately with a short enter. */
+export const chatHeaderSwitchSx = withChatReducedMotion({
+  animation: `chatHeaderSwitch 0.22s ${CHAT_EASE_OUT} both`,
+});
+
+/**
+ * Message pane blur while the next conversation loads.
+ * `active` true = blurred; fades to sharp quickly when loading completes.
+ */
+export const chatMessagesPanelBlurSx = (active) =>
+  withChatReducedMotion(
+    {
+      filter: active ? 'blur(7px)' : 'blur(0px)',
+      opacity: active ? 0.78 : 1,
+      transform: active ? 'scale(0.994)' : 'scale(1)',
+      transition: `filter 0.2s ${CHAT_EASE_OUT}, opacity 0.2s ${CHAT_EASE_OUT}, transform 0.2s ${CHAT_EASE_OUT}`,
+      willChange: active ? 'filter, opacity, transform' : 'auto',
+      pointerEvents: active ? 'none' : 'auto',
+    },
+    {
+      filter: 'none',
+      opacity: 1,
+      transform: 'none',
+      pointerEvents: 'auto',
+    },
+  );

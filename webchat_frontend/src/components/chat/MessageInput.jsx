@@ -34,6 +34,7 @@ const MessageInput = forwardRef(function MessageInput(
     channelReadOnlyHint = 'Only the channel owner or admins can post in this channel.',
     onInsertRichMessage,
     richMessageSending = false,
+    showPollOption = false,
   },
   ref,
 ) {
@@ -271,6 +272,7 @@ const MessageInput = forwardRef(function MessageInput(
             anchorEl={pinButtonRef.current}
             open={pinMenuOpen}
             onClose={() => setPinMenuOpen(false)}
+            showPollOption={showPollOption}
             onSelect={(type) => {
               setPinMenuOpen(false);
               onInsertRichMessage?.(type);

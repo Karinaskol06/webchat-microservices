@@ -46,14 +46,23 @@ function isRoomOwner(chat, currentUserId) {
 
 /** Group admins or channel owner/moderators may edit name, description, and avatar. */
 export function canEditRoomProfile(chat, currentUserId = null) {
-  if (!chat || !isGroupOrChannelType(chat)) return false;
+  if (!chat) return false;
+  const t = String(chat?.type || '').toUpperCase();
+  if (t === 'PERSONAL_SPACE') {
+    return currentUserId != null && Number(chat.createdBy) === Number(currentUserId);
+  }
+  if (!isGroupOrChannelType(chat)) return false;
   if (canDeleteRoom(chat)) return true;
   return isRoomOwner(chat, currentUserId);
 }
 
 export function canDeleteRoom(chat) {
-  if (!chat || !isGroupOrChannelType(chat)) return false;
-  const t = String(chat.type || '').toUpperCase();
+  if (!chat) return false;
+  const t = String(chat?.type || '').toUpperCase();
+  if (t === 'PERSONAL_SPACE') {
+    return chat.createdBy != null;
+  }
+  if (!isGroupOrChannelType(chat)) return false;
   if (t === 'GROUP') return Boolean(chat.isCurrentUserAdmin);
   if (t === 'CHANNEL') {
     return Boolean(chat.isCurrentUserChannelCreator || chat.isCurrentUserChannelAdmin);
@@ -65,8 +74,14 @@ export function canLeaveRoom(chat) {
   return isGroupOrChannelType(chat);
 }
 
+/** Group admins or channel owner/moderators may ban and unban members. */
+export function canBanRoomMembers(chat, currentUserId = null) {
+  return canEditRoomProfile(chat, currentUserId);
+}
+
 export function roomTypeLabel(chat) {
   const t = String(chat?.type || '').toUpperCase();
+  if (t === 'PERSONAL_SPACE') return 'Personal space';
   if (t === 'CHANNEL') return 'Channel';
   if (t === 'GROUP') return 'Group chat';
   return 'Room';

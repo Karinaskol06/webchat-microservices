@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Box } from '@mui/material';
-import { chatColors } from '../../theme/chatDesignTokens';
+import { chatColors, themePrimaryAlpha } from '../../theme/chatDesignTokens';
 
 /**
  * Renders text with optional substring highlights (case-insensitive match positions).
@@ -44,7 +44,8 @@ const HighlightedMessageText = ({
           key={`h-${start}-${end}`}
           component="mark"
           sx={{
-            bgcolor: active ? chatColors.primary : 'rgba(123, 97, 255, 0.28)',
+            bgcolor: (theme) =>
+              active ? theme.palette.primary.main : themePrimaryAlpha(theme, 0.28),
             color: active ? chatColors.textOnPrimary : 'inherit',
             borderRadius: '3px',
             px: 0.15,

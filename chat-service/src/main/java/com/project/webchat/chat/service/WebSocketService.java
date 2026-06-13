@@ -19,7 +19,7 @@ public class WebSocketService {
 
     private final SimpMessagingTemplate messagingTemplate;
 
-    // ========== CONSTANTS ==========
+    // Constants
     private static final String TOPIC_CHAT_MESSAGES = "/topic/chat/%s/messages";
     private static final String TOPIC_CHAT_TYPING = "/topic/chat/%s/typing";
     private static final String TOPIC_CHAT_READ = "/topic/chat/%s/read";
@@ -34,12 +34,9 @@ public class WebSocketService {
     private static final String QUEUE_CHATS_UPDATED = "/queue/chats/updated";
     private static final String QUEUE_CHATS_DELETED = "/queue/chats/deleted";
     private static final String QUEUE_CHATS_USER_LEFT = "/queue/chats/user-left";
-    private static final String QUEUE_FRIEND_REQUESTS_NEW = "/queue/friends/requests/new";
-    private static final String QUEUE_FRIEND_REQUESTS_UPDATED = "/queue/friends/requests/updated";
-    private static final String QUEUE_FRIEND_ACCEPTED = "/queue/friends/accepted";
     private static final String QUEUE_ROOM_MEMBER_INVITES_NEW = "/queue/rooms/member-invites/new";
 
-    // ========== MESSAGING EVENTS ==========
+    // Messaging events
     public void sendMessageToChat(String chatId, ChatMessageDTO message) {
         MessageSentEvent event = new MessageSentEvent(message);
         sendToChatTopic(TOPIC_CHAT_MESSAGES, chatId, event);
@@ -73,20 +70,7 @@ public class WebSocketService {
         log.debug("Reactions updated on message {} in chat {}", messageId, chatId);
     }
 
-    public void notifyAttachmentAdded(String chatId, String messageId, AttachmentDTO attachment) {
-        AttachmentAddedEvent event = new AttachmentAddedEvent(messageId, attachment);
-        sendToChatTopic(TOPIC_CHAT_ATTACHMENT, chatId, event);
-        log.info("Attachment {} added to message {} in chat {}", attachment.getId(), messageId, chatId);
-    }
-
-    public void notifyAttachmentDeleted(String chatId, String messageId, String attachmentId, Long deletedByUserId) {
-        AttachmentDeletedEvent event = new AttachmentDeletedEvent(messageId, attachmentId, deletedByUserId);
-        sendToChatTopic(TOPIC_CHAT_ATTACHMENT, chatId, event);
-        log.info("Attachment {} deleted from message {} in chat {} by user {}",
-                attachmentId, messageId, chatId, deletedByUserId);
-    }
-
-    // ========== CHAT EVENTS (CRUD) ==========
+    // Chat events (CRUD)
     public void notifyChatCreated(Long userId, ChatRoomDTO chatRoom) {
         sendToUserQueue(userId, QUEUE_CHATS_NEW, chatRoom);
         log.info("Chat {} created for user {}", chatRoom.getId(), userId);
@@ -115,31 +99,12 @@ public class WebSocketService {
         log.info("User {} left chat {}, notified {} members", userId, chatId, otherMembers.size());
     }
 
-    // ========== FRIEND REQUESTS EVENTS ==========
-    /*
-    public void notifyNewFriendRequest(Long receiverId, FriendRequestDTO request) {
-        sendToUserQueue(receiverId, QUEUE_FRIEND_REQUESTS_NEW, request);
-        log.info("New friend request from {} to user {}", request.getFromUserId(), receiverId);
-    }
-
-    public void notifyFriendRequestUpdated(Long requesterId, FriendRequestDTO request) {
-        sendToUserQueue(requesterId, QUEUE_FRIEND_REQUESTS_UPDATED, request);
-        log.info("Friend request {} updated for user {}", request.getId(), requesterId);
-    }
-
-    public void notifyFriendRequestAccepted(Long requesterId, FriendDTO newFriend) {
-        sendToUserQueue(requesterId, QUEUE_FRIEND_ACCEPTED, newFriend);
-        log.info("Friend request accepted, user {} now friends with {}",
-                requesterId, newFriend.getId());
-    }
-    */
-
     public void notifyRoomMemberInvite(Long inviteeUserId, RoomMemberInviteDTO invite) {
         sendToUserQueue(inviteeUserId, QUEUE_ROOM_MEMBER_INVITES_NEW, invite);
         log.info("Room member invite {} sent to user {}", invite.getId(), inviteeUserId);
     }
 
-    // ========== TYPING & PRESENCE ==========
+    // Typing and presence
     public void sendTypingMessage(String chatId, Long userId, boolean isTyping) {
         TypingEvent event = new TypingEvent(userId, isTyping);
         sendToChatTopic(TOPIC_CHAT_TYPING, chatId, event);
@@ -164,7 +129,7 @@ public class WebSocketService {
         log.info("User {} left chat {}", userId, chatId);
     }
 
-    // ========== PRIVATE HELPER METHODS ==========
+    // Priv helper methods
     private void sendToChatTopic(String topicPattern, String chatId, Object payload) {
         String destination = String.format(topicPattern, chatId);
         messagingTemplate.convertAndSend(destination, payload);
@@ -178,7 +143,7 @@ public class WebSocketService {
         );
     }
 
-    // ========== INNER EVENT CLASSES ==========
+    // Inner event classes
     @lombok.Data
     @lombok.AllArgsConstructor
     public static class UserLeftChatEvent {
@@ -190,21 +155,6 @@ public class WebSocketService {
     @lombok.AllArgsConstructor
     public static class ChatDeletedEvent {
         private String chatId;
-    }
-
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    public static class AttachmentAddedEvent {
-        private String messageId;
-        private AttachmentDTO attachment;
-    }
-
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    public static class AttachmentDeletedEvent {
-        private String messageId;
-        private String attachmentId;
-        private Long deletedByUserId;
     }
 
     @lombok.Data

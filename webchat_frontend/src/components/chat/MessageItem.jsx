@@ -37,6 +37,7 @@ import { QuotedKindIcon } from './QuotedKindIcon';
 import chatService from '../../services/chatService';
 import useChatStore from '../../store/useChatStore';
 import { canModerateOthersMessages } from '../../utils/channelPermissions';
+import { isEmojiOnlyMessage } from '../../utils/chatDisplay';
 import { countUserReactions, MAX_REACTIONS_PER_USER } from '../../utils/messageReactions';
 import RichMessageContent from '../personalSpace/RichMessageContent';
 import { getMessageCopyText, isRichMessageType } from '../../utils/personalSpace';
@@ -76,6 +77,7 @@ const MessageItem = ({
     activeInChatSearchMatch = null,
     onOpenEmojiSidebarForReaction,
     isPersonalSpace = false,
+    onOpenImage,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [menuAnchorEl, setMenuAnchorEl] = useState(null);
@@ -102,7 +104,7 @@ const MessageItem = ({
         messageTypeUpper === 'TEXT' ||
         messageTypeUpper === 'MIXED' ||
         messageTypeUpper === 'ATTACHMENT' ||
-        isRichMessage;
+        (isRichMessage && messageTypeUpper !== 'POLL');
     const canEditThis = (isOwn || canModerateOthers) && canEditMessageType;
     const canDeleteThis = isOwn || canModerateOthers;
     const attachments = Array.isArray(message.attachments) ? message.attachments : [];
@@ -126,7 +128,13 @@ const MessageItem = ({
                       end: activeInChatSearchMatch.end,
                   }
                 : null;
-        const typographySx = { whiteSpace: 'pre-wrap', wordBreak: 'break-word', ...sx };
+        const emojiOnly = isEmojiOnlyMessage(message.content);
+        const typographySx = {
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            ...(emojiOnly ? { fontSize: '2.25rem', lineHeight: 1.15 } : {}),
+            ...sx,
+        };
 
         return (
             <Typography variant="body1" sx={typographySx}>
@@ -158,6 +166,10 @@ const MessageItem = ({
     );
 
     const hasVisualMedia = images.length > 0 || videos.length > 0;
+
+    const handleOpenImage = (attachment) => {
+        onOpenImage?.(attachment);
+    };
 
     const openAttachment = async (attachment, { download = false } = {}) => {
         const blob = await chatService.getAttachmentBlob(attachment.id, { download });
@@ -471,7 +483,7 @@ const MessageItem = ({
                 isRead={Boolean(message.isRead)}
                 timestamp={showOverlay ? messageTime : null}
                 attachCaptionBelow={hasText}
-                onOpen={() => openAttachment(attachment, { download: false }).catch(() => {})}
+                onOpen={() => handleOpenImage(attachment)}
             />
         </Box>
     );
@@ -495,7 +507,7 @@ const MessageItem = ({
                             <ChatImageGridCell
                                 key={attachment.id}
                                 attachment={attachment}
-                                onOpen={() => openAttachment(attachment, { download: false }).catch(() => {})}
+                                onOpen={() => handleOpenImage(attachment)}
                             />
                         ))}
                     </Box>
@@ -796,6 +808,7 @@ const MessageItem = ({
                             editable={canEditThis}
                             onUpdate={handleRichUpdate}
                             onDelete={canDeleteThis ? () => handleDeleteMessage().catch(() => {}) : undefined}
+                            currentUserId={currentUserId}
                         />
 
                         <Box
@@ -890,7 +903,7 @@ const MessageItem = ({
                             isOwn={isOwn}
                             isRead={Boolean(message.isRead)}
                             timestamp={messageTime}
-                            onOpen={() => openAttachment(attachment, { download: false }).catch(() => {})}
+                            onOpen={() => handleOpenImage(attachment)}
                         />
                         <MessageReactionsRow
                             reactions={message.reactions}

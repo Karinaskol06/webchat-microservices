@@ -9,6 +9,11 @@ import org.springframework.stereotype.Component;
 public class PersonalSpacePayloadValidator {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private final PollPayloadHelper pollPayloadHelper;
+
+    public PersonalSpacePayloadValidator(PollPayloadHelper pollPayloadHelper) {
+        this.pollPayloadHelper = pollPayloadHelper;
+    }
 
     public void validate(MessageType type, String content) {
         if (type == null || !isRichMessageType(type)) {
@@ -30,6 +35,7 @@ public class PersonalSpacePayloadValidator {
             case TODO -> validateTodo(root);
             case STICKY_NOTE -> validateSticky(root);
             case CALLOUT -> validateCallout(root);
+            case POLL -> pollPayloadHelper.validatePollPayload(root);
             default -> throw new IllegalArgumentException("Unsupported rich message type.");
         }
     }
@@ -37,7 +43,8 @@ public class PersonalSpacePayloadValidator {
     public static boolean isRichMessageType(MessageType type) {
         return type == MessageType.TODO
                 || type == MessageType.STICKY_NOTE
-                || type == MessageType.CALLOUT;
+                || type == MessageType.CALLOUT
+                || type == MessageType.POLL;
     }
 
     private void validateTodo(JsonNode root) {

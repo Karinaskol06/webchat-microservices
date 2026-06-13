@@ -38,6 +38,7 @@ import CreateNewFolderOutlinedIcon from '@mui/icons-material/CreateNewFolderOutl
 import LinkIcon from '@mui/icons-material/Link';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
 import GroupsIcon from '@mui/icons-material/Groups';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -93,13 +94,24 @@ const ChatList = ({
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [deleteFolderTarget, setDeleteFolderTarget] = useState(null);
   const [draggingChatId, setDraggingChatId] = useState(null);
+  const [chatMenuAnchor, setChatMenuAnchor] = useState(null);
+  const [chatMenuTarget, setChatMenuTarget] = useState(null);
+  const [folderMenuAnchor, setFolderMenuAnchor] = useState(null);
   const previousUserIdRef = useRef(null);
+
+  const listMenuButtonSx = {
+    flexShrink: 0,
+    width: 40,
+    height: 40,
+    color: chatColors.glassPanelTextMuted,
+  };
 
   const folders = useChatFolderStore((s) => s.folders);
   const createFolder = useChatFolderStore((s) => s.createFolder);
   const deleteFolder = useChatFolderStore((s) => s.deleteFolder);
   const setActiveFolderId = useChatFolderStore((s) => s.setActiveFolderId);
   const getFolderIdForChat = useChatFolderStore((s) => s.getFolderIdForChat);
+  const assignChatToFolder = useChatFolderStore((s) => s.assignChatToFolder);
 
   const activeFolder = React.useMemo(
     () => folders.find((f) => f.id === activeFolderId) || null,
@@ -146,7 +158,13 @@ const ChatList = ({
         );
         const current = useChatStore.getState().currentChat;
         if (current?.id != null && !allowed.has(String(current.id))) {
-          useChatStore.getState().setCurrentChat(null);
+          const isPersonalSpace = String(current.type || '').toUpperCase() === 'PERSONAL_SPACE';
+          if (!isPersonalSpace) {
+            useChatStore.getState().setCurrentChat(null);
+          }
+          if (!isPersonalSpace) {
+            useChatStore.getState().setCurrentChat(null);
+          }
         }
       } catch (error) {
         console.error('Failed to load chats:', error);
@@ -255,6 +273,34 @@ const ChatList = ({
 
   const closeListMenu = () => {
     setMenuAnchor(null);
+  };
+
+  const openChatMenu = (event, chat) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setChatMenuAnchor(event.currentTarget);
+    setChatMenuTarget(chat);
+  };
+
+  const closeChatMenu = () => {
+    setChatMenuAnchor(null);
+    setChatMenuTarget(null);
+  };
+
+  const handleRemoveChatFromFolder = () => {
+    if (chatMenuTarget?.id && activeFolderId) {
+      assignChatToFolder(chatMenuTarget.id, null);
+    }
+    closeChatMenu();
+  };
+
+  const openFolderMenu = (event) => {
+    event.stopPropagation();
+    setFolderMenuAnchor(event.currentTarget);
+  };
+
+  const closeFolderMenu = () => {
+    setFolderMenuAnchor(null);
   };
 
   const listOptionsMenu = (
@@ -413,7 +459,7 @@ const ChatList = ({
     ? `No chats in “${activeFolder.name}”`
     : "You don't have any chats yet";
   const emptyHint = activeFolder
-    ? 'Drag chats from All chats into this folder using the sidebar, or switch views from the left rail.'
+    ? 'Use the menu on a chat to remove it from this folder, or add chats from All chats via drag-and-drop.'
     : 'Start a conversation, create a group or channel, or find users and public rooms.';
 
   const listSection =
@@ -477,6 +523,7 @@ const ChatList = ({
             <ListItem
               key={chat.id}
               draggable
+              disablePadding={Boolean(activeFolderId)}
               onDragStart={(e) => {
                 const id = String(chat.id);
                 e.dataTransfer.setData(CHAT_DRAG_TYPE, id);
@@ -487,9 +534,11 @@ const ChatList = ({
               onDragEnd={() => setDraggingChatId(null)}
               onClick={() => handleSelectChat(chat)}
               sx={{
-                mx: 1,
+                mx: activeFolderId ? 0 : 1,
                 mb: 0.5,
-                pr: 0.5,
+                px: activeFolderId ? 1.5 : undefined,
+                py: activeFolderId ? 0.75 : undefined,
+                pr: activeFolderId ? undefined : 0.5,
                 borderRadius: `${chatRadii.avatar}px`,
                 bgcolor: isSelected ? chatColors.surfaceMuted : muiTransparent,
                 opacity: isDragging ? 0.45 : 1,
@@ -500,6 +549,9 @@ const ChatList = ({
                 },
                 cursor: 'grab',
                 '&:active': { cursor: 'grabbing' },
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0,
               }}
             >
               <ListItemAvatar
@@ -563,6 +615,7 @@ const ChatList = ({
               </ListItemAvatar>
 
               <ListItemText
+                sx={{ flex: 1, minWidth: 0, my: 0, mr: unreadCount > 0 ? 0.75 : activeFolderId ? 0 : 0 }}
                 primary={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
                     {isChannel ? (
@@ -610,8 +663,7 @@ const ChatList = ({
                   aria-label={`${unreadCount} unread`}
                   sx={{
                     flexShrink: 0,
-                    ml: 0.75,
-                    mr: 1.25,
+                    mr: activeFolderId ? 0.5 : 1.25,
                     minWidth: 22,
                     height: 22,
                     px: 0.75,
@@ -628,6 +680,21 @@ const ChatList = ({
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </Box>
+              ) : null}
+
+              {activeFolderId ? (
+                <IconButton
+                  size="small"
+                  aria-label={`Options for ${otherUserName}`}
+                  onClick={(event) => openChatMenu(event, chat)}
+                  sx={{
+                    ...listMenuButtonSx,
+                    flexShrink: 0,
+                    '&:hover': { color: chatColors.glassPanelText, bgcolor: 'rgba(16, 8, 26, 0.06)' },
+                  }}
+                >
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
               ) : null}
             </ListItem>
           );
@@ -655,7 +722,6 @@ const ChatList = ({
               alignItems: 'center',
               gap: 0.75,
               mb: 1,
-              px: 0.5,
             }}
           >
             <FolderOutlinedIcon sx={{ fontSize: 20, color: chatColors.primary }} aria-hidden />
@@ -667,6 +733,17 @@ const ChatList = ({
             >
               {activeFolder.name}
             </Typography>
+            <IconButton
+              size="small"
+              aria-label={`Folder options for ${activeFolder.name}`}
+              onClick={openFolderMenu}
+              sx={{
+                ...listMenuButtonSx,
+                '&:hover': { color: chatColors.glassPanelText, bgcolor: 'rgba(16, 8, 26, 0.06)' },
+              }}
+            >
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
           </Box>
         ) : null}
         <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
@@ -694,24 +771,6 @@ const ChatList = ({
             }}
             inputProps={{ 'aria-label': 'Search chats' }}
           />
-          {activeFolder ? (
-            <Tooltip title={`Delete tab "${activeFolder.name}"`}>
-              <IconButton
-                aria-label={`Delete tab ${activeFolder.name}`}
-                onClick={() => setDeleteFolderTarget(activeFolder)}
-                sx={{
-                  flexShrink: 0,
-                  bgcolor: chatColors.surfaceMuted,
-                  borderRadius: `${chatRadii.pill}px`,
-                  width: 40,
-                  height: 40,
-                  color: 'error.main',
-                }}
-              >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          ) : null}
           <Tooltip title="Find users & rooms">
             <IconButton
               aria-label="Find users and rooms"
@@ -748,22 +807,24 @@ const ChatList = ({
               </Badge>
             </IconButton>
           </Tooltip>
-          <Tooltip title="Chat list options">
-            <IconButton
-              aria-label="Chat list options"
-              onClick={openListMenu}
-              sx={{
-                flexShrink: 0,
-                bgcolor: chatColors.surfaceMuted,
-                borderRadius: `${chatRadii.pill}px`,
-                width: 40,
-                height: 40,
-                color: chatColors.glassPanelText,
-              }}
-            >
-              <MoreVertIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {!activeFolder ? (
+            <Tooltip title="Chat list options">
+              <IconButton
+                aria-label="Chat list options"
+                onClick={openListMenu}
+                sx={{
+                  flexShrink: 0,
+                  bgcolor: chatColors.surfaceMuted,
+                  borderRadius: `${chatRadii.pill}px`,
+                  width: 40,
+                  height: 40,
+                  color: chatColors.glassPanelText,
+                }}
+              >
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          ) : null}
         </Box>
       </Box>
 
@@ -780,17 +841,57 @@ const ChatList = ({
 
       {listOptionsMenu}
 
+      <Menu
+        id="chat-folder-options-menu"
+        anchorEl={folderMenuAnchor}
+        open={Boolean(folderMenuAnchor)}
+        onClose={closeFolderMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{ paper: { sx: { minWidth: 200 } } }}
+      >
+        <MenuItem
+          onClick={() => {
+            closeFolderMenu();
+            if (activeFolder) setDeleteFolderTarget(activeFolder);
+          }}
+          sx={{ color: 'error.main' }}
+        >
+          <ListItemIcon sx={{ color: 'inherit' }}>
+            <DeleteOutlineIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Delete folder" />
+        </MenuItem>
+      </Menu>
+
+      <Menu
+        id="chat-folder-item-menu"
+        anchorEl={chatMenuAnchor}
+        open={Boolean(chatMenuAnchor)}
+        onClose={closeChatMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{ paper: { sx: { minWidth: 200 } } }}
+      >
+        <MenuItem onClick={handleRemoveChatFromFolder}>
+          <ListItemIcon>
+            <DriveFileMoveOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Remove from folder" />
+        </MenuItem>
+      </Menu>
+
       <Dialog
         open={Boolean(deleteFolderTarget)}
         onClose={() => setDeleteFolderTarget(null)}
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>Delete tab?</DialogTitle>
+        <DialogTitle>Delete folder?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Delete <strong>{deleteFolderTarget?.name}</strong>? Chats in this tab will stay in your
-            chat list — only the tab is removed.
+            Delete <strong>{deleteFolderTarget?.name}</strong>? Chats in this folder will stay in your
+            chat list — only the folder is removed.
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -808,7 +909,7 @@ const ChatList = ({
               setDeleteFolderTarget(null);
             }}
           >
-            Delete tab
+            Delete folder
           </Button>
         </DialogActions>
       </Dialog>

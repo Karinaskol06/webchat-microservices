@@ -49,6 +49,36 @@ export const categorizeAttachments = (attachments) => {
   return { photos, videos, files, audio, voice };
 };
 
+export const mergeAttachments = (existing, additions) => {
+  const seen = new Set(
+    (Array.isArray(existing) ? existing : []).map((a) => a?.id).filter(Boolean),
+  );
+  const merged = [...(Array.isArray(existing) ? existing : [])];
+  for (const attachment of Array.isArray(additions) ? additions : []) {
+    if (!attachment?.id || seen.has(attachment.id)) continue;
+    seen.add(attachment.id);
+    merged.unshift(attachment);
+  }
+  return merged;
+};
+
+export const mergeLinks = (existing, additions) => {
+  const seen = new Set(
+    (Array.isArray(existing) ? existing : []).map((item) => item?.url).filter(Boolean),
+  );
+  const merged = [...(Array.isArray(existing) ? existing : [])];
+  for (const link of Array.isArray(additions) ? additions : []) {
+    if (!link?.url || seen.has(link.url)) continue;
+    seen.add(link.url);
+    merged.unshift(link);
+  }
+  return merged.sort((a, b) => {
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tb - ta;
+  });
+};
+
 export const extractLinksFromMessages = (messages) => {
   const seen = new Set();
   const links = [];
@@ -92,4 +122,15 @@ export async function fetchMessagesForLinkScan(chatService, chatId, { maxPages =
   }
 
   return all;
+}
+
+export function liveMessagesMediaSignature(messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .map((msg) => {
+      const attachmentIds = (msg?.attachments || []).map((a) => a?.id).filter(Boolean).join(',');
+      const linkCount =
+        typeof msg?.content === 'string' ? (msg.content.match(URL_REGEX) || []).length : 0;
+      return `${msg?.id ?? ''}:${attachmentIds}:${linkCount}`;
+    })
+    .join('|');
 }
