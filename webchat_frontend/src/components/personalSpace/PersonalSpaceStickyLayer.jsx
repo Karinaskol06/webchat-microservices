@@ -109,7 +109,10 @@ const PersonalSpaceStickyLayer = ({ messages, currentUserId, viewportRef, conten
               messageId={messageId}
               payload={displayPayload}
               editable={isOwn}
-              onUpdate={(content) => persistSticky(messageId, content)}
+              onUpdate={(content) => {
+                updateMessageContent(messageId, content);
+                void persistSticky(messageId, content);
+              }}
               onDelete={
                 isOwn
                   ? () =>

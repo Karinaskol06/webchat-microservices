@@ -115,9 +115,7 @@ public class ChatMessageCommandService {
 
     @Transactional
     public ChatMessageDTO sendMessage(Long senderId, SendMessageRequest sendMessageRequest) {
-        boolean isParticipant = chatRoomRepository
-                .existsByIdAndMemberIdsContains(sendMessageRequest.getChatId(), senderId);
-        if (!isParticipant) {
+        if (!isUserChatMember(sendMessageRequest.getChatId(), senderId)) {
             throw new IllegalArgumentException("User is not a member of this chat.");
         }
 
@@ -202,8 +200,13 @@ public class ChatMessageCommandService {
                 .messageType(type)
                 .timestamp(LocalDateTime.now())
                 .isRead(false)
-                .forwardedFromUserId(forwardOrigin.userId())
+                .forwardedFromUserId(forwardOrigin.isRoom() ? null : forwardOrigin.userId())
                 .forwardedFromUsername(forwardOrigin.username())
+                .forwardedFromRoomId(forwardOrigin.isRoom() ? forwardOrigin.roomId() : null)
+                .forwardedFromRoomType(forwardOrigin.isRoom() && forwardOrigin.roomType() != null
+                        ? forwardOrigin.roomType().name()
+                        : null)
+                .forwardedFromRoomVisibility(forwardOrigin.isRoom() ? forwardOrigin.roomVisibility() : null)
                 .build());
 
         List<Attachment> newAttachments = new ArrayList<>();
@@ -364,6 +367,15 @@ public class ChatMessageCommandService {
 
         String chatId = toDelete.getChatId();
 
+        for (Attachment attachment : attachmentRepository.findByMessageId(messageId)) {
+            try {
+                fileStorageService.deleteFile(attachment.getId());
+            } catch (RuntimeException ex) {
+                log.warn("Failed to delete attachment {} for message {}", attachment.getId(), messageId, ex);
+                attachmentRepository.delete(attachment);
+            }
+        }
+
         chatMessageRepository.delete(toDelete);
         webSocketService.notifyMessageDeleted(messageId, chatId, actorId);
     }
@@ -480,8 +492,22 @@ public class ChatMessageCommandService {
     }
 
     public List<AttachmentDTO> listChatAttachmentsForRoom(String chatId) {
-        return attachmentRepository.findByChatId(chatId).stream()
+        List<Attachment> attachments = attachmentRepository.findByChatId(chatId).stream()
                 .filter(a -> a.getMessageId() != null && !a.getMessageId().isBlank())
+                .toList();
+        if (attachments.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> messageIds = attachments.stream()
+                .map(Attachment::getMessageId)
+                .collect(Collectors.toSet());
+        Set<String> existingMessageIds = chatMessageRepository.findAllById(messageIds).stream()
+                .map(ChatMessage::getId)
+                .collect(Collectors.toSet());
+
+        return attachments.stream()
+                .filter(a -> existingMessageIds.contains(a.getMessageId()))
                 .sorted(Comparator.comparing(
                         Attachment::getCreatedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
@@ -499,8 +525,7 @@ public class ChatMessageCommandService {
                         return false;
                     }
                     if (room.getType() == ChatType.PRIVATE) {
-                        Long otherId = userBanGuardService.getOtherPrivateChatMemberId(room, userId);
-                        return otherId == null || !userBanGuardService.hasBanned(userId, otherId);
+                        return !userBanGuardService.isPrivateChatBlocked(room, userId);
                     }
                     return true;
                 })

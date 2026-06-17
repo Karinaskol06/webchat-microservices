@@ -13,5 +13,7 @@ public interface UserBanRepository extends JpaRepository<UserBan, Long> {
 
     List<UserBan> findByUserIdOrderByCreatedAtDesc(Long userId);
 
+    List<UserBan> findByBannedUserIdOrderByCreatedAtDesc(Long bannedUserId);
+
     void deleteByUserIdAndBannedUserId(Long userId, Long bannedUserId);
 }

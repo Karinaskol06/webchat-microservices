@@ -15,6 +15,51 @@ import { ATTACHMENT_ACCEPT } from '../../utils/attachmentConstraints';
 
 const TYPING_NOTIFY_MS = 400;
 
+const FILE_NAME_EXT_BY_MIME = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+};
+
+const buildClipboardFileName = (file) => {
+  if (!file) return 'attachment.bin';
+  if (file.name && file.name.trim()) return file.name;
+  const ext = FILE_NAME_EXT_BY_MIME[file.type] || 'bin';
+  return `pasted-attachment-${Date.now()}.${ext}`;
+};
+
+const normalizeFileLike = (file) => {
+  if (!file) return null;
+  if (file.name && file.name.trim()) return file;
+  return new File([file], buildClipboardFileName(file), { type: file.type || 'application/octet-stream' });
+};
+
+const extractFilesFromDataTransfer = (dataTransfer) => {
+  if (!dataTransfer) return [];
+  const files = [];
+  const items = dataTransfer.items ? Array.from(dataTransfer.items) : [];
+
+  items.forEach((item) => {
+    if (item.kind !== 'file') return;
+    const file = item.getAsFile?.();
+    const normalized = normalizeFileLike(file);
+    if (normalized) files.push(normalized);
+  });
+
+  if (files.length === 0 && dataTransfer.files?.length) {
+    Array.from(dataTransfer.files).forEach((file) => {
+      const normalized = normalizeFileLike(file);
+      if (normalized) files.push(normalized);
+    });
+  }
+
+  return files;
+};
+
 const MessageInput = forwardRef(function MessageInput(
   {
     chatId,
@@ -42,6 +87,8 @@ const MessageInput = forwardRef(function MessageInput(
   const pinButtonRef = useRef(null);
   const [pinMenuOpen, setPinMenuOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [dropActive, setDropActive] = useState(false);
+  const [dropCounter, setDropCounter] = useState(0);
   const lastTypingNotifyRef = useRef(0);
 
   useEffect(() => {
@@ -102,6 +149,57 @@ const MessageInput = forwardRef(function MessageInput(
     const files = e.target.files;
     onSelectAttachments?.(files);
     e.target.value = '';
+  };
+
+  const handlePaste = (event) => {
+    if (channelReadOnly) return;
+    const files = extractFilesFromDataTransfer(event.clipboardData);
+    if (files.length === 0) return;
+    event.preventDefault();
+    onDismissComposerError?.();
+    onSelectAttachments?.(files);
+  };
+
+  const handleDragEnter = (event) => {
+    if (channelReadOnly) return;
+    if (!event.dataTransfer?.types?.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDropCounter((prev) => prev + 1);
+    setDropActive(true);
+  };
+
+  const handleDragOver = (event) => {
+    if (channelReadOnly) return;
+    if (!event.dataTransfer?.types?.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDragLeave = (event) => {
+    if (channelReadOnly) return;
+    if (!event.dataTransfer?.types?.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setDropCounter((prev) => {
+      const next = Math.max(0, prev - 1);
+      if (next === 0) setDropActive(false);
+      return next;
+    });
+  };
+
+  const handleDrop = (event) => {
+    if (channelReadOnly) return;
+    if (!event.dataTransfer?.types?.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const files = extractFilesFromDataTransfer(event.dataTransfer);
+    setDropCounter(0);
+    setDropActive(false);
+    if (files.length === 0) return;
+    onDismissComposerError?.();
+    onSelectAttachments?.(files);
   };
 
   const hasText = Boolean(draft.trim());
@@ -227,10 +325,11 @@ const MessageInput = forwardRef(function MessageInput(
           sx={{
             bgcolor: chatColors.composerInputBg,
             borderRadius: `${chatRadii.pill}px`,
-            border: '1px solid rgba(255, 255, 255, 0.12)',
+            border: dropActive ? '1px dashed rgba(155, 135, 255, 0.9)' : '1px solid rgba(255, 255, 255, 0.12)',
             px: 0.5,
             py: 0.5,
             transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+            boxShadow: dropActive ? '0 0 0 2px rgba(155, 135, 255, 0.22)' : undefined,
             '&:focus-within': {
               borderColor: 'rgba(255, 255, 255, 0.22)',
               boxShadow: '0 0 0 2px rgba(155, 135, 255, 0.2)',
@@ -242,6 +341,10 @@ const MessageInput = forwardRef(function MessageInput(
               opacity: 1,
             },
           }}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
           <input
             ref={fileInputRef}
@@ -293,6 +396,7 @@ const MessageInput = forwardRef(function MessageInput(
             value={draft}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             variant="standard"
             InputProps={{ disableUnderline: true }}
             sx={{

@@ -34,6 +34,7 @@ const MessageList = forwardRef(function MessageList(
     onReply,
     onOpenForward,
     onOpenForwardedProfile,
+    onOpenForwardedRoom,
     openSeparatorIndex = null,
     liveBeforeMessageId = null,
     scrollToMessageId = null,
@@ -221,6 +222,7 @@ const MessageList = forwardRef(function MessageList(
                 onReply={onReply}
                 onOpenForward={onOpenForward}
                 onOpenForwardedProfile={onOpenForwardedProfile}
+                onOpenForwardedRoom={onOpenForwardedRoom}
                 onJumpToMessage={handleJumpToMessage}
                 isHighlighted={
                   String(highlightedMessageId) === String(message.id ?? message._id) ||

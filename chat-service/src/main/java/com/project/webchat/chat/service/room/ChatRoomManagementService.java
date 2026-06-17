@@ -58,11 +58,13 @@ public class ChatRoomManagementService {
                 .findByMemberIdsContainsOrderByLastActivityDesc(userId, pageable);
 
         var bannedUserIds = userBanGuardService.getBannedUserIds(userId);
+        var banningUserIds = userBanGuardService.getBanningUserIds(userId);
 
         List<ChatRoomDTO> chatRooms = chatPage.getContent()
                 .stream()
                 .filter(chat -> chat.getType() != ChatType.PERSONAL_SPACE)
-                .filter(chat -> !userBanGuardService.isPrivateChatHiddenForViewer(chat, userId, bannedUserIds))
+                .filter(chat -> !userBanGuardService.isPrivateChatHiddenForViewer(
+                        chat, userId, bannedUserIds, banningUserIds))
                 .map(chat -> roomEnrichmentService.enrichChatWithUserData(
                         chat, userId, roomEnrichmentService.getUnreadCount(chat.getId(), userId), true))
                 .toList();
@@ -193,7 +195,7 @@ public class ChatRoomManagementService {
         if (room.getType() == ChatType.PRIVATE) {
             Long otherId = userBanGuardService.getOtherPrivateChatMemberId(room, userId);
             UserInfoDTO otherUser = otherId != null ? chatUserInfoService.getUserInfo(otherId) : null;
-            userBanGuardService.assertPrivateChatNotBannedByViewer(room, userId, otherUser);
+            userBanGuardService.assertPrivateChatAccessible(room, userId, otherUser);
         }
         return roomEnrichmentService.enrichChatWithUserData(
                 room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));
@@ -342,6 +344,7 @@ public class ChatRoomManagementService {
         }
         ChatRoom room = loadRoom(roomId);
         assertCanInviteMembers(room, actorId);
+        userBanGuardService.assertCanInviteUser(actorId, newMemberId);
         roomPermissionService.assertNotBanned(room, newMemberId);
         if (room.isMember(newMemberId)) {
             return roomEnrichmentService.enrichChatWithUserData(
@@ -475,6 +478,7 @@ public class ChatRoomManagementService {
         if (room.isMember(inviteeId)) {
             throw new IllegalArgumentException("That user is already a member");
         }
+        userBanGuardService.assertCanInviteUser(actorId, inviteeId);
         roomPermissionService.assertNotBanned(room, inviteeId);
         roomMemberInviteRepository
                 .findByRoomIdAndInviteeUserIdAndState(roomId, inviteeId, RoomMemberInviteState.PENDING)
@@ -543,6 +547,11 @@ public class ChatRoomManagementService {
         }
         Set<Long> members = new HashSet<>();
         if (request.getMemberIds() != null) {
+            for (Long memberId : request.getMemberIds()) {
+                if (memberId != null && !memberId.equals(creatorId)) {
+                    userBanGuardService.assertCanInviteUser(creatorId, memberId);
+                }
+            }
             members.addAll(request.getMemberIds());
         }
         members.remove(null);

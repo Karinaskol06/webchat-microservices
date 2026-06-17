@@ -82,4 +82,25 @@ class PersonalSpaceServiceTest {
         assertThat(result.getId()).isEqualTo("ps-new");
         verify(chatRoomRepository).save(any(ChatRoom.class));
     }
+
+    @Test
+    void createPersonalSpace_persistsDescription() {
+        var request = new CreatePersonalSpaceRequest();
+        request.setName("Work notes");
+        request.setDescription("  Project drafts  ");
+
+        when(chatRoomRepository.save(any(ChatRoom.class))).thenAnswer(invocation -> {
+            ChatRoom saved = invocation.getArgument(0);
+            saved.setId("ps-new");
+            assertThat(saved.getDescription()).isEqualTo("Project drafts");
+            return saved;
+        });
+        when(roomEnrichmentService.getUnreadCount("ps-new", 7L)).thenReturn(0);
+        when(roomEnrichmentService.enrichChatWithUserData(any(), eq(7L), eq(0)))
+                .thenReturn(com.project.webchat.chat.dto.ChatRoomDTO.builder().id("ps-new").build());
+
+        personalSpaceService.createPersonalSpace(7L, request);
+
+        verify(chatRoomRepository).save(any(ChatRoom.class));
+    }
 }

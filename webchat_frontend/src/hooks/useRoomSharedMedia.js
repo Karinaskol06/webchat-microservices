@@ -4,35 +4,50 @@ import chatService from '../services/chatService';
 import useChatStore from '../store/useChatStore';
 import {
   categorizeAttachments,
+  clearSharedMediaDeletionState,
   extractLinksFromMessages,
   fetchMessagesForLinkScan,
+  getSharedMediaDeletionState,
   liveMessagesMediaSignature,
   mergeAttachments,
   mergeLinks,
+  readSharedMediaCache,
+  reconcileAttachments,
+  reconcileLinks,
+  writeSharedMediaCache,
 } from '../utils/sharedMedia';
 
 const EMPTY_MESSAGES = [];
-const mediaCache = new Map();
 
-function readCache(roomId) {
-  if (!roomId) return null;
-  return mediaCache.get(String(roomId)) ?? null;
+function liveMessageAttachments(messages) {
+  return (Array.isArray(messages) ? messages : []).flatMap((msg) =>
+    Array.isArray(msg?.attachments) ? msg.attachments : [],
+  );
 }
 
-function writeCache(roomId, attachments, links) {
-  if (!roomId) return;
-  mediaCache.set(String(roomId), {
-    attachments: Array.isArray(attachments) ? attachments : [],
-    links: Array.isArray(links) ? links : [],
-  });
+function isActiveRoom(roomId) {
+  return String(useChatStore.getState().currentChat?.id) === String(roomId);
 }
 
-export function useRoomSharedMedia(roomId, { enabled = true } = {}) {
-  const cached = readCache(roomId);
-  const [loading, setLoading] = useState(Boolean(enabled && roomId && !cached));
+export function useRoomSharedMedia(roomId, { enabled = true, loadLinks = false } = {}) {
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [linksLoading, setLinksLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [attachments, setAttachments] = useState(() => cached?.attachments ?? []);
-  const [links, setLinks] = useState(() => cached?.links ?? []);
+  const [attachments, setAttachments] = useState([]);
+  const [links, setLinks] = useState([]);
+  const [trackedRoomId, setTrackedRoomId] = useState(roomId);
+  const attachmentsGenerationRef = useRef(0);
+  const linksGenerationRef = useRef(0);
+
+  if (roomId !== trackedRoomId) {
+    setTrackedRoomId(roomId);
+    const cached = readSharedMediaCache(roomId);
+    setAttachments(cached?.attachments ?? []);
+    setLinks(cached?.links ?? []);
+    setError(null);
+    setAttachmentsLoading(Boolean(enabled && roomId && !cached?.attachments?.length));
+    setLinksLoading(Boolean(enabled && roomId && loadLinks && !cached?.links?.length));
+  }
 
   const liveMessages = useChatStore(
     useShallow((state) =>
@@ -47,82 +62,159 @@ export function useRoomSharedMedia(roomId, { enabled = true } = {}) {
     [liveMessages],
   );
 
-  const load = useCallback(async () => {
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
-    if (!roomId) {
-      setAttachments([]);
-      setLinks([]);
-      setError(null);
-      setLoading(false);
+  const resetForRoom = useCallback((nextRoomId) => {
+    const cached = readSharedMediaCache(nextRoomId);
+    setAttachments(cached?.attachments ?? []);
+    setLinks(cached?.links ?? []);
+    setError(null);
+    return cached;
+  }, []);
+
+  const reloadAttachments = useCallback(async () => {
+    if (!enabled || !roomId) {
       return;
     }
 
-    const existing = readCache(roomId);
-    if (existing) {
-      setAttachments(existing.attachments);
-      setLinks(existing.links);
-    } else {
-      setLoading(true);
+    const generation = ++attachmentsGenerationRef.current;
+    const cached = readSharedMediaCache(roomId);
+    if (!cached?.attachments?.length) {
+      setAttachmentsLoading(true);
     }
     setError(null);
 
     try {
-      const [attachmentList, messages] = await Promise.all([
-        chatService.getChatAttachments(roomId),
-        fetchMessagesForLinkScan(chatService, roomId),
-      ]);
+      const attachmentList = await chatService.getChatAttachments(roomId);
+      if (generation !== attachmentsGenerationRef.current) return;
+
       const nextAttachments = Array.isArray(attachmentList) ? attachmentList : [];
-      const nextLinks = extractLinksFromMessages(messages);
-      setAttachments((prev) => mergeAttachments(nextAttachments, prev));
-      setLinks((prev) => mergeLinks(nextLinks, prev));
+      const live = isActiveRoom(roomId) ? useChatStore.getState().messages : [];
+      const merged = mergeAttachments(nextAttachments, liveMessageAttachments(live));
+      const reconciled = reconcileAttachments(merged, live, getSharedMediaDeletionState(roomId));
+
+      clearSharedMediaDeletionState(roomId);
+      setAttachments(reconciled);
     } catch (e) {
+      if (generation !== attachmentsGenerationRef.current) return;
       const message =
         typeof e === 'string' ? e : e?.message || 'Failed to load shared media';
       setError(message);
-      if (!existing) {
+      if (!cached) {
         setAttachments([]);
-        setLinks([]);
       }
     } finally {
-      setLoading(false);
+      if (generation === attachmentsGenerationRef.current) {
+        setAttachmentsLoading(false);
+      }
     }
   }, [roomId, enabled]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const reloadLinks = useCallback(async () => {
+    if (!enabled || !roomId || !loadLinks) {
+      return;
+    }
+
+    const generation = ++linksGenerationRef.current;
+    const cached = readSharedMediaCache(roomId);
+    if (!cached?.links?.length) {
+      setLinksLoading(true);
+    }
+
+    try {
+      const messages = await fetchMessagesForLinkScan(chatService, roomId);
+      if (generation !== linksGenerationRef.current) return;
+
+      const scannedLinks = extractLinksFromMessages(messages);
+      const liveLinks = isActiveRoom(roomId)
+        ? extractLinksFromMessages(useChatStore.getState().messages)
+        : [];
+      const merged = mergeLinks(scannedLinks, liveLinks);
+      const live = isActiveRoom(roomId) ? useChatStore.getState().messages : [];
+      const deletionState = getSharedMediaDeletionState(roomId);
+      setLinks(reconcileLinks(merged, live, deletionState));
+    } catch {
+      if (generation !== linksGenerationRef.current) return;
+      if (!cached) {
+        setLinks([]);
+      }
+    } finally {
+      if (generation === linksGenerationRef.current) {
+        setLinksLoading(false);
+      }
+    }
+  }, [roomId, enabled, loadLinks]);
+
+  const reload = useCallback(async () => {
+    await Promise.all([reloadAttachments(), reloadLinks()]);
+  }, [reloadAttachments, reloadLinks]);
 
   useEffect(() => {
-    if (!roomId || !enabled || !liveMediaSignature) {
+    attachmentsGenerationRef.current += 1;
+    linksGenerationRef.current += 1;
+
+    if (!enabled || !roomId) {
+      setAttachments([]);
+      setLinks([]);
+      setError(null);
+      setAttachmentsLoading(false);
+      setLinksLoading(false);
       return undefined;
     }
 
-    const messageAttachments = liveMessages.flatMap((msg) =>
-      Array.isArray(msg?.attachments) ? msg.attachments : [],
-    );
-    const messageLinks = extractLinksFromMessages(liveMessages);
+    const cached = resetForRoom(roomId);
+    setAttachmentsLoading(!cached?.attachments?.length);
+    setLinksLoading(loadLinks && !cached?.links?.length);
+    void reloadAttachments();
+    return undefined;
+  }, [roomId, enabled, resetForRoom, reloadAttachments]);
+
+  useEffect(() => {
+    if (!enabled || !roomId || !loadLinks) {
+      setLinksLoading(false);
+      return undefined;
+    }
+
+    const cached = readSharedMediaCache(roomId);
+    if (!cached?.links?.length) {
+      setLinksLoading(true);
+    }
+    void reloadLinks();
+    return () => {
+      linksGenerationRef.current += 1;
+    };
+  }, [roomId, enabled, loadLinks, reloadLinks]);
+
+  useEffect(() => {
+    if (!roomId || !enabled) {
+      return undefined;
+    }
+
+    const deletionState = getSharedMediaDeletionState(roomId);
 
     setAttachments((prev) => {
-      const merged = mergeAttachments(prev, messageAttachments);
-      return merged.length === prev.length ? prev : merged;
+      const nextAttachments = reconcileAttachments(prev, liveMessages, deletionState);
+      return nextAttachments.length === prev.length &&
+        nextAttachments.every((item, index) => item?.id === prev[index]?.id)
+        ? prev
+        : nextAttachments;
     });
 
     setLinks((prev) => {
-      const merged = mergeLinks(prev, messageLinks);
-      return merged.length === prev.length ? prev : merged;
+      const nextLinks = reconcileLinks(prev, liveMessages, deletionState);
+      return nextLinks.length === prev.length &&
+        nextLinks.every((item, index) => item?.url === prev[index]?.url)
+        ? prev
+        : nextLinks;
     });
   }, [roomId, enabled, liveMediaSignature, liveMessages]);
 
   useEffect(() => {
-    if (roomId && (attachments.length > 0 || links.length > 0)) {
-      writeCache(roomId, attachments, links);
+    if (roomId) {
+      writeSharedMediaCache(roomId, attachments, links);
     }
   }, [roomId, attachments, links]);
 
   const media = useMemo(() => categorizeAttachments(attachments), [attachments]);
+  const loading = attachmentsLoading || (loadLinks && linksLoading);
 
-  return { loading, error, media, links, reload: load };
+  return { loading, error, media, links, reload };
 }

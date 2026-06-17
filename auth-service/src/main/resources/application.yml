@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: auth-service
+  config:
+    # Load repo-level .env when running auth-service directly from IDE/Maven in dev mode.
+    import: optional:file:../.env[.properties]
   cloud:
     openfeign:
       enabled: true

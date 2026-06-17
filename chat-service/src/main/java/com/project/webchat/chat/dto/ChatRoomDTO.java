@@ -68,7 +68,9 @@ public class ChatRoomDTO {
                 .createdBy(chatRoom.getCreatedBy())
                 .memberCount(chatRoom.getMemberIds() != null ? chatRoom.getMemberIds().size() : 0);
 
-        if (chatRoom.getType() == ChatType.GROUP || chatRoom.getType() == ChatType.CHANNEL) {
+        if (chatRoom.getType() == ChatType.GROUP
+                || chatRoom.getType() == ChatType.CHANNEL
+                || chatRoom.getType() == ChatType.PERSONAL_SPACE) {
             builder.groupName(chatRoom.getGroupName());
             builder.groupPhoto(chatRoom.getGroupPhoto());
             builder.description(chatRoom.getDescription());

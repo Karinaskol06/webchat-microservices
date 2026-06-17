@@ -9,6 +9,11 @@ import {
   glassCountryDropdownPaperSx,
   glassFieldSx,
 } from "../auth/authPageTheme";
+import {
+  chatDetailDropdownListboxSx,
+  chatDetailDropdownOptionSx,
+  chatDetailDropdownPaperSx,
+} from "../../theme/chatDesignTokens";
 
 const optionLabel = (o) => `${o.label} (${o.dial})`;
 
@@ -26,7 +31,10 @@ export default function PhoneCountryField({
   onChange,
   disabled,
   glass = false,
+  variant = glass ? "glass" : "default",
 }) {
+  const isGlass = variant === "glass";
+  const isDetail = variant === "detail";
   const [national, setNational] = useState("");
 
   const selected = useMemo(() => {
@@ -41,7 +49,7 @@ export default function PhoneCountryField({
 
   const full = combinePhone(selected.dial, national);
   const showError = national.length > 0 && !isValidInternationalPhone(full);
-  const helper = showError ? "Wrong phone number format" : glass ? undefined : PHONE_FORMAT_HINT;
+  const helper = showError ? "Wrong phone number format" : isGlass ? undefined : PHONE_FORMAT_HINT;
 
   const emit = (nextIso, nextNational) => {
     const opt = COUNTRY_PHONE_OPTIONS.find((o) => o.iso === nextIso) || COUNTRY_PHONE_OPTIONS.find((o) => o.iso === "UA");
@@ -49,14 +57,40 @@ export default function PhoneCountryField({
     onChange({ phoneNumber: combined, countryCode: opt.iso });
   };
 
-  const fieldSx = glass ? glassFieldSx : undefined;
-  const autoSx = glass ? glassAutocompleteSx : undefined;
+  const fieldSx = isGlass ? glassFieldSx : undefined;
+  const autoSx = isGlass ? glassAutocompleteSx : undefined;
+
+  const dropdownSlotProps = isGlass
+    ? {
+        popper: { sx: { zIndex: 1500 } },
+        paper: { sx: glassCountryDropdownPaperSx },
+        listbox: { sx: glassCountryDropdownListboxSx },
+      }
+    : isDetail
+      ? {
+          popper: { sx: { zIndex: 1500 } },
+          paper: { sx: chatDetailDropdownPaperSx },
+          listbox: { sx: chatDetailDropdownListboxSx },
+        }
+      : {
+          listbox: {
+            sx: {
+              maxHeight: 320,
+              ...authHideScrollbarSx,
+            },
+          },
+        };
+
+  const optionSx = isGlass
+    ? glassCountryDropdownOptionSx
+    : isDetail
+      ? chatDetailDropdownOptionSx
+      : undefined;
 
   return (
     <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
       <Autocomplete
-        size="small"
-        sx={{ width: glass ? 148 : 200, flexShrink: 0, ...autoSx }}
+        sx={{ width: isGlass ? 148 : 200, flexShrink: 0, ...autoSx }}
         disabled={disabled}
         options={COUNTRY_PHONE_OPTIONS}
         getOptionLabel={optionLabel}
@@ -66,22 +100,7 @@ export default function PhoneCountryField({
           if (!opt) return;
           emit(opt.iso, national);
         }}
-        slotProps={
-          glass
-            ? {
-                popper: { sx: { zIndex: 1500 } },
-                paper: { sx: glassCountryDropdownPaperSx },
-                listbox: { sx: glassCountryDropdownListboxSx },
-              }
-            : {
-                listbox: {
-                  sx: {
-                    maxHeight: 320,
-                    ...authHideScrollbarSx,
-                  },
-                },
-              }
-        }
+        slotProps={dropdownSlotProps}
         renderOption={(props, option) => {
           const { key, ...optionProps } = props;
           return (
@@ -89,7 +108,7 @@ export default function PhoneCountryField({
               component="li"
               key={key}
               {...optionProps}
-              sx={glass ? glassCountryDropdownOptionSx : undefined}
+              sx={optionSx}
             >
               {optionLabel(option)}
             </Box>
@@ -98,9 +117,9 @@ export default function PhoneCountryField({
         renderInput={(params) => (
           <TextField
             {...params}
-            hiddenLabel={glass}
-            label={glass ? undefined : "Country"}
-            placeholder={glass ? "Country" : undefined}
+            hiddenLabel={isGlass}
+            label={isGlass ? undefined : "Country"}
+            placeholder={isGlass ? "Country" : undefined}
             inputProps={{
               ...params.inputProps,
               readOnly: true,
@@ -111,9 +130,9 @@ export default function PhoneCountryField({
       />
       <TextField
         fullWidth
-        hiddenLabel={glass}
-        label={glass ? undefined : label}
-        placeholder={glass ? "Phone number" : undefined}
+        hiddenLabel={isGlass}
+        label={isGlass ? undefined : label}
+        placeholder={isGlass ? "Phone number" : undefined}
         value={national}
         disabled={disabled}
         onChange={(e) => {

@@ -16,6 +16,6 @@ public class UserBanException extends RuntimeException {
 
     private static String buildMessage(String displayName) {
         String name = displayName != null && !displayName.isBlank() ? displayName.trim() : "this user";
-        return "You have banned " + name + ". Unban them from their profile to restore your private chat.";
+        return "You have banned " + name + ". Unban them from Settings to restore your private chat.";
     }
 }

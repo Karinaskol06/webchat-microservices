@@ -2,12 +2,14 @@ package com.project.webchat.chat.service.support;
 
 import com.project.webchat.chat.dto.AttachmentDTO;
 import com.project.webchat.chat.dto.ChatMessageDTO;
+import com.project.webchat.chat.dto.ForwardedRoomDTO;
 import com.project.webchat.chat.dto.MessageReactionDTO;
 import com.project.webchat.chat.dto.ReplyPreviewDTO;
 import com.project.webchat.chat.entity.Attachment;
 import com.project.webchat.chat.entity.ChatMessage;
 import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
+import com.project.webchat.chat.entity.RoomVisibility;
 import com.project.webchat.chat.entity.MessageReaction;
 import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
@@ -56,7 +58,7 @@ public class ChatMessageMapper {
 
         dto.setAttachments(new ArrayList<>(attachmentMap.values()));
         dto.setRepliedMessage(buildReplyPreview(message));
-        enrichForwardedFrom(message, dto);
+        enrichForwardMetadata(message, dto);
         dto.setReactions(toReactionDtos(message.getReactions(), viewerUserId));
         return dto;
     }
@@ -103,10 +105,14 @@ public class ChatMessageMapper {
             if (roomType == ChatType.GROUP || roomType == ChatType.CHANNEL) {
                 String roomName = sourceRoom.getGroupName();
                 if (roomName != null && !roomName.isBlank()) {
-                    Long originAuthorId = source.getForwardedFromUserId() != null
-                            ? source.getForwardedFromUserId()
-                            : source.getSenderId();
-                    return new ForwardOrigin(originAuthorId, roomName.trim());
+                    RoomVisibility visibility = sourceRoom.getVisibility() != null
+                            ? sourceRoom.getVisibility()
+                            : RoomVisibility.PRIVATE;
+                    return ForwardOrigin.fromRoom(
+                            sourceRoom.getId(),
+                            roomName.trim(),
+                            roomType,
+                            visibility.name());
                 }
             }
         }
@@ -128,7 +134,7 @@ public class ChatMessageMapper {
             username = source.getSenderName() != null ? source.getSenderName() : "Unknown";
         }
 
-        return new ForwardOrigin(originAuthorId, username);
+        return ForwardOrigin.fromUser(originAuthorId, username);
     }
 
     private ReplyPreviewDTO buildReplyPreview(ChatMessage message) {
@@ -159,7 +165,22 @@ public class ChatMessageMapper {
                 .build();
     }
 
-    private void enrichForwardedFrom(ChatMessage message, ChatMessageDTO dto) {
+    private void enrichForwardMetadata(ChatMessage message, ChatMessageDTO dto) {
+        if (message.getForwardedFromRoomId() != null && !message.getForwardedFromRoomId().isBlank()) {
+            dto.setForwardedFromRoom(ForwardedRoomDTO.builder()
+                    .id(message.getForwardedFromRoomId())
+                    .name(message.getForwardedFromUsername())
+                    .type(message.getForwardedFromRoomType())
+                    .visibility(message.getForwardedFromRoomVisibility())
+                    .build());
+            if (message.getForwardedFromUsername() != null && !message.getForwardedFromUsername().isBlank()) {
+                dto.setForwardedFrom(UserInfoDTO.builder()
+                        .username(message.getForwardedFromUsername())
+                        .build());
+            }
+            return;
+        }
+
         if (message.getForwardedFromUserId() == null) {
             return;
         }
@@ -177,5 +198,23 @@ public class ChatMessageMapper {
         dto.setForwardedFrom(forwarded);
     }
 
-    public record ForwardOrigin(Long userId, String username) {}
+    public record ForwardOrigin(
+            Long userId,
+            String username,
+            String roomId,
+            ChatType roomType,
+            String roomVisibility) {
+
+        public static ForwardOrigin fromUser(Long userId, String username) {
+            return new ForwardOrigin(userId, username, null, null, null);
+        }
+
+        public static ForwardOrigin fromRoom(String roomId, String roomName, ChatType roomType, String visibility) {
+            return new ForwardOrigin(null, roomName, roomId, roomType, visibility);
+        }
+
+        public boolean isRoom() {
+            return roomId != null && !roomId.isBlank();
+        }
+    }
 }

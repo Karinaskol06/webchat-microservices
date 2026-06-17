@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Box, IconButton, TextField, Typography } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { STICKY_NOTE_COLORS, serializePayload } from '../../utils/personalSpace';
@@ -18,9 +18,18 @@ const StickyNoteMessage = ({
   contentRef,
 }) => {
   const [dragging, setDragging] = useState(false);
+  const [textFocused, setTextFocused] = useState(false);
+  const [localColor, setLocalColor] = useState(null);
   const rafRef = useRef(null);
   const pendingMoveRef = useRef(null);
-  const color = payload?.color || STICKY_NOTE_COLORS[0];
+  const payloadColor = payload?.color || STICKY_NOTE_COLORS[0];
+  const color = localColor ?? payloadColor;
+
+  useEffect(() => {
+    if (localColor != null && payloadColor === localColor) {
+      setLocalColor(null);
+    }
+  }, [localColor, payloadColor]);
 
   const {
     draft: draftText,
@@ -71,9 +80,14 @@ const StickyNoteMessage = ({
     });
   };
 
+  const handleColorChange = (nextColor) => {
+    setLocalColor(nextColor);
+    onUpdate?.(serializePayload({ ...payload, text: draftText, color: nextColor }));
+  };
+
   const handlePointerDown = (e) => {
     if (!floating || !editable || !onDragEnd) return;
-    if (e.target.closest('textarea, input, button')) return;
+    if (e.target.closest('textarea, input, button, [role="button"], [data-sticky-no-drag]')) return;
     e.preventDefault();
 
     const stickyRect = e.currentTarget.getBoundingClientRect();
@@ -122,7 +136,12 @@ const StickyNoteMessage = ({
           : '0 4px 14px rgba(0,0,0,0.12), 2px 3px 0 rgba(0,0,0,0.06)',
         transform: dragging ? 'rotate(-1deg) scale(1.02)' : 'rotate(-0.5deg)',
         transition: dragging ? 'none' : 'box-shadow 0.2s ease, transform 0.2s ease',
-        cursor: floating && editable ? (dragging ? 'grabbing' : 'grab') : 'default',
+        cursor:
+          floating && editable && !textFocused
+            ? dragging
+              ? 'grabbing'
+              : 'grab'
+            : 'default',
         userSelect: dragging ? 'none' : 'auto',
         position: 'relative',
         touchAction: floating && editable ? 'none' : 'auto',
@@ -158,16 +177,28 @@ const StickyNoteMessage = ({
           placeholder="Write a note…"
           value={draftText}
           onChange={(e) => setDraftText(e.target.value)}
-          onFocus={onTextFocus}
-          onBlur={() => onTextBlur(flushText)}
+          onFocus={() => {
+            setTextFocused(true);
+            onTextFocus();
+          }}
+          onBlur={() => {
+            setTextFocused(false);
+            onTextBlur(flushText);
+          }}
           variant="standard"
           InputProps={{ disableUnderline: true }}
           sx={{
             mt: 2,
+            cursor: 'text',
+            '& .MuiInputBase-root': {
+              cursor: 'text',
+            },
             '& .MuiInputBase-input': {
               fontFamily: '"Segoe Print", "Comic Sans MS", cursive, sans-serif',
               fontSize: '0.95rem',
               color: '#1a1a1a',
+              cursor: 'text',
+              caretColor: '#1a1a1a',
             },
           }}
         />
@@ -187,17 +218,19 @@ const StickyNoteMessage = ({
       )}
 
       {editable ? (
-        <Box display="flex" gap={0.5} mt={1} flexWrap="wrap">
+        <Box display="flex" gap={0.5} mt={1} flexWrap="wrap" data-sticky-no-drag>
           {STICKY_NOTE_COLORS.map((c) => (
             <Box
               key={c}
               role="button"
               tabIndex={0}
               aria-label={`Note color ${c}`}
-              onClick={() => onUpdate?.(serializePayload({ ...payload, text: draftText, color: c }))}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => handleColorChange(c)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
-                  onUpdate?.(serializePayload({ ...payload, text: draftText, color: c }));
+                  e.preventDefault();
+                  handleColorChange(c);
                 }
               }}
               sx={{

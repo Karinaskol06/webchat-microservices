@@ -9,7 +9,9 @@ import com.project.webchat.shared.dto.ResetPasswordRequestDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,6 +52,18 @@ class PasswordResetServiceTest {
         assertThat(response.getMessage()).isEqualTo(properties.getPublicMessage());
         assertThat(mailSender.sent).isEmpty();
         assertThat(tokenRepository.tokens).isEmpty();
+    }
+
+    @Test
+    void requestPasswordReset_userNotFoundViaResponseStatusException_returnsGenericMessage() {
+        userServiceClient.emailLookupException = new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "Resource not found in user service");
+
+        MessageResponseDTO response = passwordResetService.requestPasswordReset(
+                ForgotPasswordRequestDTO.builder().email("unknown@example.com").build());
+
+        assertThat(response.getMessage()).isEqualTo(properties.getPublicMessage());
+        assertThat(mailSender.sent).isEmpty();
     }
 
     @Test
@@ -151,17 +165,22 @@ class PasswordResetServiceTest {
 
     private static final class FakeUserServiceClient implements UserServiceClient {
         private ResponseEntity<UserDTO> emailLookupResult = ResponseEntity.notFound().build();
+        private RuntimeException emailLookupException;
         private ResponseEntity<Void> resetResult = ResponseEntity.noContent().build();
         private ResetPasswordInternalDTO lastResetRequest;
 
         void clear() {
             emailLookupResult = ResponseEntity.notFound().build();
+            emailLookupException = null;
             resetResult = ResponseEntity.noContent().build();
             lastResetRequest = null;
         }
 
         @Override
         public ResponseEntity<UserDTO> getUserByEmail(String email) {
+            if (emailLookupException != null) {
+                throw emailLookupException;
+            }
             return emailLookupResult;
         }
 

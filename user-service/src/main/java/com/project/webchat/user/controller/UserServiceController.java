@@ -262,6 +262,11 @@ public class UserServiceController {
         return ResponseEntity.ok(userBanService.listBannedUserIds(userId));
     }
 
+    @GetMapping("/internal/{userId}/banning-user-ids")
+    public ResponseEntity<java.util.List<Long>> getBanningUserIdsInternal(@PathVariable Long userId) {
+        return ResponseEntity.ok(userBanService.listBanningUserIds(userId));
+    }
+
     @GetMapping("/internal/{userId}/has-banned/{targetUserId}")
     public ResponseEntity<Boolean> hasBannedInternal(
             @PathVariable Long userId,

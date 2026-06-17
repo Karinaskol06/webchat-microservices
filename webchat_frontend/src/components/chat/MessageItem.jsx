@@ -41,6 +41,11 @@ import { isEmojiOnlyMessage } from '../../utils/chatDisplay';
 import { countUserReactions, MAX_REACTIONS_PER_USER } from '../../utils/messageReactions';
 import RichMessageContent from '../personalSpace/RichMessageContent';
 import { getMessageCopyText, isRichMessageType } from '../../utils/personalSpace';
+import {
+  forwardedSourceLabel,
+  isForwardedFromRoom,
+  isForwardedSourceClickable,
+} from '../../utils/forwardedMessage';
 import UserAvatar from '../user/UserAvatar';
 
 /** Larger previews; landscape uses bubble width, portrait shrinks to stay on-screen. */
@@ -69,6 +74,7 @@ const MessageItem = ({
     onReply,
     onOpenForward,
     onOpenForwardedProfile,
+    onOpenForwardedRoom,
     onJumpToMessage,
     isHighlighted,
     hideReplyActions = false,
@@ -151,10 +157,9 @@ const MessageItem = ({
         );
     };
     const forwardedFrom = message.forwardedFrom;
-    const forwardedDisplayName =
-        forwardedFrom?.username ||
-        forwardedFrom?.firstName ||
-        (forwardedFrom?.id != null ? `User #${forwardedFrom.id}` : '');
+    const forwardedFromRoom = message.forwardedFromRoom;
+    const forwardedDisplayName = forwardedSourceLabel(message);
+    const forwardedClickable = isForwardedSourceClickable(message);
 
     // grouping attachments
     const images = attachments.filter(a => a.isImage || a.fileType === 'IMAGE');
@@ -294,6 +299,10 @@ const MessageItem = ({
     const handleForwardedNameClick = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (isForwardedFromRoom(message)) {
+            onOpenForwardedRoom?.(forwardedFromRoom);
+            return;
+        }
         if (forwardedFrom?.id != null) {
             onOpenForwardedProfile?.(forwardedFrom);
         }
@@ -785,16 +794,16 @@ const MessageItem = ({
                             </Typography>
                         )}
 
-                        {forwardedFrom && (
+                        {(forwardedFrom || forwardedFromRoom) && (
                             <Box
                                 sx={{
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: 0.5,
                                     mb: 0.75,
-                                    cursor: forwardedDisplayName ? 'pointer' : 'default',
+                                    cursor: forwardedClickable ? 'pointer' : 'default',
                                 }}
-                                onClick={() => forwardedFrom && onOpenForwardedProfile?.(forwardedFrom)}
+                                onClick={forwardedClickable ? handleForwardedNameClick : undefined}
                             >
                                 <ForwardIcon sx={{ fontSize: 14, opacity: 0.7 }} />
                                 <Typography variant="caption" color="text.secondary">
@@ -1012,7 +1021,7 @@ const MessageItem = ({
                         }),
                     }}
                 >
-                    {forwardedFrom && forwardedDisplayName && (
+                    {(forwardedFrom || forwardedFromRoom) && forwardedDisplayName && (
                         <Box
                             sx={{
                                 display: 'flex',
@@ -1028,7 +1037,7 @@ const MessageItem = ({
                             <ForwardIcon sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
                             <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.35 }}>
                                 Forwarded from{' '}
-                                {onOpenForwardedProfile && forwardedFrom?.id != null ? (
+                                {forwardedClickable ? (
                                     <Link
                                         component="button"
                                         type="button"

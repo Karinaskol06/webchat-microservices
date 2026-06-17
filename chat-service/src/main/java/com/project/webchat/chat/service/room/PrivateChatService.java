@@ -64,12 +64,9 @@ public class PrivateChatService {
 
         UserInfoDTO otherUser = chatUserInfoService.getUserInfo(userId2);
 
-        userBanGuardService.assertPrivateChatNotBannedByViewer(
-
+        userBanGuardService.assertPrivateChatAccessible(
                 ChatRoom.builder().type(ChatType.PRIVATE).memberIds(Set.of(userId1, userId2)).build(),
-
                 userId1,
-
                 otherUser);
 
 

@@ -64,6 +64,14 @@ public class UserBanService {
     }
 
     @Transactional(readOnly = true)
+    public List<Long> listBanningUserIds(Long userId) {
+        return userBanRepository.findByBannedUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(UserBan::getUserId)
+                .distinct()
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public boolean hasBanned(Long userId, Long targetUserId) {
         if (userId == null || targetUserId == null || userId.equals(targetUserId)) {
             return false;

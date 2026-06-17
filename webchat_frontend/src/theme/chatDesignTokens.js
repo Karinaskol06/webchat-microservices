@@ -59,6 +59,23 @@ export const chatRadii = {
   avatar: 14,
 };
 
+export const chatUnreadCountBadgeSx = {
+  flexShrink: 0,
+  minWidth: 22,
+  height: 22,
+  px: 0.75,
+  borderRadius: 11,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  bgcolor: chatColors.unreadBadge,
+  color: '#fff',
+  fontSize: '0.75rem',
+  fontWeight: 700,
+  lineHeight: 1,
+  transform: 'translateX(-6px)',
+};
+
 export const chatShadows = {
   panel: '0 12px 40px rgba(26, 20, 60, 0.32)',
   panelSoft: '0 8px 24px rgba(0, 0, 0, 0.28)',
@@ -231,6 +248,41 @@ export const chatMenuSlotProps = {
   },
   paper: {
     sx: chatMenuPaperSx,
+  },
+};
+
+/** Country-code Autocomplete panel on profile / detail dialogs. */
+export const chatDetailDropdownPaperSx = {
+  mt: 0.75,
+  borderRadius: `${chatRadii.panel}px`,
+  border: '1px solid rgba(255, 255, 255, 0.16)',
+  background: 'rgba(14, 8, 34, 0.97)',
+  backdropFilter: 'blur(22px)',
+  WebkitBackdropFilter: 'blur(22px)',
+  boxShadow: '0 16px 48px rgba(8, 4, 22, 0.58)',
+  color: chatColors.textPrimary,
+  backgroundImage: 'none',
+  ...chatHideScrollbarSx,
+};
+
+export const chatDetailDropdownListboxSx = {
+  maxHeight: 320,
+  py: 0.5,
+  ...chatHideScrollbarSx,
+};
+
+export const chatDetailDropdownOptionSx = {
+  color: chatColors.textPrimary,
+  fontSize: '0.875rem',
+  minHeight: 40,
+  '&[aria-selected="true"]': {
+    bgcolor: 'rgba(255, 255, 255, 0.12) !important',
+  },
+  '&.Mui-focused': {
+    bgcolor: 'rgba(255, 255, 255, 0.08) !important',
+  },
+  '&:active': {
+    bgcolor: 'rgba(255, 255, 255, 0.1) !important',
   },
 };
 

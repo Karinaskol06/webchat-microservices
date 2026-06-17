@@ -11,6 +11,7 @@ import feign.FeignException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -57,12 +58,17 @@ public class PasswordResetService {
             String resetLink = buildResetLink(token);
             mailSender.sendPasswordResetEmail(email, resetLink);
         } catch (FeignException e) {
-            if (e.status() == HttpStatus.NOT_FOUND.value()) {
+            if (isUserNotFound(e.status())) {
                 return genericSuccessResponse();
             }
             log.error("User service error during password reset request: {}", e.getMessage());
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Password reset is temporarily unavailable");
+        } catch (ResponseStatusException e) {
+            if (isUserNotFound(e.getStatusCode())) {
+                return genericSuccessResponse();
+            }
+            throw e;
         } catch (Exception e) {
             log.error("Unexpected error during password reset request", e);
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
@@ -116,6 +122,14 @@ public class PasswordResetService {
 
     private static String normalizeEmail(String email) {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean isUserNotFound(int status) {
+        return status == HttpStatus.NOT_FOUND.value();
+    }
+
+    private static boolean isUserNotFound(HttpStatusCode status) {
+        return status != null && status.value() == HttpStatus.NOT_FOUND.value();
     }
 
     private static String generateToken() {

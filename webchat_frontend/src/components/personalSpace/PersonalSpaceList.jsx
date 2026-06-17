@@ -27,7 +27,13 @@ import SearchIcon from '@mui/icons-material/Search';
 import chatService from '../../services/chatService';
 import { getApiErrorMessage } from '../../services/api';
 import useChatStore, { reorderChatsByRecent } from '../../store/useChatStore';
-import { chatColors, chatGlassFieldPanelSx, chatRadii, muiTransparent } from '../../theme/chatDesignTokens';
+import {
+  chatColors,
+  chatGlassFieldPanelSx,
+  chatRadii,
+  chatUnreadCountBadgeSx,
+  muiTransparent,
+} from '../../theme/chatDesignTokens';
 import UserAvatar from '../user/UserAvatar';
 import { resolveRoomAvatarSrc } from '../../utils/userAvatar';
 import { getMessagePreviewText } from '../../utils/personalSpace';
@@ -259,19 +265,8 @@ const PersonalSpaceList = ({
                     <Box
                       component="span"
                       sx={{
-                        flexShrink: 0,
-                        mr: 0.5,
-                        minWidth: 22,
-                        height: 22,
-                        px: 0.75,
-                        borderRadius: 11,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        bgcolor: chatColors.unreadBadge,
-                        color: '#fff',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
+                        ...chatUnreadCountBadgeSx,
+                        mr: 0.75,
                       }}
                     >
                       {unreadCount > 99 ? '99+' : unreadCount}

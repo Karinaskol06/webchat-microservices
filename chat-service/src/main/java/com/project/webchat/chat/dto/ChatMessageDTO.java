@@ -29,8 +29,11 @@ public class ChatMessageDTO {
     private String replyToMessageId;
     private ReplyPreviewDTO repliedMessage;
 
-    /** Present when this message was forwarded; click opens original author's profile. */
+    /** Present when this message was forwarded from another user. */
     private UserInfoDTO forwardedFrom;
+
+    /** Present when this message was forwarded from a group or channel. */
+    private ForwardedRoomDTO forwardedFromRoom;
 
     //for websocket (MESSAGE, WRITING, READ_RECEIPT)
     private String type;

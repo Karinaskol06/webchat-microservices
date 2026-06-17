@@ -25,13 +25,16 @@ import ContactsOutlinedIcon from '@mui/icons-material/ContactsOutlined';
 import PersonAddAlt1OutlinedIcon from '@mui/icons-material/PersonAddAlt1Outlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
+import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 import AccountCredentialsPanel from '../settings/AccountCredentialsPanel';
 import ThemePickerDialog from '../settings/ThemePickerDialog';
 import chatService from '../../services/chatService';
 import contactsService from '../../services/contactsService';
+import userBanService from '../../services/userBanService';
 import { joinInviteErrorMessage, parseInviteToken } from '../../utils/inviteLink';
 import { parseRoomBanError } from '../../utils/roomBanError';
 import RoomBanDialog from './RoomBanDialog';
+import BannedUsersPanel from './BannedUsersPanel';
 import { getApiErrorMessage } from '../../services/api';
 import UserAvatar from '../user/UserAvatar';
 
@@ -40,6 +43,7 @@ const VIEW_INVITE = 'invite';
 const VIEW_CONTACTS = 'contacts';
 const VIEW_ACCOUNT = 'account';
 const VIEW_THEMES = 'themes';
+const VIEW_BANNED = 'banned';
 
 const displayName = (user) => {
   if (!user) return 'Unknown user';
@@ -57,6 +61,7 @@ const ChatSettingsDialog = ({
   onClose,
   onJoinedRoom,
   onOpenContact,
+  onUserBanStateChange,
   currentUserId,
   currentUser,
   /** `join` opens the invite form directly (e.g. from chat list menu). */
@@ -74,6 +79,11 @@ const ChatSettingsDialog = ({
   const [requestBusyId, setRequestBusyId] = useState(null);
   const [themesOpen, setThemesOpen] = useState(false);
   const [banDialog, setBanDialog] = useState(null);
+  const [bannedUsers, setBannedUsers] = useState([]);
+  const [bannedLoading, setBannedLoading] = useState(false);
+  const [bannedListError, setBannedListError] = useState(false);
+  const [bannedError, setBannedError] = useState('');
+  const [unbanLoadingId, setUnbanLoadingId] = useState(null);
 
   const menuItems = useMemo(
     () => [
@@ -101,6 +111,12 @@ const ChatSettingsDialog = ({
         primary: 'Themes',
         secondary: 'Browse system themes and pick your favorite look',
       },
+      {
+        key: VIEW_BANNED,
+        icon: BlockOutlinedIcon,
+        primary: 'Banned users',
+        secondary: 'See users you banned and restore private chats',
+      },
     ],
     [],
   );
@@ -117,6 +133,10 @@ const ChatSettingsDialog = ({
       setContactsBusy(false);
       setRequestBusyId(null);
       setThemesOpen(false);
+      setBannedUsers([]);
+      setBannedListError(false);
+      setBannedError('');
+      setUnbanLoadingId(null);
       return;
     }
     setView(joinOnly ? VIEW_INVITE : VIEW_MENU);
@@ -153,6 +173,52 @@ const ChatSettingsDialog = ({
       cancelled = true;
     };
   }, [open, view, currentUserId]);
+
+  useEffect(() => {
+    if (!open || view !== VIEW_BANNED) return;
+    let cancelled = false;
+    const loadBannedUsers = async () => {
+      if (!currentUserId) {
+        setBannedUsers([]);
+        return;
+      }
+      setBannedLoading(true);
+      setBannedListError(false);
+      setBannedError('');
+      try {
+        const list = await userBanService.listBannedUsers(currentUserId);
+        if (!cancelled) {
+          setBannedUsers(Array.isArray(list) ? list : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setBannedListError(true);
+          setBannedError(getApiErrorMessage(error, 'Failed to load banned users.'));
+        }
+      } finally {
+        if (!cancelled) setBannedLoading(false);
+      }
+    };
+    void loadBannedUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, view, currentUserId]);
+
+  const handleUnbanUser = async (bannedUser) => {
+    if (!bannedUser?.id || !currentUserId) return;
+    setUnbanLoadingId(bannedUser.id);
+    setBannedError('');
+    try {
+      await userBanService.unbanUser(bannedUser.id, currentUserId);
+      setBannedUsers((prev) => prev.filter((item) => Number(item.id) !== Number(bannedUser.id)));
+      onUserBanStateChange?.({ userId: bannedUser.id, banned: false });
+    } catch (error) {
+      setBannedError(getApiErrorMessage(error, 'Could not unban this user.'));
+    } finally {
+      setUnbanLoadingId(null);
+    }
+  };
 
   const handleClose = () => {
     onClose?.();
@@ -235,7 +301,7 @@ const ChatSettingsDialog = ({
       open={open}
       onClose={handleClose}
       fullWidth
-      maxWidth={view === VIEW_CONTACTS || view === VIEW_ACCOUNT ? 'sm' : 'xs'}
+      maxWidth={view === VIEW_CONTACTS || view === VIEW_ACCOUNT || view === VIEW_BANNED ? 'sm' : 'xs'}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: 1 }}>
         {view !== VIEW_MENU ? (
@@ -255,7 +321,9 @@ const ChatSettingsDialog = ({
               ? 'Contacts'
               : view === VIEW_ACCOUNT
                 ? 'Change username or password'
-                : 'Settings'}
+                : view === VIEW_BANNED
+                  ? 'Banned users'
+                  : 'Settings'}
         </Typography>
         <IconButton aria-label="Close settings" onClick={handleClose} size="small">
           <CloseIcon />
@@ -279,6 +347,37 @@ const ChatSettingsDialog = ({
           </List>
         ) : view === VIEW_ACCOUNT ? (
           <AccountCredentialsPanel currentUser={currentUser} onClose={handleClose} />
+        ) : view === VIEW_BANNED ? (
+          <Stack spacing={2}>
+            <Typography variant="body2" color="text.secondary">
+              Users you banned cannot message you privately. Unban someone to restore your private chat.
+              You still see their messages in groups and channels you share.
+            </Typography>
+            {bannedError ? (
+              <Alert severity="error" onClose={() => setBannedError('')}>
+                {bannedError}
+              </Alert>
+            ) : null}
+            <Box>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                <BlockOutlinedIcon color="primary" fontSize="small" />
+                <Typography variant="subtitle2" fontWeight={700} sx={{ color: 'text.primary' }}>
+                  Banned users
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {bannedUsers.length}
+                </Typography>
+              </Stack>
+              <BannedUsersPanel
+                items={bannedUsers}
+                loading={bannedLoading}
+                error={bannedListError}
+                onUnban={handleUnbanUser}
+                actionLoadingId={unbanLoadingId}
+                variant="modal"
+              />
+            </Box>
+          </Stack>
         ) : view === VIEW_INVITE ? (
           <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary">

@@ -13,7 +13,6 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import BlockIcon from '@mui/icons-material/Block';
@@ -23,7 +22,9 @@ import userBanService from "../../services/userBanService";
 import { getApiErrorMessage } from "../../services/api";
 import useAuthStore from "../../store/useAuthStore";
 import PhoneCountryField from "../common/PhoneCountryField";
+import BirthdayField from "../common/BirthdayField";
 import { isValidInternationalPhone } from "../../utils/internationalPhone";
+import { toIsoDate, toLocalDate } from "../../utils/localDate";
 import UserAvatar from "./UserAvatar";
 import useChatStore from "../../store/useChatStore";
 import { appendCacheBust } from "../../utils/userAvatar";
@@ -41,8 +42,6 @@ const detailDialogPaperSx = {
   border: `1px solid ${chatColors.borderSubtle}`,
 };
 
-const toInputDate = (value) => (value ? new Date(value) : null);
-const toIsoDate = (value) => (value ? value.toISOString().slice(0, 10) : null);
 
 const normalizeCountryCode = (u) => {
   const c = u?.countryCode;
@@ -54,7 +53,7 @@ const userToProfileShape = (u) => ({
   firstName: u?.firstName || "",
   lastName: u?.lastName || "",
   description: u?.description || "",
-  birthday: toInputDate(u?.birthday),
+  birthday: toLocalDate(u?.birthday),
   phoneNumber: u?.phoneNumber || "",
   countryCode: normalizeCountryCode(u),
   username: u?.username || "",
@@ -70,6 +69,8 @@ const UserProfileDialog = ({
   editable = false,
   currentUserId,
   onBanStateChange,
+  /** Ban/unban controls are only for private-chat partner profiles (Settings has its own list). */
+  allowBanActions = false,
 }) => {
   const setUser = useAuthStore((state) => state.setUser);
   const [isEditing, setIsEditing] = useState(false);
@@ -87,6 +88,7 @@ const UserProfileDialog = ({
   const backgroundInputRef = useRef(null);
 
   const canModerateBan =
+    allowBanActions &&
     !editable &&
     currentUserId != null &&
     user?.id != null &&
@@ -157,7 +159,7 @@ const UserProfileDialog = ({
     return () => {
       cancelled = true;
     };
-  }, [open, user?.id, currentUserId, editable]);
+  }, [open, user?.id, currentUserId, editable, allowBanActions]);
 
   const displayName = useMemo(() => {
     if (!profile) return "";
@@ -194,13 +196,13 @@ const UserProfileDialog = ({
     setProfile((prev) => ({
       ...(prev || {}),
       ...decorated,
-      birthday: toInputDate(decorated.birthday),
+      birthday: toLocalDate(decorated.birthday),
     }));
     setInitialProfile({
       firstName: decorated.firstName || "",
       lastName: decorated.lastName || "",
       description: decorated.description || "",
-      birthday: toIsoDate(toInputDate(decorated.birthday)),
+      birthday: toIsoDate(toLocalDate(decorated.birthday)),
       phoneNumber: decorated.phoneNumber || "",
       countryCode: (decorated.countryCode || "").toUpperCase(),
     });
@@ -240,13 +242,13 @@ const UserProfileDialog = ({
       setProfile((prev) => ({
         ...(prev || {}),
         ...updated,
-        birthday: toInputDate(updated.birthday),
+        birthday: toLocalDate(updated.birthday),
       }));
       setInitialProfile({
         firstName: updated.firstName || "",
         lastName: updated.lastName || "",
         description: updated.description || "",
-        birthday: toIsoDate(toInputDate(updated.birthday)),
+        birthday: toIsoDate(toLocalDate(updated.birthday)),
         phoneNumber: updated.phoneNumber || "",
         countryCode: (updated.countryCode || "").toUpperCase(),
       });
@@ -455,15 +457,15 @@ const UserProfileDialog = ({
               onChange={(event) => handleFieldChange("description", event.target.value)}
               InputProps={{ readOnly: !editable || !isEditing }}
             />
-            <DatePicker
+            <BirthdayField
               label="Birthday"
               value={profile.birthday}
               onChange={(value) => handleFieldChange("birthday", value)}
               disabled={!editable || !isEditing}
-              slotProps={{ textField: { fullWidth: true } }}
             />
             {editable && isEditing ? (
               <PhoneCountryField
+                variant="detail"
                 phoneNumber={profile.phoneNumber}
                 countryCode={profile.countryCode}
                 onChange={({ phoneNumber, countryCode }) =>

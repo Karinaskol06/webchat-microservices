@@ -44,6 +44,13 @@ public class ChatMessage {
     /** Username snapshot for display ("Forwarded from …"). */
     private String forwardedFromUsername;
 
+    /** Source room when forwarded from a group or channel. */
+    private String forwardedFromRoomId;
+
+    private String forwardedFromRoomType;
+
+    private String forwardedFromRoomVisibility;
+
     @Builder.Default
     private List<String> attachmentIds = new ArrayList<>();
 

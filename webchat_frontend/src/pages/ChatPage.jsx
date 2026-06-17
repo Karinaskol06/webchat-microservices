@@ -24,6 +24,7 @@ import EmojiSidebar from '../components/chat/EmojiSidebar';
 import UserProfileDialog from '../components/user/UserProfileDialog';
 import ForwardChatDialog from '../components/chat/ForwardChatDialog';
 import UserSearchDialog from '../components/chat/UserSearchDialog';
+import ForwardedRoomJoinDialog from '../components/chat/ForwardedRoomJoinDialog';
 import RoomProfileDialog from '../components/chat/RoomProfileDialog';
 import ChatSettingsDialog from '../components/chat/ChatSettingsDialog';
 import ChatInMessageSearch from '../components/chat/ChatInMessageSearch';
@@ -79,12 +80,15 @@ const ChatPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [profileDialogUser, setProfileDialogUser] = useState(null);
+  const [profileBanActionsAllowed, setProfileBanActionsAllowed] = useState(false);
   const [myProfileOpen, setMyProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDialogVariant, setSettingsDialogVariant] = useState('settings');
   const [userSearchOpen, setUserSearchOpen] = useState(false);
   const [roomProfileOpen, setRoomProfileOpen] = useState(false);
   const [roomProfileId, setRoomProfileId] = useState(null);
+  const [forwardedRoomDialogOpen, setForwardedRoomDialogOpen] = useState(false);
+  const [forwardedRoomTarget, setForwardedRoomTarget] = useState(null);
   const [presenceStatus, setPresenceStatus] = useState(null);
   const [emojiSidebarOpen, setEmojiSidebarOpen] = useState(false);
   const [reactionTargetMessageId, setReactionTargetMessageId] = useState(null);
@@ -98,7 +102,6 @@ const ChatPage = () => {
   const [roomMemberInvites, setRoomMemberInvites] = useState([]);
   const [roomInviteActionLoading, setRoomInviteActionLoading] = useState(false);
   const [roomBanDialog, setRoomBanDialog] = useState(null);
-  const [userBanNotice, setUserBanNotice] = useState('');
   const [messageToForward, setMessageToForward] = useState(null);
   const [personalSpaceActive, setPersonalSpaceActive] = useState(false);
   const [workspaceMode, setWorkspaceMode] = useState('chats');
@@ -167,9 +170,9 @@ const ChatPage = () => {
   }, [isGroupOrChannel, isPersonalSpace, chatTypeUpper, currentChat?.visibility, currentChat?.memberCount]);
 
   useEffect(() => {
-    setGroupInfoPanelOpen(true);
+    setGroupInfoPanelOpen(!isPrivateChat);
     setMembersPanelOpen(isGroupOrChannel && !isPersonalSpace);
-  }, [currentChat?.id, isGroupOrChannel, isPersonalSpace]);
+  }, [currentChat?.id, isGroupOrChannel, isPersonalSpace, isPrivateChat]);
 
   const showSharedMediaPanel =
     (isGroupOrChannel || isPrivateChat || isPersonalSpace) && Boolean(currentChat?.id);
@@ -546,6 +549,7 @@ const ChatPage = () => {
   const closeProfileDialog = () => {
     setProfileDialogOpen(false);
     setProfileDialogUser(null);
+    setProfileBanActionsAllowed(false);
   };
 
   const handleProfileBanStateChange = useCallback(
@@ -584,16 +588,38 @@ const ChatPage = () => {
   );
 
   const openPartnerProfile = () => {
-    if (!otherUser) return;
+    if (!otherUser || !isPrivateChat) return;
     setProfileDialogUser(otherUser);
+    setProfileBanActionsAllowed(true);
     setProfileDialogOpen(true);
   };
 
   const openForwardedProfile = (userLike) => {
     if (userLike == null || userLike.id == null) return;
     setProfileDialogUser(userLike);
+    setProfileBanActionsAllowed(false);
     setProfileDialogOpen(true);
   };
+
+  const openForwardedRoom = useCallback(
+    async (roomSummary) => {
+      if (!roomSummary?.id) return;
+      const existing = chats.find((chat) => String(chat.id) === String(roomSummary.id));
+      if (existing) {
+        activateChat(existing);
+        return;
+      }
+      try {
+        const dto = await chatService.getRoom(roomSummary.id);
+        useChatStore.getState().upsertChat(dto);
+        activateChat(dto);
+      } catch {
+        setForwardedRoomTarget(roomSummary);
+        setForwardedRoomDialogOpen(true);
+      }
+    },
+    [chats, activateChat],
+  );
 
   const mergeRoomMemberInvite = useCallback((invite) => {
     if (!invite?.id || String(invite.state || '').toUpperCase() !== 'PENDING') return;
@@ -803,22 +829,24 @@ const ChatPage = () => {
     loadContactStatus();
   }, [currentChat?.id, currentChat?.type, otherUser?.id, user?.id]);
 
+  useEffect(() => {
+    setProfileDialogOpen(false);
+    setProfileDialogUser(null);
+    setProfileBanActionsAllowed(false);
+  }, [currentChat?.id]);
+
   const handleSelectUserForNewChat = async (selectedUser) => {
     if (!selectedUser) return;
     if (user?.id) {
       try {
         const banned = await userBanService.getBanStatus(selectedUser.id, user.id);
         if (banned) {
-          setUserBanNotice(
-            'You banned this user. Unban them from their profile to restore your private chat.',
-          );
           return;
         }
       } catch (error) {
         console.debug('Ban status check failed', error);
       }
     }
-    setUserBanNotice('');
     const existingChat = useChatStore
       .getState()
       .chats.find((chat) => Number(chat.otherUser?.id) === Number(selectedUser.id));
@@ -1136,12 +1164,6 @@ const ChatPage = () => {
         </Alert>
       )}
 
-      {userBanNotice ? (
-        <Alert severity="warning" sx={{ mx: 2, mt: 1, borderRadius: 3 }} onClose={() => setUserBanNotice('')}>
-          {userBanNotice}
-        </Alert>
-      ) : null}
-
       <Box
         sx={{
           flex: 1,
@@ -1162,6 +1184,7 @@ const ChatPage = () => {
           onReply={setReplyToMessage}
           onOpenForward={(msg) => setMessageToForward(msg)}
           onOpenForwardedProfile={openForwardedProfile}
+          onOpenForwardedRoom={openForwardedRoom}
           openSeparatorIndex={openSeparatorIndex}
           liveBeforeMessageId={liveBeforeMessageId}
           scrollToMessageId={scrollToMessageId}
@@ -1208,6 +1231,7 @@ const ChatPage = () => {
         user={profileDialogUser}
         currentUserId={user?.id}
         onBanStateChange={handleProfileBanStateChange}
+        allowBanActions={profileBanActionsAllowed}
       />
 
       <ForwardChatDialog
@@ -1347,11 +1371,22 @@ const ChatPage = () => {
         onClose={() => setSettingsOpen(false)}
         onJoinedRoom={handleJoinedRoom}
         onOpenContact={handleSelectUserForNewChat}
+        onUserBanStateChange={handleProfileBanStateChange}
         currentUserId={user?.id}
         currentUser={user}
       />
 
       <RoomProfileDialog open={roomProfileOpen} roomId={roomProfileId} onClose={closeRoomProfile} />
+
+      <ForwardedRoomJoinDialog
+        open={forwardedRoomDialogOpen}
+        room={forwardedRoomTarget}
+        onClose={() => {
+          setForwardedRoomDialogOpen(false);
+          setForwardedRoomTarget(null);
+        }}
+        onJoined={handleJoinedRoom}
+      />
 
       <Dialog
         open={leaveRoomDialogOpen}

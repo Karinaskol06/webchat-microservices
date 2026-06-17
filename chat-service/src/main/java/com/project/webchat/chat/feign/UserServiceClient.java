@@ -46,6 +46,9 @@ public interface UserServiceClient {
     @GetMapping("/api/users/internal/{userId}/banned-user-ids")
     List<Long> getBannedUserIds(@PathVariable("userId") Long userId);
 
+    @GetMapping("/api/users/internal/{userId}/banning-user-ids")
+    List<Long> getBanningUserIds(@PathVariable("userId") Long userId);
+
     @GetMapping("/api/users/internal/{userId}/has-banned/{targetUserId}")
     Boolean hasBanned(
             @PathVariable("userId") Long userId,

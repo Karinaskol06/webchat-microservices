@@ -43,7 +43,13 @@ import GroupsIcon from '@mui/icons-material/Groups';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import InputAdornment from '@mui/material/InputAdornment';
 import Tooltip from '@mui/material/Tooltip';
-import { chatColors, chatGlassFieldPanelSx, chatRadii, muiTransparent } from '../../theme/chatDesignTokens';
+import {
+  chatColors,
+  chatGlassFieldPanelSx,
+  chatRadii,
+  chatUnreadCountBadgeSx,
+  muiTransparent,
+} from '../../theme/chatDesignTokens';
 import UserAvatar from '../user/UserAvatar';
 import { resolveRoomAvatarSrc } from '../../utils/userAvatar';
 import { getMessagePreviewText } from '../../utils/personalSpace';
@@ -662,20 +668,8 @@ const ChatList = ({
                   component="span"
                   aria-label={`${unreadCount} unread`}
                   sx={{
-                    flexShrink: 0,
-                    mr: activeFolderId ? 0.5 : 1.25,
-                    minWidth: 22,
-                    height: 22,
-                    px: 0.75,
-                    borderRadius: 11,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: chatColors.unreadBadge,
-                    color: '#fff',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    lineHeight: 1,
+                    ...chatUnreadCountBadgeSx,
+                    mr: activeFolderId ? 0.75 : 1.5,
                   }}
                 >
                   {unreadCount > 99 ? '99+' : unreadCount}

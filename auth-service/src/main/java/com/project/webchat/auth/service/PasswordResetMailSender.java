@@ -8,6 +8,8 @@ import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 @Component
 @Slf4j
@@ -26,9 +28,9 @@ public class PasswordResetMailSender implements PasswordResetNotifier {
 
         JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
         if (mailSender == null) {
-            log.warn("Mail is enabled but JavaMailSender is not configured. Reset link for {}: {}",
-                    recipientEmail, resetLink);
-            return;
+            log.error("Mail is enabled but JavaMailSender is not configured");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Password reset is temporarily unavailable");
         }
 
         SimpleMailMessage message = new SimpleMailMessage();

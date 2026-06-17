@@ -303,7 +303,11 @@ const ChatInfoSidebar = ({
       : chatType === 'CHANNEL'
         ? 'Channel'
         : 'Group';
-  const sharedMedia = useRoomSharedMedia(roomId, { enabled: roomAccessVerified && groupInfoOpen });
+  const linksSectionExpanded = expandedSections.includes('links');
+  const sharedMedia = useRoomSharedMedia(roomId, {
+    enabled: roomAccessVerified && groupInfoOpen,
+    loadLinks: linksSectionExpanded,
+  });
   const membersPanelVisible = showMembersPanel && membersOpen;
   const bothPanelsOpen = groupInfoOpen && membersPanelVisible;
   const groupInfoExpanded = groupInfoOpen && !mediaFolded;

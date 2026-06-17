@@ -80,6 +80,7 @@ public class ChatRoomEnrichmentService {
                     ? chat.getGroupName()
                     : com.project.webchat.chat.service.room.PersonalSpaceService.PERSONAL_SPACE_DISPLAY_NAME);
             builder.groupPhoto(chat.getGroupPhoto());
+            builder.description(chat.getDescription());
         }
 
         if (chat.getType() == ChatType.GROUP || chat.getType() == ChatType.CHANNEL) {

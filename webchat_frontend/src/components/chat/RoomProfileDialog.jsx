@@ -5,7 +5,9 @@ import {
   Chip,
   CircularProgress,
   Dialog,
+  DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   Divider,
   IconButton,
@@ -31,7 +33,7 @@ import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { alpha, useTheme } from '@mui/material/styles';
 import chatService from '../../services/chatService';
-import { canEditRoomProfile } from '../../utils/channelPermissions';
+import { canBanRoomMembers, canEditRoomProfile } from '../../utils/channelPermissions';
 import { getApiErrorMessage } from '../../services/api';
 import useChatStore from '../../store/useChatStore';
 import useAuthStore from '../../store/useAuthStore';
@@ -122,6 +124,9 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
   const photoInputRef = useRef(null);
   const [manageAnchor, setManageAnchor] = useState(null);
   const [manageMember, setManageMember] = useState(null);
+  const [banConfirmOpen, setBanConfirmOpen] = useState(false);
+  const [banActionBusy, setBanActionBusy] = useState(false);
+  const [banActionError, setBanActionError] = useState('');
   const [editingProfile, setEditingProfile] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -194,6 +199,38 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
   const closeManage = () => {
     setManageAnchor(null);
     setManageMember(null);
+  };
+
+  const canBanMember = (member) => {
+    if (!canBanMembers || !member?.id) return false;
+    if (myId != null && Number(member.id) === myId) return false;
+    if (room?.createdBy != null && Number(room.createdBy) === Number(member.id)) return false;
+    return true;
+  };
+
+  const requestBanMember = () => {
+    setBanActionError('');
+    setBanConfirmOpen(true);
+  };
+
+  const confirmBanMember = async () => {
+    if (!room?.id || !manageMember?.id) return;
+    setBanActionBusy(true);
+    setBanActionError('');
+    try {
+      const dto = await chatService.banRoomMember(room.id, manageMember.id);
+      applyRoomUpdate(dto);
+      setBanConfirmOpen(false);
+      closeManage();
+    } catch (e) {
+      const msg =
+        e?.status === 404
+          ? 'Ban is not available on the server yet. Restart chat-service so it loads the latest code, then try again.'
+          : getApiErrorMessage({ response: { data: e } }, 'Could not ban this member');
+      setBanActionError(msg);
+    } finally {
+      setBanActionBusy(false);
+    }
   };
 
   const runAdminAction = async (targetUserId, action) => {
@@ -311,6 +348,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
         ? myId != null && Number(room.createdBy) === myId
         : canEditRoomProfile(room, myId)),
   );
+  const canBanMembers = Boolean(room && canBanRoomMembers(room, myId));
   const canEditProfileDetails = canModerateRoom;
 
   const title = room?.groupName || (isPersonalSpace ? 'Personal Space' : isChannel ? 'Channel' : isGroup ? 'Group' : 'Room');
@@ -706,7 +744,12 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                       const chipColor =
                         isOwner ? 'primary' : isGrpAdm || isChanMod ? 'default' : isPoster ? 'secondary' : 'default';
                       const chipVariant = isOwner ? 'filled' : 'outlined';
-                      const showManage = canModerateRoom && myId != null && mid !== myId && !isOwner;
+                      const showManage =
+                        (canModerateRoom || canBanMembers) &&
+                        myId != null &&
+                        mid !== myId &&
+                        !isOwner &&
+                        (canModerateRoom || canBanMember(m));
 
                       return (
                         <ListItem
@@ -818,7 +861,54 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                         ) : null}
                       </>
                     ) : null}
+                    {manageMember && canBanMember(manageMember) ? (
+                      <MenuItem
+                        disabled={actionBusy || banActionBusy}
+                        onClick={requestBanMember}
+                        sx={{ color: 'error.main' }}
+                      >
+                        Ban from {isChannel ? 'channel' : 'group'}
+                      </MenuItem>
+                    ) : null}
                   </Menu>
+                  <Dialog
+                    open={banConfirmOpen}
+                    onClose={() => {
+                      if (banActionBusy) return;
+                      setBanConfirmOpen(false);
+                    }}
+                    maxWidth="xs"
+                    fullWidth
+                  >
+                    <DialogTitle>Ban {displayName(manageMember)}?</DialogTitle>
+                    <DialogContent>
+                      <DialogContentText>
+                        They will be removed from this {isChannel ? 'channel' : 'group'} and will not be
+                        able to join again unless you unban them.
+                      </DialogContentText>
+                      {banActionError ? (
+                        <Typography variant="body2" color="error" sx={{ mt: 1.5 }}>
+                          {banActionError}
+                        </Typography>
+                      ) : null}
+                    </DialogContent>
+                    <DialogActions sx={{ px: 3, pb: 2 }}>
+                      <Button
+                        disabled={banActionBusy}
+                        onClick={() => setBanConfirmOpen(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        color="error"
+                        variant="contained"
+                        disabled={banActionBusy}
+                        onClick={() => void confirmBanMember()}
+                      >
+                        {banActionBusy ? 'Banning…' : 'Ban'}
+                      </Button>
+                    </DialogActions>
+                  </Dialog>
                 </Box>
               </>
             ) : null}

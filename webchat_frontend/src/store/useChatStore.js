@@ -1,4 +1,8 @@
 import { create } from 'zustand';
+import {
+  recordSharedMediaAttachmentDeleted,
+  recordSharedMediaMessageDeleted,
+} from '../utils/sharedMedia';
 import { appendCacheBust, bustRoomPhotoUrl, stripMediaCacheKey } from '../utils/userAvatar';
 
 function mergeChatRecord(existing, incoming) {
@@ -381,6 +385,8 @@ const useChatStore = create((set, get) => ({
 
   // deleting a message from the list
   removeMessage: (messageId) => {
+    const { currentChat } = get();
+    recordSharedMediaMessageDeleted(currentChat?.id, messageId);
     set((state) => ({
       messages: state.messages.filter(msg => msg.id !== messageId)
     }));
@@ -423,6 +429,8 @@ const useChatStore = create((set, get) => ({
 
   // deleting an attachment
   removeAttachment: (messageId, attachmentId) => {
+    const { currentChat } = get();
+    recordSharedMediaAttachmentDeleted(currentChat?.id, messageId, attachmentId);
     set((state) => ({
       messages: state.messages.map(msg =>
           msg.id === messageId

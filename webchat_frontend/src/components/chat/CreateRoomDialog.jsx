@@ -19,6 +19,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import ImageIcon from '@mui/icons-material/Image';
 import chatService from '../../services/chatService';
+import { chatHideScrollbarSx } from '../../theme/chatDesignTokens';
 
 const MAX_EDGE = 720;
 const JPEG_QUALITY = 0.82;
@@ -181,7 +182,7 @@ const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ ...chatHideScrollbarSx, overflowX: 'hidden' }}>
         {error ? (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
             {error}
