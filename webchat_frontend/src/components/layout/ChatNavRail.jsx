@@ -22,19 +22,7 @@ import ChatFolderRailSection from './ChatFolderRailSection';
 import { isChatDragEvent, readChatDragId } from '../../utils/chatDrag';
 import { chatColors, chatLayout, muiTransparent } from '../../theme/chatDesignTokens';
 import UserAvatar from '../user/UserAvatar';
-
-const CHAT_FILTERS = [
-  { id: 'ALL', label: 'All chats', icon: ChatBubbleOutlineIcon },
-  { id: 'PRIVATE', label: 'Direct', icon: PersonOutlineIcon },
-  { id: 'GROUP', label: 'Groups', icon: PeopleOutlineIcon },
-  { id: 'CHANNEL', label: 'Channels', icon: CampaignOutlinedIcon },
-];
-
-const FIND_USERS_ITEM = {
-  id: 'FIND_USERS',
-  label: 'Find users & rooms',
-  icon: SearchIcon,
-};
+import useTranslation from '../../hooks/useTranslation';
 
 const navRailIconSx = (active, { dropTarget = false } = {}) => ({
   width: 48,
@@ -78,8 +66,21 @@ const ChatNavRail = ({
   personalSpaceActive,
   onPersonalSpaceSelect,
 }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+
+  const chatFilters = React.useMemo(
+    () => [
+      { id: 'ALL', label: t('nav.allChats'), icon: ChatBubbleOutlineIcon },
+      { id: 'PRIVATE', label: t('nav.direct'), icon: PersonOutlineIcon },
+      { id: 'GROUP', label: t('nav.groups'), icon: PeopleOutlineIcon },
+      { id: 'CHANNEL', label: t('nav.channels'), icon: CampaignOutlinedIcon },
+    ],
+    [t],
+  );
+
+  const findUsersLabel = t('nav.findUsers');
   const chats = useChatStore((s) => s.chats);
   const folders = useChatFolderStore((s) => s.folders);
   const dragOverFolderId = useChatFolderStore((s) => s.dragOverFolderId);
@@ -108,7 +109,7 @@ const ChatNavRail = ({
   return (
     <Box
       component="nav"
-      aria-label="Chat navigation"
+      aria-label={t('nav.ariaLabel')}
       sx={{
         width: '100%',
         height: '100%',
@@ -133,9 +134,9 @@ const ChatNavRail = ({
           px: 1,
         }}
       >
-        <Tooltip title={FIND_USERS_ITEM.label} placement="right">
+        <Tooltip title={findUsersLabel} placement="right">
           <IconButton
-            aria-label={FIND_USERS_ITEM.label}
+            aria-label={findUsersLabel}
             aria-pressed={findUsersOpen ? 'true' : undefined}
             onClick={() => onFindUsers?.()}
             sx={navRailIconSx(findUsersOpen)}
@@ -158,12 +159,12 @@ const ChatNavRail = ({
                 },
               }}
             >
-              <FIND_USERS_ITEM.icon fontSize="small" />
+              <SearchIcon fontSize="small" />
             </Badge>
           </IconButton>
         </Tooltip>
 
-        {CHAT_FILTERS.map(({ id, label, icon: Icon }) => {
+        {chatFilters.map(({ id, label, icon: Icon }) => {
           const active = !personalSpaceActive && !activeFolderId && activeFilter === id;
           const badge = id === 'ALL' ? unreadByFilter.ALL : unreadByFilter[id];
           const isAllChats = id === 'ALL';
@@ -226,9 +227,9 @@ const ChatNavRail = ({
           );
         })}
 
-        <Tooltip title="Personal Space" placement="right">
+        <Tooltip title={t('nav.personalSpace')} placement="right">
           <IconButton
-            aria-label="Personal Space"
+            aria-label={t('nav.personalSpace')}
             aria-current={personalSpaceActive ? 'true' : undefined}
             onClick={() => onPersonalSpaceSelect?.()}
             sx={navRailIconSx(personalSpaceActive)}
@@ -269,9 +270,9 @@ const ChatNavRail = ({
           width: '100%',
         }}
       >
-        <Tooltip title="My profile">
+        <Tooltip title={t('nav.myProfile')}>
           <IconButton
-            aria-label="My profile"
+            aria-label={t('nav.myProfile')}
             onClick={onOpenProfile}
             sx={{ p: 0.5 }}
           >
@@ -283,9 +284,9 @@ const ChatNavRail = ({
             />
           </IconButton>
         </Tooltip>
-        <Tooltip title="Settings">
+        <Tooltip title={t('nav.settings')}>
           <IconButton
-            aria-label="Settings"
+            aria-label={t('nav.settings')}
             aria-pressed={settingsOpen ? 'true' : undefined}
             onClick={() => onOpenSettings?.()}
             sx={{
@@ -299,9 +300,9 @@ const ChatNavRail = ({
             <SettingsOutlinedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
-        <Tooltip title="Log out">
+        <Tooltip title={t('nav.logout')}>
           <IconButton
-            aria-label="Log out"
+            aria-label={t('nav.logout')}
             onClick={handleLogout}
             sx={{
               color: chatColors.navIcon,

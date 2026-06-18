@@ -54,6 +54,83 @@ describe("useChatStore", () => {
     expect(ids[1]).toBe("2");
   });
 
+  it("removeMessage updates chat list preview when deleting the latest message", () => {
+    useChatStore.getState().setCurrentChat({
+      id: "chat-1",
+      lastMessage: "bye",
+      lastMessageTime: "2025-06-02T12:00:00",
+    });
+    useChatStore.getState().setChats([
+      {
+        id: "chat-1",
+        lastMessage: "bye",
+        lastMessageTime: "2025-06-02T12:00:00",
+      },
+      {
+        id: "chat-2",
+        lastMessage: "older",
+        lastMessageTime: "2025-06-01T12:00:00",
+      },
+    ]);
+    useChatStore.getState().setMessages([
+      {
+        id: "m1",
+        content: "hello",
+        timestamp: "2025-06-01T12:00:00",
+        senderId: 1,
+      },
+      {
+        id: "m2",
+        content: "bye",
+        timestamp: "2025-06-02T12:00:00",
+        senderId: 1,
+      },
+    ]);
+
+    useChatStore.getState().removeMessage("m2");
+
+    const chat = useChatStore.getState().chats.find((c) => c.id === "chat-1");
+    expect(useChatStore.getState().messages).toHaveLength(1);
+    expect(chat.lastMessage).toBe("hello");
+    expect(chat.lastMessageTime).toBe("2025-06-01T12:00:00");
+    expect(useChatStore.getState().chats[0].id).toBe("chat-1");
+  });
+
+  it("removeMessage leaves chat preview unchanged when deleting an older message", () => {
+    useChatStore.getState().setCurrentChat({
+      id: "chat-1",
+      lastMessage: "bye",
+      lastMessageTime: "2025-06-02T12:00:00",
+    });
+    useChatStore.getState().setChats([
+      {
+        id: "chat-1",
+        lastMessage: "bye",
+        lastMessageTime: "2025-06-02T12:00:00",
+      },
+    ]);
+    useChatStore.getState().setMessages([
+      {
+        id: "m1",
+        content: "hello",
+        timestamp: "2025-06-01T12:00:00",
+        senderId: 1,
+      },
+      {
+        id: "m2",
+        content: "bye",
+        timestamp: "2025-06-02T12:00:00",
+        senderId: 1,
+      },
+    ]);
+
+    useChatStore.getState().removeMessage("m1");
+
+    const chat = useChatStore.getState().chats.find((c) => c.id === "chat-1");
+    expect(chat.lastMessage).toBe("bye");
+    expect(chat.lastMessageTime).toBe("2025-06-02T12:00:00");
+  });
+
   it("setCurrentChat clears messages when switching to a different chat", () => {
     useChatStore.getState().setMessages([{ id: "m1", content: "text" }]);
     useChatStore.getState().setCurrentChat({ id: "chat-1" });

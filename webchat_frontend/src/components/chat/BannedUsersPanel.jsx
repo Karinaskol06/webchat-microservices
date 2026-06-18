@@ -10,9 +10,11 @@ import {
 } from '@mui/material';
 import UserAvatar from '../user/UserAvatar';
 import { chatColors } from '../../theme/chatDesignTokens';
+import useTranslation from '../../hooks/useTranslation';
+import { t as translateStatic } from '../../i18n';
 
 const displayName = (u) => {
-  if (!u) return 'Unknown';
+  if (!u) return translateStatic('common.unknown');
   const full = `${u.firstName || ''} ${u.lastName || ''}`.trim();
   return full || u.username || `User ${u.id}`;
 };
@@ -32,6 +34,7 @@ const BannedUsersPanel = ({
   actionLoadingId,
   variant = 'glass',
 }) => {
+  const { t } = useTranslation();
   const isModal = variant === 'modal';
 
   if (loading) {
@@ -48,7 +51,7 @@ const BannedUsersPanel = ({
         variant="body2"
         sx={isModal ? { color: 'text.secondary' } : { color: chatColors.glassPanelTextMuted }}
       >
-        Banned users are unavailable right now.
+        {t('banned.error.unavailable')}
       </Typography>
     );
   }
@@ -63,7 +66,7 @@ const BannedUsersPanel = ({
             : { color: chatColors.glassPanelTextMuted, fontSize: '0.75rem' }
         }
       >
-        No banned users.
+        {t('banned.empty')}
       </Typography>
     );
   }
@@ -115,7 +118,7 @@ const BannedUsersPanel = ({
                     fontWeight: 600,
                   }}
                 >
-                  {busy ? '…' : 'Unban'}
+                  {busy ? '…' : t('banned.unban')}
                 </Button>
               </ListItem>
               {index < items.length - 1 ? <Divider component="li" /> : null}
@@ -180,7 +183,7 @@ const BannedUsersPanel = ({
                 },
               }}
             >
-              {busy ? '…' : 'Unban'}
+              {busy ? '…' : t('banned.unban')}
             </Button>
           </Box>
         );

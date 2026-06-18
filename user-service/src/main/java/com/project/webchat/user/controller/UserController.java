@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.webchat.shared.exceptions.ResourceNotFoundException;
 import com.project.webchat.user.dto.ChangePasswordDTO;
+import com.project.webchat.user.dto.DeleteAccountDTO;
 import com.project.webchat.user.dto.FieldAvailabilityDTO;
 import com.project.webchat.user.dto.UpdateAccountDTO;
 import com.project.webchat.user.dto.UpdateAccountResultDTO;
@@ -131,6 +132,28 @@ public class UserController {
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("message", "User not found", "error", "User not found"));
+        }
+    }
+
+    @DeleteMapping("/account")
+    public ResponseEntity<?> deleteAccount(
+            @RequestHeader("X-User-Id") Long userId,
+            @RequestHeader("X-Username") String username,
+            @Valid @RequestBody DeleteAccountDTO deleteAccountDTO) {
+        try {
+            userService.deleteAccount(userId, username, deleteAccountDTO);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Your account has been deleted."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", e.getMessage(), "error", e.getMessage()));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "User not found", "error", "User not found"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("message", "Could not complete account deletion. Please try again.",
+                            "error", "Account deletion failed"));
         }
     }
 

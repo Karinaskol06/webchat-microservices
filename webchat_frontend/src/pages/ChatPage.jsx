@@ -4,11 +4,6 @@ import {
   Button,
   Box,
   Typography,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
 } from '@mui/material';
 import ChatShell from '../components/layout/ChatShell';
 import { chatColors } from '../theme/chatDesignTokens';
@@ -30,13 +25,15 @@ import ChatSettingsDialog from '../components/chat/ChatSettingsDialog';
 import ChatInMessageSearch from '../components/chat/ChatInMessageSearch';
 import ChatInfoSidebar from '../components/chat/ChatInfoSidebar';
 import MediaLightbox from '../components/chat/MediaLightbox';
+import DeleteChatDialog from '../components/chat/DeleteChatDialog';
+import LeaveRoomDialog from '../components/chat/LeaveRoomDialog';
 import TwoStepDeleteRoomDialog from '../components/chat/TwoStepDeleteRoomDialog';
 import RoomBanDialog from '../components/chat/RoomBanDialog';
 import { parseRoomBanError } from '../utils/roomBanError';
 import useChatFolderStore from '../store/useChatFolderStore';
 import { findInChatMessageMatches } from '../utils/chatMessageSearch';
 import useWebSocket from '../hooks/useWebSocket';
-import { WEBCHAT_ACTIVATE_CHAT } from '../constants/chatEvents';
+import { WEBCHAT_ACTIVATE_CHAT, WEBCHAT_CHAT_CREATED, WEBCHAT_CHAT_DELETED } from '../constants/chatEvents';
 import useMessages from '../hooks/useMessages';
 import { useUnreadMessageSeparator } from '../hooks/useUnreadMessageSeparator';
 import useTyping from '../hooks/useTyping'; 
@@ -45,11 +42,14 @@ import contactsService from '../services/contactsService';
 import userBanService from '../services/userBanService';
 import { useSearchParams } from 'react-router-dom';
 import {
+  canDeleteChat,
   canDeleteRoom,
   canLeaveRoom,
   channelPostingRestricted,
+  isGroupOrChannelType,
   roomTypeLabel,
 } from '../utils/channelPermissions';
+import { isDeletedAccountUser } from '../utils/chatDisplay';
 import { resolveRoomAvatarSrc } from '../utils/userAvatar';
 import PersonalSpaceList from '../components/personalSpace/PersonalSpaceList';
 import PollCreationDialog from '../components/chat/PollCreationDialog';
@@ -61,8 +61,10 @@ import {
   getMessagePreviewText,
   serializePayload,
 } from '../utils/personalSpace';
+import useTranslation from '../hooks/useTranslation';
 
 const ChatPage = () => {
+  const { t } = useTranslation();
   const { currentChat, messages } = useChatStore(
     useShallow(state => ({
       currentChat: state.currentChat,
@@ -76,7 +78,6 @@ const ChatPage = () => {
   const resetUnreadCount = useChatStore((state) => state.resetUnreadCount);
   const removeChat = useChatStore((state) => state.removeChat);
   const assignChatToFolder = useChatFolderStore((s) => s.assignChatToFolder);
-  const setActiveFolderId = useChatFolderStore((s) => s.setActiveFolderId);
   const [searchParams, setSearchParams] = useSearchParams();
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [profileDialogUser, setProfileDialogUser] = useState(null);
@@ -110,8 +111,12 @@ const ChatPage = () => {
   const [personalSpacesError, setPersonalSpacesError] = useState('');
   const [richMessageSending, setRichMessageSending] = useState(false);
   const [pollCreationOpen, setPollCreationOpen] = useState(false);
+  const [deleteChatDialogOpen, setDeleteChatDialogOpen] = useState(false);
+  const [deleteChatTarget, setDeleteChatTarget] = useState(null);
   const [leaveRoomDialogOpen, setLeaveRoomDialogOpen] = useState(false);
+  const [leaveRoomTarget, setLeaveRoomTarget] = useState(null);
   const [deleteRoomDialogOpen, setDeleteRoomDialogOpen] = useState(false);
+  const [deleteRoomTarget, setDeleteRoomTarget] = useState(null);
   const [roomActionLoading, setRoomActionLoading] = useState(false);
   const [roomActionError, setRoomActionError] = useState('');
   const addMessage = useChatStore((state) => state.addMessage);
@@ -179,13 +184,38 @@ const ChatPage = () => {
   const showMembersSidePanel = isGroupOrChannel && !isPersonalSpace && Boolean(currentChat?.id);
   const roomSidePanelsVisible =
     showSharedMediaPanel && (groupInfoPanelOpen || (showMembersSidePanel && membersPanelOpen));
-  const sharedMediaToggleLabel = isPersonalSpace
-    ? 'Space info'
-    : isPrivateChat
-      ? 'Chat info'
-      : chatTypeUpper === 'CHANNEL'
-        ? 'Channel info'
-        : 'Group info';
+  const sharedMediaToggleLabel = useMemo(() => {
+    if (isPersonalSpace) return t('chat.sidebar.spaceInfo');
+    if (isPrivateChat) return t('chat.sidebar.chatInfo');
+    if (chatTypeUpper === 'CHANNEL') return t('chat.sidebar.channelInfo');
+    return t('chat.sidebar.groupInfo');
+  }, [isPersonalSpace, isPrivateChat, chatTypeUpper, t]);
+
+  const translateRoomTypeLabel = useCallback(
+    (chat) => {
+      const type = String(chat?.type || '').toUpperCase();
+      if (type === 'PERSONAL_SPACE') return t('roomType.personalSpace');
+      if (type === 'CHANNEL') return t('roomType.channel');
+      if (type === 'GROUP') return t('roomType.group');
+      return t('roomType.room');
+    },
+    [t],
+  );
+
+  const resolveChatDeleteLabel = useCallback(
+    (chat) => {
+      if (!chat) return '';
+      const type = String(chat?.type || '').toUpperCase();
+      if (type === 'PRIVATE') {
+        const partner = chat.otherUser;
+        if (isDeletedAccountUser(partner)) return t('common.deletedAccount');
+        const name = `${partner?.firstName || ''} ${partner?.lastName || ''}`.trim();
+        return name || partner?.username || t('roomType.fallback');
+      }
+      return chat.groupName || translateRoomTypeLabel(chat);
+    },
+    [t, translateRoomTypeLabel],
+  );
 
   const syncChatIdInUrl = useCallback(
     (chatId) => {
@@ -484,64 +514,106 @@ const ChatPage = () => {
       if (chatId != null) {
         removeChat(chatId);
         assignChatToFolder(chatId, null);
+        if (useChatStore.getState().currentChat?.id === chatId) {
+          activateChat(null);
+        }
       }
-      activateChat(null);
+      setDeleteChatDialogOpen(false);
+      setDeleteChatTarget(null);
       setLeaveRoomDialogOpen(false);
+      setLeaveRoomTarget(null);
       setDeleteRoomDialogOpen(false);
+      setDeleteRoomTarget(null);
       setRoomActionError('');
     },
     [removeChat, assignChatToFolder, activateChat],
   );
 
+  const openDeleteChatDialog = useCallback((chat) => {
+    if (!chat?.id) return;
+    if (isGroupOrChannelType(chat)) {
+      if (!canDeleteRoom(chat)) return;
+      setDeleteRoomTarget(chat);
+      setRoomActionError('');
+      setDeleteRoomDialogOpen(true);
+      return;
+    }
+    if (!canDeleteChat(chat)) return;
+    setDeleteChatTarget(chat);
+    setRoomActionError('');
+    setDeleteChatDialogOpen(true);
+  }, []);
+
+  const openLeaveRoomDialog = useCallback((chat) => {
+    if (!chat?.id || !canLeaveRoom(chat)) return;
+    setLeaveRoomTarget(chat);
+    setRoomActionError('');
+    setLeaveRoomDialogOpen(true);
+  }, []);
+
   const handleConfirmLeaveRoom = useCallback(async () => {
-    if (!currentChat?.id) return;
+    const chat = leaveRoomTarget || currentChat;
+    if (!chat?.id) return;
     setRoomActionLoading(true);
     setRoomActionError('');
     try {
-      await chatService.leaveChat(currentChat.id);
-      clearRoomFromClient(currentChat.id);
+      await chatService.leaveChat(chat.id);
+      clearRoomFromClient(chat.id);
+      setLeaveRoomTarget(null);
     } catch (err) {
-      setRoomActionError(err?.message || 'Failed to leave room');
+      setRoomActionError(err?.message || t('chat.roomAction.error.leave'));
     } finally {
       setRoomActionLoading(false);
     }
-  }, [currentChat?.id, clearRoomFromClient]);
+  }, [leaveRoomTarget, currentChat, clearRoomFromClient, t]);
 
   const handleConfirmDeleteRoom = useCallback(async () => {
-    if (!currentChat?.id) return;
-    const wasPersonalSpace = String(currentChat?.type || '').toUpperCase() === 'PERSONAL_SPACE';
-    const deletedId = currentChat.id;
+    const chat = deleteRoomTarget || currentChat;
+    if (!chat?.id) return;
     setRoomActionLoading(true);
     setRoomActionError('');
     try {
-      await chatService.deleteRoom(deletedId);
-      removeChat(deletedId);
-      assignChatToFolder(deletedId, null);
-      setDeleteRoomDialogOpen(false);
-      setRoomActionError('');
-      if (wasPersonalSpace && workspaceMode === 'personal-spaces') {
-        const spaces = await refreshPersonalSpaces();
-        await selectPersonalSpaceAfterListChange(spaces);
-      } else {
-        activateChat(null);
-      }
+      await chatService.deleteChatForEveryone(chat.id);
+      clearRoomFromClient(chat.id);
+      setDeleteRoomTarget(null);
     } catch (err) {
-      setRoomActionError(err?.message || 'Failed to delete room');
+      setRoomActionError(err?.message || t('chat.roomAction.error.delete'));
     } finally {
       setRoomActionLoading(false);
     }
-  }, [
-    currentChat?.id,
-    currentChat?.type,
-    removeChat,
-    assignChatToFolder,
-    activateChat,
-    workspaceMode,
-    refreshPersonalSpaces,
-    selectPersonalSpaceAfterListChange,
-  ]);
+  }, [deleteRoomTarget, currentChat, clearRoomFromClient, t]);
 
-  const roomDisplayName = currentChat?.groupName || roomTypeLabel(currentChat);
+  const handleConfirmDeleteChatForMe = useCallback(async () => {
+    const chat = deleteChatTarget || currentChat;
+    if (!chat?.id) return;
+    setRoomActionLoading(true);
+    setRoomActionError('');
+    try {
+      await chatService.deleteChatForMe(chat.id);
+      clearRoomFromClient(chat.id);
+      setDeleteChatTarget(null);
+    } catch (err) {
+      setRoomActionError(err?.message || 'Failed to delete chat');
+    } finally {
+      setRoomActionLoading(false);
+    }
+  }, [deleteChatTarget, currentChat, clearRoomFromClient]);
+
+  const handleConfirmDeleteChatForEveryone = useCallback(async () => {
+    const chat = deleteChatTarget || currentChat;
+    if (!chat?.id) return;
+    setRoomActionLoading(true);
+    setRoomActionError('');
+    try {
+      await chatService.deleteChatForEveryone(chat.id);
+      clearRoomFromClient(chat.id);
+      setDeleteChatTarget(null);
+    } catch (err) {
+      setRoomActionError(err?.message || 'Failed to delete chat');
+    } finally {
+      setRoomActionLoading(false);
+    }
+  }, [deleteChatTarget, currentChat, clearRoomFromClient]);
 
   // Use the typing hook instead of direct store access
   const { isOtherUserTyping } = useTyping(currentChat, otherUser);
@@ -927,6 +999,42 @@ const ChatPage = () => {
     return () => window.removeEventListener(WEBCHAT_ACTIVATE_CHAT, onActivateChatEvent);
   }, [chats, activateChat]);
 
+  useEffect(() => {
+    const onRemoteChatDeleted = (event) => {
+      const chatId = event?.detail?.chatId;
+      if (!chatId) return;
+      const key = String(chatId);
+      const openId = useChatStore.getState().currentChat?.id;
+      const urlId = searchParams.get('chatId');
+      const shouldClose =
+        (openId != null && String(openId) === key) ||
+        (urlId && String(urlId) === key) ||
+        (userSelectedChatIdRef.current && String(userSelectedChatIdRef.current) === key);
+      if (shouldClose) {
+        activateChat(null);
+      }
+    };
+    window.addEventListener(WEBCHAT_CHAT_DELETED, onRemoteChatDeleted);
+    return () => window.removeEventListener(WEBCHAT_CHAT_DELETED, onRemoteChatDeleted);
+  }, [activateChat, searchParams]);
+
+  useEffect(() => {
+    const onLocalChatCreated = (event) => {
+      const chat = event?.detail?.chat;
+      if (!chat?.id) return;
+      const openChat = useChatStore.getState().currentChat;
+      const isDraftPrivate =
+        !openChat?.id &&
+        String(openChat?.type || '').toUpperCase() === 'PRIVATE' &&
+        Number(openChat?.otherUser?.id) === Number(chat?.otherUser?.id);
+      if (isDraftPrivate || (openChat?.id != null && String(openChat.id) === String(chat.id))) {
+        activateChat(chat);
+      }
+    };
+    window.addEventListener(WEBCHAT_CHAT_CREATED, onLocalChatCreated);
+    return () => window.removeEventListener(WEBCHAT_CHAT_CREATED, onLocalChatCreated);
+  }, [activateChat]);
+
   const handleAcceptContact = async () => {
     const requestId = contactStatus?.prompt?.requestId;
     if (!requestId) return;
@@ -1018,6 +1126,8 @@ const ChatPage = () => {
   }, []);
 
   const channelComposerLocked = channelPostingRestricted(currentChat);
+  const messagingBlocked = Boolean(currentChat?.messagingBlocked);
+  const composerLocked = channelComposerLocked || messagingBlocked;
 
   const inChatSearchMatches = useMemo(
     () => findInChatMessageMatches(messages, inChatSearchQuery),
@@ -1103,20 +1213,16 @@ const ChatPage = () => {
           headerAvatarSrc={headerAvatarSrc}
           headerAvatarCacheKey={headerAvatarCacheKey}
           headerAvatarLetter={headerAvatarLetter}
-          headerAvatarClickable={isGroupOrChannel || isPersonalSpace || Boolean(otherUser)}
+          headerAvatarClickable={
+            isGroupOrChannel || isPersonalSpace || (Boolean(otherUser) && !isDeletedAccountUser(otherUser))
+          }
           showCopyInvite={showCopyRoomInvite}
           onCopyInvite={handleCopyRoomInvite}
           isGroupOrChannel={isGroupOrChannel}
           canLeaveRoom={canLeaveRoom(currentChat)}
-          canDeleteRoom={canDeleteRoom(currentChat)}
-          onRequestLeaveRoom={() => {
-            setRoomActionError('');
-            setLeaveRoomDialogOpen(true);
-          }}
-          onRequestDeleteRoom={() => {
-            setRoomActionError('');
-            setDeleteRoomDialogOpen(true);
-          }}
+          onRequestLeaveRoom={() => openLeaveRoomDialog(currentChat)}
+          canDeleteChat={canDeleteChat(currentChat)}
+          onRequestDeleteChat={() => openDeleteChatDialog(currentChat)}
           inChatSearchOpen={inChatSearchOpen}
           onToggleInChatSearch={toggleInChatSearch}
           showGroupInfoToggle={showSharedMediaPanel}
@@ -1152,15 +1258,15 @@ const ChatPage = () => {
           action={
             <>
               <Button color="inherit" size="small" onClick={handleAcceptContact} disabled={contactActionLoading}>
-                Yes
+                {t('common.yes')}
               </Button>
               <Button color="inherit" size="small" onClick={handleDeclineContact} disabled={contactActionLoading}>
-                No
+                {t('common.no')}
               </Button>
             </>
           }
         >
-          Add to contacts?
+          {t('chat.contact.prompt')}
         </Alert>
       )}
 
@@ -1211,8 +1317,12 @@ const ChatPage = () => {
         onToggleEmojiSidebar={() => setEmojiSidebarOpen((prev) => !prev)}
         composerError={composerError}
         onDismissComposerError={() => setComposerError('')}
-        channelReadOnly={channelComposerLocked}
-        channelReadOnlyHint="Only the channel owner, moderators, or members granted posting can send messages here."
+        channelReadOnly={composerLocked}
+        channelReadOnlyHint={
+          messagingBlocked
+            ? t('errors.composer.cannotMessageUser')
+            : t('chat.channel.readOnlyHint')
+        }
         onInsertRichMessage={handleInsertRichMessage}
         richMessageSending={richMessageSending}
         showPollOption={isGroupOrChannel && !isPersonalSpace}
@@ -1255,10 +1365,10 @@ const ChatPage = () => {
       }}
     >
       <Typography variant="h5" fontWeight={700} gutterBottom sx={{ color: chatColors.textPrimary }}>
-        Welcome to WebChat
+        {t('chat.empty.welcomeTitle')}
       </Typography>
       <Typography variant="body1" sx={{ maxWidth: 360, color: chatColors.textSecondary }}>
-        Choose a conversation from the list or find users and rooms to get started.
+        {t('chat.empty.welcomeBody')}
       </Typography>
     </Box>
   );
@@ -1388,47 +1498,51 @@ const ChatPage = () => {
         onJoined={handleJoinedRoom}
       />
 
-      <Dialog
-        open={leaveRoomDialogOpen}
-        onClose={() => !roomActionLoading && setLeaveRoomDialogOpen(false)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>Leave {roomTypeLabel(currentChat)}?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            You will no longer see messages from <strong>{roomDisplayName}</strong>. You can rejoin
-            if the room is public or you receive a new invite.
-          </DialogContentText>
-          {roomActionError ? (
-            <Typography variant="body2" color="error" sx={{ mt: 1.5 }}>
-              {roomActionError}
-            </Typography>
-          ) : null}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setLeaveRoomDialogOpen(false)} disabled={roomActionLoading}>
-            Cancel
-          </Button>
-          <Button
-            color="primary"
-            variant="contained"
-            disabled={roomActionLoading}
-            onClick={() => void handleConfirmLeaveRoom()}
-          >
-            {roomActionLoading ? 'Leaving…' : 'Leave'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <TwoStepDeleteRoomDialog
-        open={deleteRoomDialogOpen}
-        roomLabel={roomDisplayName}
-        roomTypeLabel={roomTypeLabel(currentChat)}
+      <DeleteChatDialog
+        open={deleteChatDialogOpen}
+        chat={deleteChatTarget || currentChat}
+        chatLabel={resolveChatDeleteLabel(deleteChatTarget || currentChat)}
         loading={roomActionLoading}
         error={roomActionError}
         onClose={() => {
-          if (!roomActionLoading) setDeleteRoomDialogOpen(false);
+          if (!roomActionLoading) {
+            setDeleteChatDialogOpen(false);
+            setDeleteChatTarget(null);
+            setRoomActionError('');
+          }
+        }}
+        onDeleteForMe={() => void handleConfirmDeleteChatForMe()}
+        onDeleteForEveryone={() => void handleConfirmDeleteChatForEveryone()}
+      />
+
+      <LeaveRoomDialog
+        open={leaveRoomDialogOpen}
+        chat={leaveRoomTarget || currentChat}
+        roomLabel={resolveChatDeleteLabel(leaveRoomTarget || currentChat)}
+        loading={roomActionLoading}
+        error={roomActionError}
+        onClose={() => {
+          if (!roomActionLoading) {
+            setLeaveRoomDialogOpen(false);
+            setLeaveRoomTarget(null);
+            setRoomActionError('');
+          }
+        }}
+        onConfirm={() => void handleConfirmLeaveRoom()}
+      />
+
+      <TwoStepDeleteRoomDialog
+        open={deleteRoomDialogOpen}
+        roomLabel={resolveChatDeleteLabel(deleteRoomTarget || currentChat)}
+        roomTypeLabel={roomTypeLabel(deleteRoomTarget || currentChat)}
+        loading={roomActionLoading}
+        error={roomActionError}
+        onClose={() => {
+          if (!roomActionLoading) {
+            setDeleteRoomDialogOpen(false);
+            setDeleteRoomTarget(null);
+            setRoomActionError('');
+          }
         }}
         onConfirmDelete={() => void handleConfirmDeleteRoom()}
       />

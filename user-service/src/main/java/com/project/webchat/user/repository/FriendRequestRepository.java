@@ -3,6 +3,9 @@ package com.project.webchat.user.repository;
 import com.project.webchat.user.entity.FriendRequest;
 import com.project.webchat.shared.dto.ContactRequestState;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,4 +37,8 @@ public interface FriendRequestRepository extends JpaRepository<FriendRequest, Lo
     //prevent user from sending another until the cooldown period ends
     Optional<FriendRequest> findFirstByFromUserIdAndToUserIdAndStateInAndNextEligibleAtAfterOrderByCreatedAtDesc(
             Long fromUserId, Long toUserId, List<ContactRequestState> states, java.time.LocalDateTime threshold);
+
+    @Modifying
+    @Query("DELETE FROM FriendRequest fr WHERE fr.fromUserId = :userId OR fr.toUserId = :userId")
+    void deleteByFromUserIdOrToUserId(@Param("userId") Long userId);
 }

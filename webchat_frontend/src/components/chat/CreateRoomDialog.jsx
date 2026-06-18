@@ -19,7 +19,9 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import ImageIcon from '@mui/icons-material/Image';
 import chatService from '../../services/chatService';
+import { getApiErrorMessage } from '../../services/api';
 import { chatHideScrollbarSx } from '../../theme/chatDesignTokens';
+import useTranslation from '../../hooks/useTranslation';
 
 const MAX_EDGE = 720;
 const JPEG_QUALITY = 0.82;
@@ -62,6 +64,7 @@ async function fileToRoomPhotoDataUrl(file) {
 }
 
 const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
+  const { t } = useTranslation();
   const isChannel = mode === 'channel';
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -94,9 +97,9 @@ const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
     } catch (e) {
       setPhotoDataUrl(null);
       setPhotoPreview(null);
-      setError(e?.message || 'Could not use this image.');
+      setError(e?.message || t('room.create.error.invalidImage'));
     }
-  }, []);
+  }, [t]);
 
   const onPaste = useCallback(
     (e) => {
@@ -137,7 +140,7 @@ const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
   const handleSubmit = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Name is required.');
+      setError(t('room.create.error.nameRequired'));
       return;
     }
     setSubmitting(true);
@@ -157,17 +160,13 @@ const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
       onCreated?.(dto);
       onClose?.();
     } catch (e) {
-      const msg =
-        (typeof e === 'object' && e !== null && e.message) ||
-        e?.error ||
-        (typeof e === 'string' ? e : 'Could not create this room.');
-      setError(msg);
+      setError(getApiErrorMessage(e, t('room.create.error.fallback')));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const title = isChannel ? 'Create a channel' : 'Create a group chat';
+  const title = isChannel ? t('room.create.title.channel') : t('room.create.title.group');
 
   return (
     <Dialog open={open} onClose={() => !submitting && onClose?.()} fullWidth maxWidth="sm">
@@ -176,7 +175,7 @@ const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
         <IconButton
           onClick={() => !submitting && onClose?.()}
           sx={{ ml: 'auto' }}
-          aria-label="Close"
+          aria-label={t('common.close')}
           disabled={submitting}
         >
           <CloseIcon />
@@ -192,7 +191,7 @@ const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
         <TextField
           autoFocus
           fullWidth
-          label="Name"
+          label={t('room.create.name.label')}
           value={name}
           onChange={(e) => setName(e.target.value)}
           margin="normal"
@@ -200,43 +199,41 @@ const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
         />
 
         <FormControl component="fieldset" margin="normal" fullWidth>
-          <FormLabel component="legend">Visibility</FormLabel>
+          <FormLabel component="legend">{t('room.create.visibility.label')}</FormLabel>
           <RadioGroup
             row
             value={visibility}
             onChange={(e) => setVisibility(e.target.value)}
             name="room-visibility"
           >
-            <FormControlLabel value="PUBLIC" control={<Radio />} label="Public" disabled={submitting} />
-            <FormControlLabel value="PRIVATE" control={<Radio />} label="Private" disabled={submitting} />
+            <FormControlLabel value="PUBLIC" control={<Radio />} label={t('common.public')} disabled={submitting} />
+            <FormControlLabel value="PRIVATE" control={<Radio />} label={t('common.private')} disabled={submitting} />
           </RadioGroup>
         </FormControl>
 
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
-          {isChannel
-            ? 'Only you (the channel owner) can post. Others read messages. Private channels use invite links.'
-            : 'Everyone in the group can post. Private groups use invite links; you and admins can copy the link.'}
+          {isChannel ? t('room.create.hint.channel') : t('room.create.hint.group')}
         </Typography>
 
         <TextField
           fullWidth
-          label="Description (optional)"
+          label={t('room.create.description.label')}
           value={description}
           onChange={(e) => setDescription(e.target.value.slice(0, 2000))}
           margin="normal"
           multiline
           minRows={2}
           maxRows={6}
-          placeholder="What is this room about?"
+          placeholder={t('room.create.description.placeholder')}
           disabled={submitting}
           inputProps={{ maxLength: 2000 }}
         />
 
         <Typography variant="subtitle2" sx={{ mt: 2, mb: 0.5 }}>
-          Room image (optional)
+          {t('room.create.image.label')}
         </Typography>
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-          Drag and drop, choose a file, or paste an image (Ctrl+V) while this dialog is open.
+          {t('room.create.image.hint')}
         </Typography>
 
         <Box
@@ -288,7 +285,7 @@ const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
             <Box sx={{ py: 2 }}>
               <ImageIcon color="action" sx={{ fontSize: 40, opacity: 0.7 }} />
               <Typography variant="body2" color="text.secondary">
-                Drop image here or click to browse
+                {t('room.create.image.drop')}
               </Typography>
             </Box>
           )}
@@ -296,16 +293,16 @@ const CreateRoomDialog = ({ open, mode, onClose, onCreated }) => {
 
         {photoPreview ? (
           <Button size="small" sx={{ mt: 1 }} onClick={() => { setPhotoPreview(null); setPhotoDataUrl(null); }} disabled={submitting}>
-            Remove image
+            {t('room.create.image.remove')}
           </Button>
         ) : null}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={() => onClose?.()} disabled={submitting}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button variant="contained" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? 'Creating…' : 'Create'}
+          {submitting ? t('common.creating') : t('common.create')}
         </Button>
       </DialogActions>
     </Dialog>

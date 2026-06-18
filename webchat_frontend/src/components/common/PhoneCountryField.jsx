@@ -14,6 +14,7 @@ import {
   chatDetailDropdownOptionSx,
   chatDetailDropdownPaperSx,
 } from "../../theme/chatDesignTokens";
+import useTranslation from "../../hooks/useTranslation";
 
 const optionLabel = (o) => `${o.label} (${o.dial})`;
 
@@ -25,7 +26,7 @@ const glassAutocompleteSx = {
 };
 
 export default function PhoneCountryField({
-  label = "Phone number",
+  label,
   phoneNumber,
   countryCode,
   onChange,
@@ -33,6 +34,7 @@ export default function PhoneCountryField({
   glass = false,
   variant = glass ? "glass" : "default",
 }) {
+  const { t } = useTranslation();
   const isGlass = variant === "glass";
   const isDetail = variant === "detail";
   const [national, setNational] = useState("");
@@ -49,7 +51,7 @@ export default function PhoneCountryField({
 
   const full = combinePhone(selected.dial, national);
   const showError = national.length > 0 && !isValidInternationalPhone(full);
-  const helper = showError ? "Wrong phone number format" : isGlass ? undefined : PHONE_FORMAT_HINT;
+  const helper = showError ? t("phone.error.invalid") : isGlass ? undefined : PHONE_FORMAT_HINT;
 
   const emit = (nextIso, nextNational) => {
     const opt = COUNTRY_PHONE_OPTIONS.find((o) => o.iso === nextIso) || COUNTRY_PHONE_OPTIONS.find((o) => o.iso === "UA");
@@ -118,8 +120,8 @@ export default function PhoneCountryField({
           <TextField
             {...params}
             hiddenLabel={isGlass}
-            label={isGlass ? undefined : "Country"}
-            placeholder={isGlass ? "Country" : undefined}
+            label={isGlass ? undefined : t("phone.country.label")}
+            placeholder={isGlass ? t("phone.country.label") : undefined}
             inputProps={{
               ...params.inputProps,
               readOnly: true,
@@ -131,8 +133,8 @@ export default function PhoneCountryField({
       <TextField
         fullWidth
         hiddenLabel={isGlass}
-        label={isGlass ? undefined : label}
-        placeholder={isGlass ? "Phone number" : undefined}
+        label={isGlass ? undefined : (label ?? t("phone.number.label"))}
+        placeholder={isGlass ? t("phone.number.label") : undefined}
         value={national}
         disabled={disabled}
         onChange={(e) => {

@@ -38,6 +38,7 @@ import UserAvatar from '../user/UserAvatar';
 import { resolveRoomAvatarSrc } from '../../utils/userAvatar';
 import { getMessagePreviewText } from '../../utils/personalSpace';
 import CreatePersonalSpaceDialog from './CreatePersonalSpaceDialog';
+import useTranslation from '../../hooks/useTranslation';
 
 const PersonalSpaceList = ({
   spaces,
@@ -48,6 +49,7 @@ const PersonalSpaceList = ({
   onOpenSpaceProfile,
   activeSpaceId,
 }) => {
+  const { t } = useTranslation();
   const removeChat = useChatStore((s) => s.removeChat);
   const upsertChat = useChatStore((s) => s.upsertChat);
   const storeChats = useChatStore((s) => s.chats);
@@ -87,7 +89,7 @@ const PersonalSpaceList = ({
       setDeleteTarget(null);
       onRefresh?.();
     } catch (e) {
-      setDeleteError(getApiErrorMessage(e, 'Could not delete this personal space.'));
+      setDeleteError(getApiErrorMessage(e, t('personalSpace.list.delete.error')));
     } finally {
       setDeleteBusy(false);
     }
@@ -143,11 +145,11 @@ const PersonalSpaceList = ({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
           <SpaceDashboardOutlinedIcon sx={{ fontSize: 20, color: chatColors.primary }} aria-hidden />
           <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1, color: chatColors.glassPanelText }}>
-            Personal spaces
+            {t('personalSpace.list.title')}
           </Typography>
           <IconButton
             size="small"
-            aria-label="Create personal space"
+            aria-label={t('personalSpace.list.create.ariaLabel')}
             onClick={() => setCreateOpen(true)}
             sx={{ color: chatColors.glassPanelTextMuted }}
           >
@@ -157,7 +159,7 @@ const PersonalSpaceList = ({
         <TextField
           size="small"
           fullWidth
-          placeholder="Search spaces"
+          placeholder={t('personalSpace.list.search.placeholder')}
           value={listSearch}
           onChange={(e) => setListSearch(e.target.value)}
           InputProps={{
@@ -182,7 +184,7 @@ const PersonalSpaceList = ({
               severity="error"
               action={
                 <Button color="inherit" size="small" onClick={() => onRefresh?.()}>
-                  Retry
+                  {t('common.retry')}
                 </Button>
               }
             >
@@ -192,11 +194,13 @@ const PersonalSpaceList = ({
         ) : filtered.length === 0 ? (
           <Box p={3} textAlign="center">
             <Typography variant="body1" paragraph sx={{ color: chatColors.glassPanelTextMuted }}>
-              {liveSpaces.length === 0 ? 'No personal spaces yet' : 'No spaces match your search'}
+              {liveSpaces.length === 0
+                ? t('personalSpace.list.empty.none')
+                : t('personalSpace.list.empty.noMatch')}
             </Typography>
             {liveSpaces.length === 0 ? (
               <Button variant="contained" onClick={() => setCreateOpen(true)} sx={{ mt: 1 }}>
-                Create your first space
+                {t('personalSpace.list.createFirst')}
               </Button>
             ) : null}
           </Box>
@@ -204,12 +208,12 @@ const PersonalSpaceList = ({
           <List sx={{ width: '100%', minWidth: 0, bgcolor: muiTransparent, py: 0 }}>
             {filtered.map((space) => {
               const isSelected = String(activeSpaceId) === String(space.id);
-              const name = space.groupName || 'Personal Space';
+              const name = space.groupName || t('roomProfile.fallback.personalSpace');
               const letter = (name[0] || 'P').toUpperCase();
               const preview = getMessagePreviewText({
                 content: space.lastMessage || space.lastMessageContent || '',
                 messageType: space.lastMessageType,
-              }) || 'Notes, to-dos & reminders';
+              }) || t('personalSpace.list.preview.fallback');
               const unreadCount = space.unreadCount || 0;
 
               return (
@@ -274,7 +278,7 @@ const PersonalSpaceList = ({
                   ) : null}
                   <IconButton
                     size="small"
-                    aria-label={`Options for ${name}`}
+                    aria-label={t('personalSpace.list.options.ariaLabel', { name })}
                     onClick={(e) => openMenu(e, space)}
                     sx={{ color: chatColors.glassPanelTextMuted }}
                   >
@@ -294,7 +298,7 @@ const PersonalSpaceList = ({
             onOpenSpaceProfile?.(menuTarget);
           }}
         >
-          Space details
+          {t('personalSpace.list.menu.details')}
         </MenuItem>
         <MenuItem
           disabled={!canDeleteSpace(menuTarget)}
@@ -304,15 +308,19 @@ const PersonalSpaceList = ({
           }}
           sx={{ color: canDeleteSpace(menuTarget) ? 'error.main' : undefined }}
         >
-          Delete space
+          {t('personalSpace.list.menu.delete')}
         </MenuItem>
       </Menu>
 
       <Dialog open={Boolean(deleteTarget)} onClose={() => !deleteBusy && setDeleteTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Delete {deleteTarget?.groupName || 'personal space'}?</DialogTitle>
+        <DialogTitle>
+          {t('personalSpace.list.delete.title', {
+            name: deleteTarget?.groupName || t('personalSpace.list.delete.fallbackName'),
+          })}
+        </DialogTitle>
         <DialogContent>
           <DialogContentText>
-            All notes, to-dos, and messages in this space will be permanently deleted.
+            {t('personalSpace.list.delete.body')}
           </DialogContentText>
           {deleteError ? (
             <Typography variant="body2" color="error" sx={{ mt: 1.5 }}>
@@ -322,10 +330,10 @@ const PersonalSpaceList = ({
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDeleteTarget(null)} disabled={deleteBusy}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button color="error" variant="contained" disabled={deleteBusy} onClick={() => void handleDelete()}>
-            {deleteBusy ? 'Deleting…' : 'Delete'}
+            {deleteBusy ? t('common.deleting') : t('common.delete')}
           </Button>
         </DialogActions>
       </Dialog>

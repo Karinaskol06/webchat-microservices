@@ -8,7 +8,6 @@ import {
   Typography,
 } from '@mui/material';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import useAuthStore from '../store/useAuthStore';
@@ -16,15 +15,19 @@ import AuthPageLayout from '../components/auth/AuthPageLayout';
 import AuthAnimatedItem from '../components/auth/AuthAnimatedItem';
 import AuthErrorAlert from '../components/auth/AuthErrorAlert';
 import GlassTextField from '../components/auth/GlassTextField';
+import GlassPasswordField from '../components/auth/GlassPasswordField';
 import {
   authLinkButtonSx,
   authPrimaryButtonSx,
   glassCheckboxLabelSx,
   glassCheckboxSx,
 } from '../components/auth/authPageTheme';
+import useTranslation from '../hooks/useTranslation';
+
 const REMEMBER_KEY = 'webchat-remember-username';
 
 const Login = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuthStore();
@@ -79,7 +82,7 @@ const Login = () => {
       login(userData, loginResponse.token);
       navigate('/chat');
     } catch (err) {
-      setError(err.message || 'Login failed. Please try again.');
+      setError(err.message || t('auth.login.error.fallback'));
     } finally {
       setLoading(false);
     }
@@ -87,18 +90,18 @@ const Login = () => {
 
   return (
     <AuthPageLayout
-      title="Login"
+      title={t('auth.login.title')}
       shake={errorShake}
       footer={
         <>
-          Don&apos;t have an account?{' '}
+          {t('auth.login.footer.noAccount')}{' '}
           <Button
             component={RouterLink}
             to="/register"
             disableRipple
             sx={authLinkButtonSx}
           >
-            Register
+            {t('auth.login.footer.register')}
           </Button>
         </>
       }
@@ -127,7 +130,7 @@ const Login = () => {
         <AuthAnimatedItem index={0}>
           <GlassTextField
             name="username"
-            placeholder="Username or email"
+            placeholder={t('auth.login.username.placeholder')}
             autoComplete="username"
             value={formData.username}
             onChange={handleChange}
@@ -136,7 +139,7 @@ const Login = () => {
             endIcon={PersonOutlineIcon}
             slotProps={{
               htmlInput: {
-                'aria-label': 'Username or email',
+                'aria-label': t('auth.login.username.ariaLabel'),
                 autoCapitalize: 'none',
                 autoCorrect: 'off',
               },
@@ -145,16 +148,14 @@ const Login = () => {
         </AuthAnimatedItem>
 
         <AuthAnimatedItem index={1}>
-          <GlassTextField
+          <GlassPasswordField
             name="password"
-            type="password"
-            placeholder="Password"
+            placeholder={t('auth.login.password.placeholder')}
             autoComplete="current-password"
             value={formData.password}
             onChange={handleChange}
             required
             disabled={loading}
-            endIcon={LockOutlinedIcon}
           />
         </AuthAnimatedItem>
 
@@ -181,7 +182,7 @@ const Login = () => {
                   sx={glassCheckboxSx}
                 />
               }
-              label="Remember me"
+              label={t('auth.login.rememberMe')}
               sx={glassCheckboxLabelSx}
             />
             <Typography
@@ -195,7 +196,7 @@ const Login = () => {
                 '&:hover': { textDecoration: 'underline', opacity: 0.9 },
               }}
             >
-              Forgot Password?
+              {t('auth.login.forgotPassword')}
             </Typography>
           </Box>
         </AuthAnimatedItem>
@@ -212,7 +213,7 @@ const Login = () => {
             {loading ? (
               <CircularProgress size={24} sx={{ color: '#1a1a2e' }} />
             ) : (
-              'Login'
+              t('auth.login.submit')
             )}
           </Button>
         </AuthAnimatedItem>

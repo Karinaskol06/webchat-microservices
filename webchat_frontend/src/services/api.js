@@ -92,13 +92,16 @@ api.interceptors.response.use(
     const status = error.response?.status ?? null;
     const url = error.config?.url ?? "unknown";
 
-    const gatewayMsg = error.response?.headers?.["x-error-message"]
-      ?? error.response?.headers?.["X-Error-Message"];
-    console.error("❌ Response error:", {
-      url,
-      status,
-      message: getApiErrorMessage(error, error.message || "Request failed"),
-    });
+    const silentError = Boolean(error.config?.silentError);
+    if (!silentError) {
+      const gatewayMsg = error.response?.headers?.["x-error-message"]
+        ?? error.response?.headers?.["X-Error-Message"];
+      console.error("❌ Response error:", {
+        url,
+        status,
+        message: getApiErrorMessage(error, error.message || "Request failed"),
+      });
+    }
 
     const isAuthFailure =
       status === 401 &&

@@ -4,6 +4,61 @@ import {
   recordSharedMediaMessageDeleted,
 } from '../utils/sharedMedia';
 import { appendCacheBust, bustRoomPhotoUrl, stripMediaCacheKey } from '../utils/userAvatar';
+import { getMessagePreviewText } from '../utils/personalSpace';
+
+const messageIdKey = (message) => String(message?.id ?? message?._id ?? '');
+
+const chatLastPreviewTimeMs = (chat) => {
+  const raw = chat?.lastMessageTime ?? chat?.lastActivity ?? null;
+  if (raw == null || raw === '') return null;
+  const t = new Date(raw).getTime();
+  return Number.isFinite(t) ? t : null;
+};
+
+const buildLastMessagePreviewPatch = (message) => {
+  if (!message) {
+    return {
+      lastMessage: '',
+      lastMessageContent: '',
+      lastMessageTime: null,
+      lastMessageSenderId: null,
+      lastMessageType: null,
+    };
+  }
+  const preview = getMessagePreviewText(message) || 'Attachment';
+  const senderId = message.senderId ?? message.sender?.id ?? null;
+  return {
+    lastMessage: preview,
+    lastMessageContent: preview,
+    lastMessageTime: message.timestamp ?? null,
+    lastMessageSenderId: senderId,
+    ...(message.messageType != null && message.messageType !== ''
+      ? { lastMessageType: String(message.messageType).toUpperCase() }
+      : {}),
+  };
+};
+
+const applyChatLastMessagePatch = (state, chatId, patch) => {
+  const key = String(chatId);
+  let found = false;
+  const nextChats = state.chats.map((chat) => {
+    if (String(chat.id) !== key) return chat;
+    found = true;
+    return { ...chat, ...patch };
+  });
+
+  const chats = found
+    ? reorderChatsByRecent(nextChats)
+    : state.currentChat && String(state.currentChat.id) === key
+      ? reorderChatsByRecent([{ ...state.currentChat, ...patch }, ...state.chats])
+      : state.chats;
+
+  const next = { chats };
+  if (state.currentChat && String(state.currentChat.id) === key) {
+    next.currentChat = { ...state.currentChat, ...patch };
+  }
+  return next;
+};
 
 function mergeChatRecord(existing, incoming) {
   if (!incoming) return existing;
@@ -90,6 +145,24 @@ const useChatStore = create((set, get) => ({
     // Ensure chats is always an array
     const chatsArray = Array.isArray(chats) ? chats : [];
     set({ chats: reorderChatsByRecent(chatsArray), error: null });
+  },
+
+  /** Keep WebSocket-upserted chats when a stale REST list loads. */
+  mergeChatsFromServer: (serverChats, localChats) => {
+    const serverArr = Array.isArray(serverChats) ? serverChats : [];
+    const localArr = Array.isArray(localChats) ? localChats : [];
+    const byId = new Map();
+    for (const chat of localArr) {
+      if (chat?.id != null && chat.id !== '') {
+        byId.set(String(chat.id), chat);
+      }
+    }
+    for (const chat of serverArr) {
+      if (chat?.id == null || chat.id === '') continue;
+      const key = String(chat.id);
+      byId.set(key, byId.has(key) ? mergeChatRecord(byId.get(key), chat) : chat);
+    }
+    return reorderChatsByRecent([...byId.values()]);
   },
 
   upsertChat: (chat) => {
@@ -337,25 +410,7 @@ const useChatStore = create((set, get) => ({
           ? { lastMessageType: String(messageType).toUpperCase() }
           : {}),
       };
-
-      let found = false;
-      const nextChats = state.chats.map((chat) => {
-        if (String(chat.id) !== key) return chat;
-        found = true;
-        return { ...chat, ...patch };
-      });
-
-      const chats = found
-        ? reorderChatsByRecent(nextChats)
-        : state.currentChat && String(state.currentChat.id) === key
-          ? reorderChatsByRecent([{ ...state.currentChat, ...patch }, ...state.chats])
-          : state.chats;
-
-      const next = { chats };
-      if (state.currentChat && String(state.currentChat.id) === key) {
-        next.currentChat = { ...state.currentChat, ...patch };
-      }
-      return next;
+      return applyChatLastMessagePatch(state, key, patch);
     });
   },
 
@@ -386,10 +441,30 @@ const useChatStore = create((set, get) => ({
   // deleting a message from the list
   removeMessage: (messageId) => {
     const { currentChat } = get();
-    recordSharedMediaMessageDeleted(currentChat?.id, messageId);
-    set((state) => ({
-      messages: state.messages.filter(msg => msg.id !== messageId)
-    }));
+    const chatId = currentChat?.id;
+    recordSharedMediaMessageDeleted(chatId, messageId);
+    const messageKey = String(messageId);
+    set((state) => {
+      const deletedMsg = state.messages.find((msg) => messageIdKey(msg) === messageKey);
+      const messages = state.messages.filter((msg) => messageIdKey(msg) !== messageKey);
+      const next = { messages };
+
+      if (!chatId || !deletedMsg) return next;
+
+      const chatRecord = state.chats.find((c) => String(c.id) === String(chatId)) ?? state.currentChat;
+      const deletedTimeMs = deletedMsg.timestamp ? new Date(deletedMsg.timestamp).getTime() : null;
+      const listLastMs = chatLastPreviewTimeMs(chatRecord);
+      const wasLastInLoaded = state.messages.length > 0
+        && messageIdKey(state.messages[state.messages.length - 1]) === messageKey;
+      const wasChatListPreview = deletedTimeMs != null
+        && (listLastMs == null || deletedTimeMs >= listLastMs - 1000);
+
+      if (!wasLastInLoaded && !wasChatListPreview) return next;
+
+      const lastRemaining = messages.length > 0 ? messages[messages.length - 1] : null;
+      const patch = buildLastMessagePreviewPatch(lastRemaining);
+      return { ...next, ...applyChatLastMessagePatch(state, chatId, patch) };
+    });
   },
 
   // updating message text (and optional messageType after caption edits)

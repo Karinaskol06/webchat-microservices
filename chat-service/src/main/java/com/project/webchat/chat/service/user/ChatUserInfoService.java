@@ -32,6 +32,9 @@ public class ChatUserInfoService {
         if (useCache) {
             UserInfoDTO cached = redisService.getCachedUserInfo(userId);
             if (cached != null) {
+                if (cached.isDeleted()) {
+                    return DeletedUserInfoFactory.build(userId);
+                }
                 cached.setOnline(redisService.isUserOnline(userId));
                 return cached;
             }
@@ -42,6 +45,14 @@ public class ChatUserInfoService {
             UserDTO userData = response.getBody();
 
             if (userData != null) {
+                if (userData.isDeleted() || !userData.isActive()) {
+                    UserInfoDTO deleted = DeletedUserInfoFactory.build(userId);
+                    if (useCache) {
+                        redisService.cacheUserInfo(deleted);
+                    }
+                    return deleted;
+                }
+
                 UserInfoDTO userInfo = UserInfoDTO.builder()
                         .id(userData.getId())
                         .username(userData.getUsername())
@@ -49,6 +60,7 @@ public class ChatUserInfoService {
                         .lastName(userData.getLastName())
                         .profilePicture(userData.getProfilePicture())
                         .online(redisService.isUserOnline(userId))
+                        .deleted(false)
                         .build();
 
                 if (useCache) {
@@ -60,11 +72,7 @@ public class ChatUserInfoService {
             log.error("Failed to fetch user {}: {}", userId, e.getMessage());
         }
 
-        return UserInfoDTO.builder()
-                .id(userId)
-                .username("User " + userId)
-                .online(redisService.isUserOnline(userId))
-                .build();
+        return DeletedUserInfoFactory.build(userId);
     }
 
     public Map<Long, UserInfoDTO> getUserInfoBatch(Set<Long> userIds) {

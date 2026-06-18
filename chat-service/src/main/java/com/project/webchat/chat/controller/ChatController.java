@@ -61,8 +61,6 @@ public class ChatController {
         ChatRoomDTO chat = chatService.createChat(
                 currentUser.getId(), createChatRequest.getOtherUserId());
 
-        webSocketService.notifyChatCreated(currentUser.getId(), chat);
-
         return ResponseEntity.status(HttpStatus.CREATED).body(chat);
     }
 
@@ -252,6 +250,24 @@ public class ChatController {
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         log.info("User {} is deleting room {}", currentUser.getId(), id);
         chatService.deleteRoom(id, currentUser.getId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{chatId}/delete-for-me")
+    public ResponseEntity<Void> deleteChatForMe(
+            @PathVariable String chatId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        log.info("User {} is deleting chat {} for themselves", currentUser.getId(), chatId);
+        chatService.deleteChatForMe(chatId, currentUser.getId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{chatId}/delete-for-everyone")
+    public ResponseEntity<Void> deleteChatForEveryone(
+            @PathVariable String chatId,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        log.info("User {} is deleting chat {} for everyone", currentUser.getId(), chatId);
+        chatService.deleteChatForEveryone(chatId, currentUser.getId());
         return ResponseEntity.noContent().build();
     }
 

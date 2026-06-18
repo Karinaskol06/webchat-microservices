@@ -55,6 +55,7 @@ public class PrivateChatService {
     private final UserBanGuardService userBanGuardService;
 
     private final ChatUserInfoService chatUserInfoService;
+    private final ChatRoomManagementService chatRoomManagementService;
 
 
 
@@ -76,28 +77,21 @@ public class PrivateChatService {
         ChatRoom chatRoom = lookup.chatRoom();
 
         if (!lookup.createdNew()) {
-
             int unreadCount = roomEnrichmentService.getUnreadCount(chatRoom.getId(), userId1);
-
-            ChatRoomDTO dto = roomEnrichmentService.enrichChatWithUserData(chatRoom, userId1, unreadCount);
-
-            webSocketService.notifyChatCreated(userId2, dto);
-
-            webSocketService.notifyChatCreated(userId1, dto);
-
-            return dto;
-
+            notifyPrivateChatMembers(chatRoom, userId1, userId2, unreadCount);
+            return roomEnrichmentService.enrichChatWithUserData(chatRoom, userId1, unreadCount);
         }
 
+        notifyPrivateChatMembers(chatRoom, userId1, userId2, 0);
+        return roomEnrichmentService.enrichChatWithUserData(chatRoom, userId1, 0);
+    }
 
-
-        ChatRoomDTO dto = roomEnrichmentService.enrichChatWithUserData(chatRoom, userId1, 0);
-
-        webSocketService.notifyChatCreated(userId1, dto);
-
-        webSocketService.notifyChatCreated(userId2, dto);
-
-        return dto;
+    private void notifyPrivateChatMembers(ChatRoom chatRoom, Long userId1, Long userId2, int unreadForUser1) {
+        int unreadForUser2 = roomEnrichmentService.getUnreadCount(chatRoom.getId(), userId2);
+        webSocketService.notifyChatCreated(userId1,
+                roomEnrichmentService.enrichChatWithUserData(chatRoom, userId1, unreadForUser1));
+        webSocketService.notifyChatCreated(userId2,
+                roomEnrichmentService.enrichChatWithUserData(chatRoom, userId2, unreadForUser2));
 
     }
 
@@ -111,7 +105,9 @@ public class PrivateChatService {
 
         if (existsAlready.isPresent()) {
 
-            return new PrivateChatLookup(existsAlready.get(), false);
+            ChatRoom existing = existsAlready.get();
+            chatRoomManagementService.revealChatForMember(existing.getId(), userId1);
+            return new PrivateChatLookup(chatRoomRepository.findById(existing.getId()).orElse(existing), false);
 
         }
 

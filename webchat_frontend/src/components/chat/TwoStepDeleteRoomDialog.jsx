@@ -8,6 +8,15 @@ import {
   DialogTitle,
   Typography,
 } from '@mui/material';
+import useTranslation from '../../hooks/useTranslation';
+
+function resolveRoomType(label, t) {
+  const lower = String(label || '').toLowerCase();
+  if (lower.includes('channel')) return t('roomType.channel');
+  if (lower.includes('group')) return t('roomType.group');
+  if (lower.includes('personal')) return t('roomType.personalSpace');
+  return label || t('roomType.room');
+}
 
 /**
  * Two-step confirmation before permanently deleting a group or channel.
@@ -21,6 +30,7 @@ const TwoStepDeleteRoomDialog = ({
   onClose,
   onConfirmDelete,
 }) => {
+  const { t } = useTranslation();
   const [step, setStep] = useState(1);
 
   useEffect(() => {
@@ -32,23 +42,17 @@ const TwoStepDeleteRoomDialog = ({
     onClose?.();
   };
 
+  const roomType = resolveRoomType(roomTypeLabel, t);
+
   const title =
     step === 1
-      ? `Delete ${roomTypeLabel}?`
-      : 'Delete permanently?';
+      ? t('room.delete.step1.title', { roomType })
+      : t('room.delete.step2.title');
 
   const body =
-    step === 1 ? (
-      <>
-        You are about to delete <strong>{roomLabel}</strong>. Members will lose access and all
-        messages will be removed.
-      </>
-    ) : (
-      <>
-        This action <strong>cannot be undone</strong>. The {roomTypeLabel.toLowerCase()} and its
-        entire message history will be deleted forever.
-      </>
-    );
+    step === 1
+      ? t('room.delete.step1.body', { roomLabel })
+      : t('room.delete.step2.body', { roomType });
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
@@ -63,11 +67,11 @@ const TwoStepDeleteRoomDialog = ({
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={handleClose} disabled={loading}>
-          Cancel
+          {t('common.cancel')}
         </Button>
         {step === 1 ? (
           <Button color="error" variant="contained" onClick={() => setStep(2)} disabled={loading}>
-            Continue
+            {t('room.delete.continue')}
           </Button>
         ) : (
           <Button
@@ -76,7 +80,7 @@ const TwoStepDeleteRoomDialog = ({
             disabled={loading}
             onClick={() => onConfirmDelete?.()}
           >
-            {loading ? 'Deleting…' : 'Delete forever'}
+            {loading ? t('common.deleting') : t('room.delete.confirm')}
           </Button>
         )}
       </DialogActions>

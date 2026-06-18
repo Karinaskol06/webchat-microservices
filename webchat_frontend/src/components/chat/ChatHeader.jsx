@@ -1,24 +1,21 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Box,
   IconButton,
-  ListItemIcon,
-  ListItemText,
-  Menu,
-  MenuItem,
   Tooltip,
   Typography,
 } from '@mui/material';
 import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import LinkIcon from '@mui/icons-material/Link';
 import SearchIcon from '@mui/icons-material/Search';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
-import ExitToAppOutlinedIcon from '@mui/icons-material/ExitToAppOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { getPresenceLabel } from '../../utils/presence';
+import LogoutIcon from '@mui/icons-material/Logout';
+import { derivePresenceState } from '../../utils/presence';
+import { isDeletedAccountUser } from '../../utils/chatDisplay';
 import { chatColors } from '../../theme/chatDesignTokens';
+import useTranslation from '../../hooks/useTranslation';
 
 import UserAvatar from '../user/UserAvatar';
 import { getUserAvatarLetter } from '../../utils/userAvatar';
@@ -41,9 +38,9 @@ const ChatHeader = ({
   onCopyInvite,
   isGroupOrChannel = false,
   canLeaveRoom = false,
-  canDeleteRoom = false,
   onRequestLeaveRoom,
-  onRequestDeleteRoom,
+  canDeleteChat = false,
+  onRequestDeleteChat,
   inChatSearchOpen = false,
   onToggleInChatSearch,
   showGroupInfoToggle = false,
@@ -52,44 +49,43 @@ const ChatHeader = ({
   showMembersPanelToggle = false,
   membersPanelOpen = false,
   onToggleMembersPanel,
-  groupInfoToggleLabel = 'Group info',
+  groupInfoToggleLabel,
 }) => {
-  const [menuAnchor, setMenuAnchor] = useState(null);
+  const { t } = useTranslation();
+  const panelToggleLabel = groupInfoToggleLabel ?? t('chat.sidebar.groupInfo');
 
-  const derivedTitle = otherUser
-    ? `${otherUser.firstName || ''} ${otherUser.lastName || ''}`.trim() ||
-      otherUser.username
-    : 'Chat';
+  const derivedTitle = isDeletedAccountUser(otherUser)
+    ? t('common.deletedAccount')
+    : otherUser
+      ? `${otherUser.firstName || ''} ${otherUser.lastName || ''}`.trim() ||
+        otherUser.username
+      : t('roomType.fallback');
 
   const title = headerTitle ?? derivedTitle;
 
   const avatarSrc = headerAvatarSrc ?? undefined;
   const letter = headerAvatarLetter ?? getUserAvatarLetter(otherUser);
-  const subtitle = isTyping
-    ? getPresenceLabel(presenceStatus, true)
-    : headerSubtitle ?? getPresenceLabel(presenceStatus, false);
+  const getPresenceSubtitle = () => {
+    if (isTyping) return t('chatHeader.presence.typing');
+    if (headerSubtitle != null) return headerSubtitle;
+    const state = derivePresenceState(presenceStatus);
+    if (state === 'online') return t('chatHeader.presence.online');
+    return presenceStatus?.lastSeenFormatted || t('chatHeader.presence.lastSeen');
+  };
+  const subtitle = getPresenceSubtitle();
 
   const avatarTooltip = headerTitle
-    ? 'View room details'
+    ? t('chatHeader.avatar.viewRoomDetails')
     : otherUser
-      ? 'View profile'
-      : 'View details';
+      ? t('chatHeader.avatar.viewProfile')
+      : t('chatHeader.avatar.viewDetails');
 
   const handleAvatarClick = () => {
     if (!avatarInteractive) return;
     onOpenProfile?.();
   };
 
-  const handleCopyInvite = async () => {
-    setMenuAnchor(null);
-    await onCopyInvite?.();
-  };
-
-  const closeMenu = () => setMenuAnchor(null);
-
   const avatarInteractive = Boolean(headerAvatarClickable && onOpenProfile);
-
-  const hasRoomMenuItems = showCopyInvite || canLeaveRoom || canDeleteRoom;
 
   const avatarEl = (
     <UserAvatar
@@ -117,9 +113,9 @@ const ChatHeader = ({
   const headerActions = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
       {showGroupInfoToggle && onToggleGroupInfoPanel ? (
-        <Tooltip title={groupInfoPanelOpen ? `Hide ${groupInfoToggleLabel}` : `Show ${groupInfoToggleLabel}`}>
+        <Tooltip title={groupInfoPanelOpen ? t('chatHeader.panel.hide', { label: panelToggleLabel }) : t('chatHeader.panel.show', { label: panelToggleLabel })}>
           <IconButton
-            aria-label={groupInfoPanelOpen ? `Hide ${groupInfoToggleLabel}` : `Show ${groupInfoToggleLabel}`}
+            aria-label={groupInfoPanelOpen ? t('chatHeader.panel.hide', { label: panelToggleLabel }) : t('chatHeader.panel.show', { label: panelToggleLabel })}
             aria-pressed={groupInfoPanelOpen}
             size="small"
             onClick={onToggleGroupInfoPanel}
@@ -133,9 +129,9 @@ const ChatHeader = ({
         </Tooltip>
       ) : null}
       {showMembersPanelToggle && onToggleMembersPanel ? (
-        <Tooltip title={membersPanelOpen ? 'Hide members' : 'Show members'}>
+        <Tooltip title={membersPanelOpen ? t('chatHeader.members.hide') : t('chatHeader.members.show')}>
           <IconButton
-            aria-label={membersPanelOpen ? 'Hide members panel' : 'Show members panel'}
+            aria-label={membersPanelOpen ? t('chatHeader.members.ariaHide') : t('chatHeader.members.ariaShow')}
             aria-pressed={membersPanelOpen}
             size="small"
             onClick={onToggleMembersPanel}
@@ -149,9 +145,9 @@ const ChatHeader = ({
         </Tooltip>
       ) : null}
       {onToggleInChatSearch ? (
-        <Tooltip title={inChatSearchOpen ? 'Close search' : 'Search in chat'}>
+        <Tooltip title={inChatSearchOpen ? t('chatHeader.search.close') : t('chatHeader.search.open')}>
           <IconButton
-            aria-label="Search in chat"
+            aria-label={t('chatHeader.search.open')}
             aria-pressed={inChatSearchOpen}
             size="small"
             onClick={onToggleInChatSearch}
@@ -164,66 +160,64 @@ const ChatHeader = ({
           </IconButton>
         </Tooltip>
       ) : null}
-      {isGroupOrChannel && hasRoomMenuItems ? (
-        <>
-          <Tooltip title="Room options">
-            <IconButton
-              aria-label="Room options"
-              onClick={(e) => setMenuAnchor(e.currentTarget)}
-              size="small"
-              sx={headerIconButtonSx}
-            >
-              <MoreVertIcon />
-            </IconButton>
-          </Tooltip>
-          <Menu
-            anchorEl={menuAnchor}
-            open={Boolean(menuAnchor)}
-            onClose={closeMenu}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-            slotProps={{ paper: { sx: { minWidth: 220 } } }}
+      {showCopyInvite ? (
+        <Tooltip title={t('chatHeader.menu.copyInvite')}>
+          <IconButton
+            aria-label={t('chatHeader.menu.copyInvite')}
+            onClick={onCopyInvite}
+            size="small"
+            sx={headerIconButtonSx}
           >
-            {showCopyInvite ? (
-              <MenuItem onClick={handleCopyInvite}>
-                <ListItemIcon>
-                  <LinkIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText primary="Copy invite link" />
-              </MenuItem>
-            ) : null}
-            {canLeaveRoom ? (
-              <MenuItem
-                onClick={() => {
-                  closeMenu();
-                  onRequestLeaveRoom?.();
-                }}
-              >
-                <ListItemIcon>
-                  <ExitToAppOutlinedIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText primary="Leave group/channel" />
-              </MenuItem>
-            ) : null}
-            {canDeleteRoom ? (
-              <MenuItem
-                onClick={() => {
-                  closeMenu();
-                  onRequestDeleteRoom?.();
-                }}
-                sx={{ color: 'error.main' }}
-              >
-                <ListItemIcon>
-                  <DeleteOutlineIcon fontSize="small" color="error" />
-                </ListItemIcon>
-                <ListItemText primary="Delete group/channel" />
-              </MenuItem>
-            ) : null}
-          </Menu>
-        </>
+            <LinkIcon />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+      {canLeaveRoom ? (
+        <Tooltip title={t('chatHeader.leave.tooltip')}>
+          <IconButton
+            aria-label={t('chatHeader.menu.leave')}
+            onClick={onRequestLeaveRoom}
+            size="small"
+            sx={{
+              ...headerIconButtonSx,
+              color: chatColors.textSecondary,
+              '&:hover': {
+                color: '#fff',
+                bgcolor: 'rgba(255, 255, 255, 0.08)',
+              },
+            }}
+          >
+            <LogoutIcon />
+          </IconButton>
+        </Tooltip>
+      ) : null}
+      {canDeleteChat ? (
+        <Tooltip
+          title={
+            isGroupOrChannel
+              ? t('chatHeader.delete.roomTooltip')
+              : t('chatHeader.delete.tooltip')
+          }
+        >
+          <IconButton
+            aria-label={t('chatHeader.menu.deleteChat')}
+            onClick={onRequestDeleteChat}
+            size="small"
+            sx={{
+              ...headerIconButtonSx,
+              color: chatColors.textSecondary,
+              '&:hover': {
+                color: '#fff',
+                bgcolor: 'rgba(255, 255, 255, 0.08)',
+              },
+            }}
+          >
+            <DeleteOutlineIcon />
+          </IconButton>
+        </Tooltip>
       ) : null}
       {!emojiSidebarOpen && onShowEmojiSidebar ? (
-        <Tooltip title="Show emoji sidebar">
+        <Tooltip title={t('chatHeader.emoji.show')}>
           <IconButton
             size="small"
             onClick={onShowEmojiSidebar}

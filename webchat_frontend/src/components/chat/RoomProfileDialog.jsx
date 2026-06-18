@@ -39,6 +39,8 @@ import useChatStore from '../../store/useChatStore';
 import useAuthStore from '../../store/useAuthStore';
 import { fileToRoomPhotoDataUrl, ROOM_PHOTO_ACCEPT } from '../../utils/roomPhoto';
 import { chatColors, chatHideScrollbarSx } from '../../theme/chatDesignTokens';
+import useTranslation from '../../hooks/useTranslation';
+import { t as translateStatic } from '../../i18n';
 
 const detailDialogPaperSx = {
   bgcolor: chatColors.detailPageBg,
@@ -48,7 +50,7 @@ const detailDialogPaperSx = {
 };
 
 const displayName = (u) => {
-  if (!u) return 'Unknown';
+  if (!u) return translateStatic('common.unknown');
   const full = `${u.firstName || ''} ${u.lastName || ''}`.trim();
   return full || u.username || `User ${u.id}`;
 };
@@ -111,6 +113,7 @@ function sortRoomMembers(room) {
 }
 
 const RoomProfileDialog = ({ open, roomId, onClose }) => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const { user } = useAuthStore();
   const [room, setRoom] = useState(null);
@@ -163,7 +166,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(getApiErrorMessage(err, 'Could not load room'));
+          setError(getApiErrorMessage(err, t('roomProfile.error.load')));
         }
       } finally {
         if (!cancelled) {
@@ -192,7 +195,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
       const dto = await chatService.getRoom(roomId);
       applyRoomUpdate(dto);
     } catch (err) {
-      setActionError(getApiErrorMessage(err, 'Could not refresh room'));
+      setActionError(getApiErrorMessage(err, t('roomProfile.error.refresh')));
     }
   };
 
@@ -226,7 +229,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
       const msg =
         e?.status === 404
           ? 'Ban is not available on the server yet. Restart chat-service so it loads the latest code, then try again.'
-          : getApiErrorMessage({ response: { data: e } }, 'Could not ban this member');
+          : getApiErrorMessage({ response: { data: e } }, t('roomProfile.error.ban'));
       setBanActionError(msg);
     } finally {
       setBanActionBusy(false);
@@ -242,7 +245,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
       await refreshRoom();
       closeManage();
     } catch (e) {
-      setActionError(getApiErrorMessage(e, 'Action failed'));
+      setActionError(getApiErrorMessage(e, t('roomProfile.error.action')));
     } finally {
       setActionBusy(false);
     }
@@ -251,7 +254,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
   const handleInviteMember = async () => {
     const username = String(inviteUsername || '').trim().replace(/^@/, '');
     if (!room?.id || !username) {
-      setActionError('Enter a username.');
+      setActionError(t('roomProfile.error.usernameRequired'));
       return;
     }
     setActionBusy(true);
@@ -262,7 +265,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
       setInviteSentMessage(`Invite sent to @${username}. They must accept before joining.`);
     } catch (e) {
       setInviteSentMessage('');
-      setActionError(getApiErrorMessage(e, 'Could not send invite'));
+      setActionError(getApiErrorMessage(e, t('roomProfile.error.invite')));
     } finally {
       setActionBusy(false);
     }
@@ -303,16 +306,16 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
     if (!room?.id) return;
     const name = String(editName || '').trim();
     if (!name) {
-      setActionError('Room name is required.');
+      setActionError(t('roomProfile.error.nameRequired'));
       return;
     }
     if (name.length > 100) {
-      setActionError('Room name must be at most 100 characters.');
+      setActionError(t('roomProfile.error.nameTooLong'));
       return;
     }
     const desc = String(editDescription ?? '');
     if (desc.length > 2000) {
-      setActionError('Description must be at most 2000 characters.');
+      setActionError(t('roomProfile.error.descriptionTooLong'));
       return;
     }
     setProfileSaving(true);
@@ -325,7 +328,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
       applyRoomUpdate(updatedRoom);
       setEditingProfile(false);
     } catch (e) {
-      setActionError(getApiErrorMessage(e, 'Could not save room details'));
+      setActionError(getApiErrorMessage(e, t('roomProfile.error.save')));
     } finally {
       setProfileSaving(false);
     }
@@ -351,7 +354,13 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
   const canBanMembers = Boolean(room && canBanRoomMembers(room, myId));
   const canEditProfileDetails = canModerateRoom;
 
-  const title = room?.groupName || (isPersonalSpace ? 'Personal Space' : isChannel ? 'Channel' : isGroup ? 'Group' : 'Room');
+  const title = room?.groupName || (isPersonalSpace
+    ? t('roomProfile.fallback.personalSpace')
+    : isChannel
+      ? t('roomProfile.fallback.channel')
+      : isGroup
+        ? t('roomProfile.fallback.group')
+        : t('roomProfile.fallback.room'));
   const profileBusy = profileSaving || photoUploading || actionBusy;
   const letter = (title?.[0] || '?').toUpperCase();
 
@@ -377,7 +386,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
         }}
       >
         <Typography component="span" variant="h6" sx={{ flex: 1, fontWeight: 700 }}>
-          {isPersonalSpace ? 'Personal space' : 'Room details'}
+          {isPersonalSpace ? t('roomProfile.title.personalSpace') : t('roomProfile.title.default')}
         </Typography>
         {canEditProfileDetails && !editingProfile ? (
           <Button
@@ -387,7 +396,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
             disabled={profileBusy || loading}
             sx={{ mr: 0.5, textTransform: 'none', fontWeight: 600 }}
           >
-            Edit
+            {t('roomProfile.edit')}
           </Button>
         ) : null}
         {editingProfile ? (
@@ -398,7 +407,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
               disabled={profileBusy}
               sx={{ mr: 0.5, textTransform: 'none' }}
             >
-              Cancel
+              {t('roomProfile.cancel')}
             </Button>
             <Button
               size="small"
@@ -407,11 +416,11 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
               disabled={profileBusy}
               sx={{ mr: 0.5, textTransform: 'none', fontWeight: 600 }}
             >
-              {profileSaving ? 'Saving…' : 'Save'}
+              {profileSaving ? t('roomProfile.saving') : t('roomProfile.save')}
             </Button>
           </>
         ) : null}
-        <IconButton aria-label="Close" onClick={onClose} edge="end" size="small">
+        <IconButton aria-label={t('common.close')} onClick={onClose} edge="end" size="small">
           <CloseIcon />
         </IconButton>
       </DialogTitle>
@@ -511,7 +520,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                         color="text.secondary"
                         sx={{ display: 'block', mb: 0.75, fontWeight: 500 }}
                       >
-                        {isPersonalSpace ? 'Space name' : 'Room name'} *
+                        {isPersonalSpace ? t('roomProfile.name.personalSpace') : t('roomProfile.name.room')} *
                       </Typography>
                       <TextField
                         value={editName}
@@ -519,7 +528,12 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                         fullWidth
                         required
                         disabled={profileBusy}
-                        inputProps={{ maxLength: 100, 'aria-label': isPersonalSpace ? 'Space name' : 'Room name' }}
+                        inputProps={{
+                          maxLength: 100,
+                          'aria-label': isPersonalSpace
+                            ? t('roomProfile.name.personalSpace')
+                            : t('roomProfile.name.room'),
+                        }}
                         sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
                       />
                     </>
@@ -540,7 +554,13 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                           <GroupsIcon sx={{ fontSize: 16 }} />
                         )
                       }
-                      label={isPersonalSpace ? 'Personal space' : isChannel ? 'Channel' : isGroup ? 'Group chat' : kind}
+                      label={isPersonalSpace
+                        ? t('roomProfile.chip.personalSpace')
+                        : isChannel
+                          ? t('roomProfile.fallback.channel')
+                          : isGroup
+                            ? t('roomProfile.fallback.group')
+                            : kind}
                       color={isChannel ? 'primary' : 'default'}
                       variant={isChannel ? 'filled' : 'outlined'}
                     />
@@ -550,12 +570,12 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                       <Chip
                         size="small"
                         icon={isPublic ? <PublicIcon sx={{ fontSize: 16 }} /> : <LockIcon sx={{ fontSize: 16 }} />}
-                        label={isPublic ? 'Public' : 'Private'}
+                        label={isPublic ? t('common.public') : t('common.private')}
                         variant="outlined"
                       />
                     )}
                     {typeof room.memberCount === 'number' ? (
-                      <Chip size="small" variant="outlined" label={`${room.memberCount} members`} />
+                      <Chip size="small" variant="outlined" label={t('common.members', { count: room.memberCount })} />
                     ) : null}
                   </Stack>
                 </Box>
@@ -564,7 +584,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
 
             <Box sx={{ px: 3, mt: 2 }}>
               <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.08 }}>
-                {isPersonalSpace ? 'Purpose' : 'About'}
+                {isPersonalSpace ? t('roomProfile.section.purpose') : t('roomProfile.section.about')}
               </Typography>
               {editingProfile && canEditProfileDetails ? (
                 <TextField
@@ -576,7 +596,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                   minRows={3}
                   maxRows={8}
                   disabled={profileBusy}
-                  placeholder="What is this room about?"
+                  placeholder={t('room.create.description.placeholder')}
                   helperText={`${editDescription.length}/2000`}
                   inputProps={{ maxLength: 2000, 'aria-label': 'Room description' }}
                   sx={{ mt: 0.75, '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' } }}
@@ -596,8 +616,8 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                     {room.description?.trim()
                       ? room.description.trim()
                       : isPersonalSpace
-                        ? 'Your private space for notes, attachments, reminders, and pinned blocks.'
-                        : 'No description has been added for this room yet.'}
+                        ? t('roomProfile.description.empty.personalSpace')
+                        : t('roomProfile.description.empty.room')}
                   </Typography>
                 </Box>
               )}
@@ -605,7 +625,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
 
             {formatCreated(room.createdAt) ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 3, mt: 1.5 }}>
-                Created {formatCreated(room.createdAt)}
+                {t('roomProfile.created', { date: formatCreated(room.createdAt) })}
               </Typography>
             ) : null}
 
@@ -615,12 +635,12 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
 
                 <Box sx={{ px: 3 }}>
                   <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.08 }}>
-                    {isChannel ? 'Owner & channel moderators' : 'Owner & admins'}
+                    {isChannel ? t('roomProfile.admins.title.channel') : t('roomProfile.admins.title.group')}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.25, mb: 1.25 }}>
                     {isChannel
-                      ? 'Owner and moderators manage invites, roles, and other members’ messages. Posting in the channel requires permission.'
-                      : 'Admins can manage invites, add members, promote other admins, and moderate messages. All members can chat.'}
+                      ? t('roomProfile.admins.hint.channel')
+                      : t('roomProfile.admins.hint.group')}
                   </Typography>
                   <Stack spacing={1}>
                     {sortedMembers
@@ -648,7 +668,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                               {handleForUser(m)}
                             </Typography>
                           </Box>
-                          <Chip size="small" label="Owner" color="primary" variant="outlined" />
+                          <Chip size="small" label={t('roomProfile.role.owner')} color="primary" variant="outlined" />
                         </Stack>
                       ))}
                     {(isGroup || isChannel)
@@ -678,7 +698,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                               </Box>
                               <Chip
                                 size="small"
-                                label={isChannel ? 'Moderator' : 'Admin'}
+                                label={isChannel ? t('roomProfile.role.moderator') : t('roomProfile.role.admin')}
                                 variant="outlined"
                               />
                             </Stack>
@@ -723,7 +743,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
 
                 <Box sx={{ px: 3 }}>
                   <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.08 }}>
-                    Members
+                    {t('roomProfile.members.title')}
                   </Typography>
                   <List dense disablePadding sx={{ mt: 1 }}>
                     {sortedMembers.map((m) => {
@@ -735,11 +755,11 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                       const isChanMod = isChannel && adminSet.has(mid) && !isOwner;
                       const isPoster = isChannel && posterSet.has(mid) && !isOwner && !isChanMod;
 
-                      let role = 'Member';
-                      if (isOwner) role = 'Owner';
-                      else if (isChanMod) role = 'Moderator';
-                      else if (isGrpAdm) role = 'Admin';
-                      else if (isPoster) role = 'Can post';
+                      let role = t('roomProfile.role.member');
+                      if (isOwner) role = t('roomProfile.role.owner');
+                      else if (isChanMod) role = t('roomProfile.role.moderator');
+                      else if (isGrpAdm) role = t('roomProfile.role.admin');
+                      else if (isPoster) role = t('roomProfile.role.canPost');
 
                       const chipColor =
                         isOwner ? 'primary' : isGrpAdm || isChanMod ? 'default' : isPoster ? 'secondary' : 'default';

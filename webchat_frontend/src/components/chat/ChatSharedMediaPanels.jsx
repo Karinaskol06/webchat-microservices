@@ -197,20 +197,39 @@ const LinksPanel = ({ items, glassPanel }) => {
   if (items.length === 0) {
     return <EmptyHint glassPanel={glassPanel}>No links shared in messages yet.</EmptyHint>;
   }
+  const linkSx = glassPanel
+    ? {
+        fontSize: '0.8125rem',
+        fontWeight: 600,
+        lineHeight: 1.45,
+        wordBreak: 'break-all',
+        color: chatColors.primaryDark,
+        textDecorationColor: 'rgba(99, 72, 224, 0.45)',
+        '&:hover': {
+          color: chatColors.primary,
+          textDecorationColor: chatColors.primary,
+        },
+        '&:visited': {
+          color: chatColors.primaryDark,
+        },
+      }
+    : {
+        fontSize: '0.8rem',
+        wordBreak: 'break-all',
+        color: chatColors.primaryLight,
+        fontWeight: 600,
+      };
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
       {items.slice(0, 15).map((item) => (
         <Link
           key={`${item.messageId}-${item.url}`}
           href={item.url}
           target="_blank"
           rel="noopener noreferrer"
-          underline="hover"
-          sx={{
-            fontSize: '0.8rem',
-            wordBreak: 'break-all',
-            color: chatColors.primary,
-          }}
+          underline="always"
+          sx={linkSx}
         >
           {item.url}
         </Link>

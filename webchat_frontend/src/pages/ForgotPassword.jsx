@@ -16,8 +16,10 @@ import {
   authLinkButtonSx,
   authPrimaryButtonSx,
 } from '../components/auth/authPageTheme';
+import useTranslation from '../hooks/useTranslation';
 
 const ForgotPassword = () => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [errorShake, setErrorShake] = useState(false);
@@ -35,7 +37,7 @@ const ForgotPassword = () => {
     e.preventDefault();
     const trimmed = email.trim();
     if (!trimmed) {
-      showError('Please enter your email address.');
+      showError(t('auth.forgot.error.emailRequired'));
       return;
     }
 
@@ -45,10 +47,10 @@ const ForgotPassword = () => {
       const response = await authService.requestPasswordReset(trimmed);
       setSuccessMessage(
         response?.message ||
-          'If an account exists for that email, you will receive password reset instructions shortly.'
+          t('auth.forgot.success.fallback')
       );
     } catch (err) {
-      showError(err.message || 'Unable to process your request. Please try again.');
+      showError(err.message || t('auth.forgot.error.fallback'));
     } finally {
       setLoading(false);
     }
@@ -56,18 +58,18 @@ const ForgotPassword = () => {
 
   return (
     <AuthPageLayout
-      title="Forgot Password"
+      title={t('auth.forgot.title')}
       shake={errorShake}
       footer={
         <>
-          Remember your password?{' '}
+          {t('auth.forgot.footer.remember')}{' '}
           <Button
             component={RouterLink}
             to="/login"
             disableRipple
             sx={authLinkButtonSx}
           >
-            Back to Login
+            {t('auth.forgot.footer.backToLogin')}
           </Button>
         </>
       }
@@ -103,8 +105,7 @@ const ForgotPassword = () => {
                 lineHeight: 1.55,
               }}
             >
-              Enter the email address linked to your account. We will send you a link to
-              reset your password.
+              {t('auth.forgot.instructions')}
             </Typography>
           </AuthAnimatedItem>
 
@@ -112,7 +113,7 @@ const ForgotPassword = () => {
             <GlassTextField
               name="email"
               type="email"
-              placeholder="Email address"
+              placeholder={t('auth.forgot.email.placeholder')}
               autoComplete="email"
               value={email}
               onChange={(e) => {
@@ -125,7 +126,7 @@ const ForgotPassword = () => {
               endIcon={EmailOutlinedIcon}
               slotProps={{
                 htmlInput: {
-                  'aria-label': 'Email address',
+                  'aria-label': t('auth.forgot.email.ariaLabel'),
                   autoCapitalize: 'none',
                   autoCorrect: 'off',
                 },
@@ -145,7 +146,7 @@ const ForgotPassword = () => {
               {loading ? (
                 <CircularProgress size={24} sx={{ color: '#1a1a2e' }} />
               ) : (
-                'Send Reset Link'
+                t('auth.forgot.submit')
               )}
             </Button>
           </AuthAnimatedItem>

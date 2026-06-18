@@ -2,6 +2,7 @@ package com.project.webchat.chat.service.message;
 
 import com.project.webchat.chat.dto.AttachmentDTO;
 import com.project.webchat.chat.dto.ChatMessageDTO;
+import com.project.webchat.chat.dto.ChatRoomDTO;
 import com.project.webchat.chat.dto.MessageWithAttachmentsDTO;
 import com.project.webchat.chat.dto.SendMessageRequest;
 import com.project.webchat.chat.entity.Attachment;
@@ -43,6 +44,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -105,11 +107,9 @@ public class ChatMessageCommandService {
         String preview = previewHelper.getPreviewText(normalized, List.of(), type);
         publishMessageCreatedV1(saved, preview);
         updateChatLastActivity(chatId, preview);
-        chatRoomRepository.findById(chatId).ifPresent(roomEnrichmentService::notifyRoomMembersChatUpdated);
         redisService.updatePresence(senderId, chatId);
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(saved, senderInfo);
-        webSocketService.sendMessageToChat(chatId, messageDTO);
-        webSocketService.notifyUserJoinedChat(chatId, senderId);
+        deliverSentMessage(room, senderId, messageDTO);
         return messageDTO;
     }
 
@@ -139,15 +139,9 @@ public class ChatMessageCommandService {
         publishMessageCreatedV1(saved, previewHelper.getPreviewText(sendMessageRequest.getContent(), List.of()));
 
         updateChatLastActivity(sendMessageRequest.getChatId(), sendMessageRequest.getContent());
-        chatRoomRepository.findById(sendMessageRequest.getChatId()).ifPresent(roomEnrichmentService::notifyRoomMembersChatUpdated);
-
         redisService.updatePresence(senderId, sendMessageRequest.getChatId());
-
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(saved, senderInfo);
-
-        webSocketService.sendMessageToChat(sendMessageRequest.getChatId(), messageDTO);
-        webSocketService.notifyUserJoinedChat(chatMessage.getChatId(), senderId);
-
+        deliverSentMessage(room, senderId, messageDTO);
         return messageDTO;
     }
 
@@ -217,14 +211,11 @@ public class ChatMessageCommandService {
         }
         updateChatLastActivity(targetChatId,
                 previewHelper.getPreviewText(saved.getContent(), newAttachments, saved.getMessageType()));
-        chatRoomRepository.findById(targetChatId).ifPresent(roomEnrichmentService::notifyRoomMembersChatUpdated);
         publishMessageCreatedV1(saved,
                 previewHelper.getPreviewText(saved.getContent(), newAttachments, saved.getMessageType()));
-
         redisService.updatePresence(senderId, targetChatId);
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(saved, senderInfo);
-        webSocketService.sendMessageToChat(targetChatId, messageDTO);
-        webSocketService.notifyUserJoinedChat(targetChatId, senderId);
+        deliverSentMessage(targetRoom, senderId, messageDTO);
         return messageDTO;
     }
 
@@ -256,14 +247,10 @@ public class ChatMessageCommandService {
         List<Attachment> attachments = linkAttachments(attachmentIds, savedMessage);
 
         updateChatLastActivity(chatId, previewHelper.getPreviewText(content, attachments));
-        chatRoomRepository.findById(chatId).ifPresent(roomEnrichmentService::notifyRoomMembersChatUpdated);
         publishMessageCreatedV1(savedMessage, previewHelper.getPreviewText(content, attachments));
-
         redisService.updatePresence(senderId, chatId);
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(savedMessage, senderInfo);
-        webSocketService.sendMessageToChat(chatId, messageDTO);
-        webSocketService.notifyUserJoinedChat(chatId, senderId);
-
+        deliverSentMessage(room, senderId, messageDTO);
         return MessageWithAttachmentsDTO.fromEntity(savedMessage, attachments);
     }
 
@@ -296,14 +283,10 @@ public class ChatMessageCommandService {
         List<Attachment> attachments = linkAttachments(attachmentIds, savedMessage);
 
         updateChatLastActivity(chatId, previewHelper.getPreviewText(null, attachments));
-        chatRoomRepository.findById(chatId).ifPresent(roomEnrichmentService::notifyRoomMembersChatUpdated);
         publishMessageCreatedV1(savedMessage, previewHelper.getPreviewText(null, attachments));
-
         redisService.updatePresence(senderId, chatId);
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(savedMessage, senderInfo);
-        webSocketService.sendMessageToChat(chatId, messageDTO);
-        webSocketService.notifyUserJoinedChat(chatId, senderId);
-
+        deliverSentMessage(room, senderId, messageDTO);
         return MessageWithAttachmentsDTO.fromEntity(savedMessage, attachments);
     }
 
@@ -377,6 +360,7 @@ public class ChatMessageCommandService {
         }
 
         chatMessageRepository.delete(toDelete);
+        refreshChatLastMessageAfterDelete(chatId);
         webSocketService.notifyMessageDeleted(messageId, chatId, actorId);
     }
 
@@ -560,6 +544,52 @@ public class ChatMessageCommandService {
             chatRoom.setLastActivity(LocalDateTime.now());
             chatRoom.setLastMessage(content);
             chatRoomRepository.save(chatRoom);
+        });
+    }
+
+    private void deliverSentMessage(ChatRoom room, Long senderId, ChatMessageDTO messageDTO) {
+        if (room == null || room.getId() == null || messageDTO == null) {
+            if (messageDTO != null && messageDTO.getChatId() != null) {
+                webSocketService.sendMessageToChat(messageDTO.getChatId(), messageDTO);
+            }
+            return;
+        }
+        roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+        webSocketService.sendMessageToChat(room.getId(), messageDTO);
+        webSocketService.notifyUserJoinedChat(room.getId(), senderId);
+        if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {
+            return;
+        }
+        for (Long memberId : room.getMemberIds()) {
+            if (memberId == null || memberId.equals(senderId)) {
+                continue;
+            }
+            int unread = roomEnrichmentService.getUnreadCount(room.getId(), memberId);
+            ChatRoomDTO chatDto = roomEnrichmentService.enrichChatWithUserData(room, memberId, unread);
+            webSocketService.notifyIncomingChatMessage(memberId, chatDto, messageDTO);
+        }
+    }
+
+    private void refreshChatLastMessageAfterDelete(String chatId) {
+        chatRoomRepository.findById(chatId).ifPresent(chatRoom -> {
+            Optional<ChatMessage> latest = chatMessageRepository.findTopByChatIdOrderByTimestampDesc(chatId);
+            if (latest.isPresent()) {
+                ChatMessage msg = latest.get();
+                List<Attachment> attachments = attachmentRepository.findByMessageId(msg.getId());
+                String preview = previewHelper.getPreviewText(
+                        msg.getContent(), attachments, msg.getMessageType());
+                chatRoom.setLastMessage(preview);
+                if (msg.getTimestamp() != null) {
+                    chatRoom.setLastActivity(msg.getTimestamp());
+                }
+            } else {
+                chatRoom.setLastMessage("");
+                if (chatRoom.getCreatedAt() != null) {
+                    chatRoom.setLastActivity(chatRoom.getCreatedAt());
+                }
+            }
+            chatRoomRepository.save(chatRoom);
+            roomEnrichmentService.notifyRoomMembersChatUpdated(chatRoom);
         });
     }
 

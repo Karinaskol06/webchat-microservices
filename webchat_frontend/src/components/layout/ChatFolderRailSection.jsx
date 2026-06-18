@@ -13,8 +13,10 @@ import useChatFolderStore from '../../store/useChatFolderStore';
 import useChatStore from '../../store/useChatStore';
 import { isChatDragEvent, readChatDragId } from '../../utils/chatDrag';
 import { chatColors, chatHideScrollbarSx, muiTransparent } from '../../theme/chatDesignTokens';
+import useTranslation from '../../hooks/useTranslation';
 
 const ChatFolderRailSection = ({ activeFolderId, personalSpaceActive, onSelectFolder }) => {
+  const { t } = useTranslation();
   const folders = useChatFolderStore((s) => s.folders);
   const foldersSectionCollapsed = useChatFolderStore((s) => s.foldersSectionCollapsed);
   const setFoldersSectionCollapsed = useChatFolderStore((s) => s.setFoldersSectionCollapsed);
@@ -98,12 +100,12 @@ const ChatFolderRailSection = ({ activeFolderId, personalSpaceActive, onSelectFo
               whiteSpace: 'nowrap',
             }}
           >
-            Folders
+            {t('folders.title')}
           </Typography>
         </Box>
         <IconButton
           size="small"
-          aria-label={foldersSectionCollapsed ? 'Expand folders' : 'Collapse folders'}
+          aria-label={foldersSectionCollapsed ? t('folders.expand') : t('folders.collapse')}
           onClick={() => setFoldersSectionCollapsed(!foldersSectionCollapsed)}
           sx={{
             flexShrink: 0,
@@ -156,7 +158,9 @@ const ChatFolderRailSection = ({ activeFolderId, personalSpaceActive, onSelectFo
               >
                 <Tooltip
                   title={
-                    unread > 0 ? `${folder.name} (${unread} unread)` : folder.name
+                    unread > 0
+                      ? t('folders.unreadTooltip', { name: folder.name, count: unread })
+                      : folder.name
                   }
                   placement="right"
                 >

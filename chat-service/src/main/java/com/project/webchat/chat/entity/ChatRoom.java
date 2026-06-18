@@ -49,6 +49,10 @@ public class ChatRoom {
     @Builder.Default
     private Set<Long> bannedUserIds = new HashSet<>();
 
+    /** Members who removed the chat from their sidebar (private chats stay for the other person). */
+    @Builder.Default
+    private Set<Long> hiddenForMemberIds = new HashSet<>();
+
     /**
      * Opaque invite token for private GROUP / CHANNEL rooms.
      */
@@ -88,6 +92,15 @@ public class ChatRoom {
             return false;
         }
         return bannedUserIds.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(id -> id.longValue() == userId.longValue());
+    }
+
+    public boolean isHiddenFor(Long userId) {
+        if (userId == null || hiddenForMemberIds == null || hiddenForMemberIds.isEmpty()) {
+            return false;
+        }
+        return hiddenForMemberIds.stream()
                 .filter(Objects::nonNull)
                 .anyMatch(id -> id.longValue() == userId.longValue());
     }

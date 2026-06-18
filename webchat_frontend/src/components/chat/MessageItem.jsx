@@ -47,6 +47,7 @@ import {
   isForwardedSourceClickable,
 } from '../../utils/forwardedMessage';
 import UserAvatar from '../user/UserAvatar';
+import useTranslation from '../../hooks/useTranslation';
 
 /** Larger previews; landscape uses bubble width, portrait shrinks to stay on-screen. */
 const MEDIA_BUBBLE_MAX_WIDTH = 560;
@@ -85,6 +86,7 @@ const MessageItem = ({
     isPersonalSpace = false,
     onOpenImage,
 }) => {
+    const { t } = useTranslation();
     const [expanded, setExpanded] = useState(false);
     const [menuAnchorEl, setMenuAnchorEl] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -237,9 +239,9 @@ const MessageItem = ({
         message.repliedMessage?.senderDisplayName ||
         (message.repliedMessage?.senderId != null &&
         Number(message.repliedMessage.senderId) === Number(currentUserId)
-            ? 'You'
+            ? t('common.you')
             : null) ||
-        'Message';
+        t('message.quoted.fallback');
 
     const canJumpToReply =
         Boolean(onJumpToMessage) &&
@@ -342,7 +344,7 @@ const MessageItem = ({
                 error?.message ||
                 (typeof error === 'string' ? error : '');
             setReactionError(
-                responseMessage || 'Unable to update reaction. Please try again.',
+                responseMessage || t('message.reactions.error'),
             );
         } finally {
             setIsTogglingReaction(false);
@@ -373,7 +375,7 @@ const MessageItem = ({
                     color="text.secondary"
                     sx={{ px: 1.5, pb: 0.5, display: 'block' }}
                 >
-                    Maximum {MAX_REACTIONS_PER_USER} reactions per message
+                    {t('message.reactions.limit', { max: MAX_REACTIONS_PER_USER })}
                 </Typography>
             ) : null}
             <Divider sx={{ borderColor: chatColors.borderSubtle }} />
@@ -427,7 +429,7 @@ const MessageItem = ({
                 error?.message ||
                 (typeof error === 'string' ? error : '');
             setEditError(
-                responseMessage || 'Unable to edit this message. Please try again.'
+                responseMessage || t('message.edit.error')
             );
         } finally {
             setIsSavingEdit(false);
@@ -454,7 +456,7 @@ const MessageItem = ({
                 error?.message ||
                 (typeof error === 'string' ? error : '');
             setDeleteError(
-                responseMessage || 'Unable to delete this message. Please try again.'
+                responseMessage || t('message.delete.error')
             );
         } finally {
             setIsDeleting(false);
@@ -462,6 +464,14 @@ const MessageItem = ({
     };
 
     const toggleExpand = () => setExpanded(!expanded);
+
+    const renderAttachmentMenuRow = () => (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
+            <IconButton size="small" onClick={openMenu} aria-label={t('message.actions.aria')}>
+                <MoreVertIcon fontSize="small" />
+            </IconButton>
+        </Box>
+    );
 
     const showExpandButton = hasAttachments && attachments.length > 3;
 
@@ -601,7 +611,7 @@ const MessageItem = ({
                     <IconButton size="small" onClick={toggleExpand}>
                         {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                         <Typography variant="caption" sx={{ ml: 0.5 }}>
-                            {expanded ? 'Сховати' : `Показати ще ${attachments.length - 3} файлів`}
+                            {expanded ? t('message.attachments.hide') : t('message.attachments.showMore', { count: attachments.length - 3 })}
                         </Typography>
                     </IconButton>
                 </Box>
@@ -627,11 +637,11 @@ const MessageItem = ({
                 }}
             >
                 {reactionMenuHeader}
-                {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
-                <MenuItem onClick={() => void handleCopy()}>Copy</MenuItem>
-                <MenuItem onClick={handleForward}>Forward</MenuItem>
-                {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
-                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
+                {!hideReplyActions && <MenuItem onClick={handleReply}>{t('message.menu.reply')}</MenuItem>}
+                <MenuItem onClick={() => void handleCopy()}>{t('message.menu.copy')}</MenuItem>
+                <MenuItem onClick={handleForward}>{t('message.menu.forward')}</MenuItem>
+                {canEditThis && <MenuItem onClick={handleStartEdit}>{t('message.menu.edit')}</MenuItem>}
+                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>{t('message.menu.delete')}</MenuItem>}
             </Menu>
 
             <Menu
@@ -647,15 +657,15 @@ const MessageItem = ({
                 }
             >
                 {reactionMenuHeader}
-                {!hideReplyActions && <MenuItem onClick={handleReply}>Reply</MenuItem>}
-                <MenuItem onClick={() => void handleCopy()}>Copy</MenuItem>
-                <MenuItem onClick={handleForward}>Forward</MenuItem>
-                {canEditThis && <MenuItem onClick={handleStartEdit}>Edit</MenuItem>}
-                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>Delete</MenuItem>}
+                {!hideReplyActions && <MenuItem onClick={handleReply}>{t('message.menu.reply')}</MenuItem>}
+                <MenuItem onClick={() => void handleCopy()}>{t('message.menu.copy')}</MenuItem>
+                <MenuItem onClick={handleForward}>{t('message.menu.forward')}</MenuItem>
+                {canEditThis && <MenuItem onClick={handleStartEdit}>{t('message.menu.edit')}</MenuItem>}
+                {canDeleteThis && <MenuItem onClick={handleOpenDeleteDialog}>{t('message.menu.delete')}</MenuItem>}
             </Menu>
 
             <Dialog open={moderatorEditOpen} onClose={handleCancelEdit} fullWidth maxWidth="sm">
-                <DialogTitle>Edit message</DialogTitle>
+                <DialogTitle>{t('message.editDialog.title')}</DialogTitle>
                 <DialogContent>
                     <TextField
                         autoFocus
@@ -663,7 +673,7 @@ const MessageItem = ({
                         fullWidth
                         multiline
                         minRows={3}
-                        label="Message text"
+                        label={t('message.editDialog.label')}
                         value={editedContent}
                         error={Boolean(editError)}
                         helperText={editError}
@@ -675,7 +685,7 @@ const MessageItem = ({
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={handleCancelEdit} disabled={isSavingEdit}>
-                        Cancel
+                        {t('common.cancel')}
                     </Button>
                     <Button
                         variant="contained"
@@ -684,16 +694,16 @@ const MessageItem = ({
                         }}
                         disabled={isSavingEdit || captionUnchanged}
                     >
-                        Save
+                        {t('common.save')}
                     </Button>
                 </DialogActions>
             </Dialog>
 
             <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-                <DialogTitle>Delete message?</DialogTitle>
+                <DialogTitle>{t('message.deleteDialog.title')}</DialogTitle>
                 <DialogContent>
                     <DialogContentText>
-                        This action cannot be undone.
+                        {t('message.deleteDialog.body')}
                     </DialogContentText>
                     {deleteError && (
                         <Typography variant="body2" color="error" sx={{ mt: 1 }}>
@@ -703,7 +713,7 @@ const MessageItem = ({
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
-                        Cancel
+                        {t('common.cancel')}
                     </Button>
                     <Button
                         color="error"
@@ -712,22 +722,26 @@ const MessageItem = ({
                         }}
                         disabled={isDeleting}
                     >
-                        Delete
+                        {t('common.delete')}
                     </Button>
                 </DialogActions>
             </Dialog>
         </>
     );
 
+    const isActiveSearchMatch =
+        activeInChatSearchMatch != null &&
+        String(activeInChatSearchMatch.messageId) === messageIdStr;
+
     const rowHighlightSx = isHighlighted
         ? {
               outline: (theme) => `2px solid ${theme.palette.primary.main}`,
               outlineOffset: 2,
-              borderRadius: 2,
+              borderRadius: isActiveSearchMatch ? '4px' : 2,
           }
         : {};
 
-    const senderLabel = sender?.firstName || sender?.username || 'User';
+    const senderLabel = sender?.firstName || sender?.username || t('common.user');
 
     const handleRichUpdate = async (content) => {
         try {
@@ -807,7 +821,7 @@ const MessageItem = ({
                             >
                                 <ForwardIcon sx={{ fontSize: 14, opacity: 0.7 }} />
                                 <Typography variant="caption" color="text.secondary">
-                                    Forwarded from {forwardedDisplayName}
+                                    {t('message.forwardedFrom', { name: forwardedDisplayName })}
                                 </Typography>
                             </Box>
                         )}
@@ -843,7 +857,7 @@ const MessageItem = ({
                             )}
                             <IconButton
                                 size="small"
-                                aria-label="Message actions"
+                                aria-label={t('message.actions.aria')}
                                 onClick={openMenu}
                                 sx={{ ml: 0.25 }}
                             >
@@ -914,18 +928,12 @@ const MessageItem = ({
                             timestamp={messageTime}
                             onOpen={() => handleOpenImage(attachment)}
                         />
+                        {renderAttachmentMenuRow()}
                         <MessageReactionsRow
                             reactions={message.reactions}
                             currentUserId={currentUserId}
                             onToggleReaction={handleToggleReaction}
                         />
-                        {isOwn && (
-                            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
-                                <IconButton size="small" onClick={openMenu} aria-label="Message actions">
-                                    <MoreVertIcon fontSize="small" />
-                                </IconButton>
-                            </Box>
-                        )}
                     </Box>
 
                     {isOwn && (
@@ -1036,7 +1044,7 @@ const MessageItem = ({
                         >
                             <ForwardIcon sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }} />
                             <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.35 }}>
-                                Forwarded from{' '}
+                                {t('message.forwardedFrom', { name: '' })}
                                 {forwardedClickable ? (
                                     <Link
                                         component="button"
@@ -1073,8 +1081,8 @@ const MessageItem = ({
                             tabIndex={canJumpToReply ? 0 : undefined}
                             aria-label={
                                 canJumpToReply
-                                    ? 'Quoted message; press to jump to original'
-                                    : 'Quoted original message preview'
+                                    ? t('message.quoted.jumpAria')
+                                    : t('message.quoted.previewAria')
                             }
                             sx={{
                                 display: 'flex',
@@ -1185,8 +1193,7 @@ const MessageItem = ({
                     )}
 
                     {isOwn ? (
-                        <>
-                            {!hasAttachments && hasText && (
+                        !hasAttachments && hasText && (
                                 isEditMode ? (
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                                         <TextField
@@ -1206,7 +1213,7 @@ const MessageItem = ({
                                         />
                                         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
                                             <Button size="small" onClick={handleCancelEdit} disabled={isSavingEdit}>
-                                                Cancel
+                                                {t('common.cancel')}
                                             </Button>
                                             <Button
                                                 size="small"
@@ -1216,7 +1223,7 @@ const MessageItem = ({
                                                 }}
                                                 disabled={isSavingEdit || captionUnchanged}
                                             >
-                                                Save
+                                                {t('common.save')}
                                             </Button>
                                         </Box>
                                     </Box>
@@ -1228,40 +1235,40 @@ const MessageItem = ({
                                         <IconButton
                                             size="small"
                                             onClick={openMenu}
-                                            aria-label="Message actions"
+                                            aria-label={t('message.actions.aria')}
                                             sx={{ mt: -0.5, mr: -0.5, flexShrink: 0 }}
                                         >
                                             <MoreVertIcon fontSize="small" />
                                         </IconButton>
                                     </Box>
                                 )
-                            )}
-                            {renderMediaAndFiles()}
-                        </>
+                        )
                     ) : (
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
-                            <IconButton
-                                size="small"
-                                onClick={openMenu}
-                                aria-label="Message actions"
-                                sx={{ mt: -0.25, ml: -0.5, flexShrink: 0, alignSelf: 'flex-start' }}
-                            >
-                                <MoreVertIcon fontSize="small" />
-                            </IconButton>
-                            <Box sx={{ flex: 1, minWidth: 0 }}>
-                                {!hasAttachments && hasText && renderMessageText()}
-                                {hasAttachments && (
-                                    <>
-                                        {renderMediaAndFiles()}
-                                        {hasText &&
-                                            renderMessageText({
-                                                px: 1.5,
-                                                py: 1.25,
-                                            })}
-                                    </>
-                                )}
+                        !hasAttachments && hasText && (
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+                                <IconButton
+                                    size="small"
+                                    onClick={openMenu}
+                                    aria-label={t('message.actions.aria')}
+                                    sx={{ mt: -0.25, ml: -0.5, flexShrink: 0, alignSelf: 'flex-start' }}
+                                >
+                                    <MoreVertIcon fontSize="small" />
+                                </IconButton>
+                                <Box sx={{ flex: 1, minWidth: 0 }}>{renderMessageText()}</Box>
                             </Box>
-                        </Box>
+                        )
+                    )}
+
+                    {hasAttachments && (
+                        <>
+                            {renderMediaAndFiles()}
+                            {hasText && !isEditMode &&
+                                renderMessageText({
+                                    px: 1.5,
+                                    py: 1.25,
+                                })}
+                            {!isEditMode && renderAttachmentMenuRow()}
+                        </>
                     )}
 
                     {hasAttachments && isOwn && isEditMode && (
@@ -1271,7 +1278,7 @@ const MessageItem = ({
                                 fullWidth
                                 multiline
                                 minRows={2}
-                                placeholder="Add a caption (optional)"
+                                placeholder={t('message.editDialog.caption')}
                                 value={editedContent}
                                 error={Boolean(editError)}
                                 helperText={editError}
@@ -1284,7 +1291,7 @@ const MessageItem = ({
                             />
                             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
                                 <Button size="small" onClick={handleCancelEdit} disabled={isSavingEdit}>
-                                    Cancel
+                                    {t('common.cancel')}
                                 </Button>
                                 <Button
                                     size="small"
@@ -1294,39 +1301,9 @@ const MessageItem = ({
                                     }}
                                     disabled={isSavingEdit || captionUnchanged}
                                 >
-                                    Save
+                                    {t('common.save')}
                                 </Button>
                             </Box>
-                        </Box>
-                    )}
-
-                    {hasAttachments && isOwn && !isEditMode && hasText && (
-                        <Box
-                            sx={{
-                                mt: 1,
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                justifyContent: 'space-between',
-                                gap: 1,
-                            }}
-                        >
-                            <Box sx={{ flex: 1, minWidth: 0 }}>{renderMessageText()}</Box>
-                            <IconButton
-                                size="small"
-                                onClick={openMenu}
-                                aria-label="Message actions"
-                                sx={{ mt: -0.5, mr: -0.5, flexShrink: 0 }}
-                            >
-                                <MoreVertIcon fontSize="small" />
-                            </IconButton>
-                        </Box>
-                    )}
-
-                    {hasAttachments && isOwn && !isEditMode && !hasText && (
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
-                            <IconButton size="small" onClick={openMenu} aria-label="Message actions">
-                                <MoreVertIcon fontSize="small" />
-                            </IconButton>
                         </Box>
                     )}
 
@@ -1360,7 +1337,7 @@ const MessageItem = ({
                         </Typography>
                         {message.editedAt && (
                             <Typography variant="caption" color="text.secondary">
-                                (edited)
+                                {t('message.edited')}
                             </Typography>
                         )}
                         {isOwn && (

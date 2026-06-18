@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,6 +30,7 @@ public class WebSocketService {
     private static final String TOPIC_CHAT_EDITED = "/topic/chat/%s/edited";
     private static final String TOPIC_CHAT_REACTIONS = "/topic/chat/%s/reactions";
     private static final String TOPIC_CHAT_ATTACHMENT = "/topic/chat/%s/attachment";
+    private static final String TOPIC_USER_INBOX = "/topic/users/%s/inbox";
 
     // User queues for personal messages
     private static final String QUEUE_CHATS_NEW = "/queue/chats/new";
@@ -35,6 +38,7 @@ public class WebSocketService {
     private static final String QUEUE_CHATS_DELETED = "/queue/chats/deleted";
     private static final String QUEUE_CHATS_USER_LEFT = "/queue/chats/user-left";
     private static final String QUEUE_ROOM_MEMBER_INVITES_NEW = "/queue/rooms/member-invites/new";
+    private static final String QUEUE_MESSAGES_INCOMING = "/queue/messages/incoming";
 
     // Messaging events
     public void sendMessageToChat(String chatId, ChatMessageDTO message) {
@@ -72,23 +76,56 @@ public class WebSocketService {
 
     // Chat events (CRUD)
     public void notifyChatCreated(Long userId, ChatRoomDTO chatRoom) {
-        sendToUserQueue(userId, QUEUE_CHATS_NEW, chatRoom);
-        log.info("Chat {} created for user {}", chatRoom.getId(), userId);
+        runAfterCommit(() -> deliverChatCreated(userId, chatRoom));
     }
 
     public void notifyChatUpdated(String chatId, ChatRoomDTO chatRoom, Set<Long> memberIds) {
+        runAfterCommit(() -> deliverChatUpdated(chatId, chatRoom, memberIds));
+    }
+
+    public void notifyChatDeleted(String chatId, Set<Long> memberIds) {
+        runAfterCommit(() -> deliverChatDeleted(chatId, memberIds));
+    }
+
+    public void notifyIncomingChatMessage(Long recipientUserId, ChatRoomDTO chatRoom, ChatMessageDTO message) {
+        runAfterCommit(() -> deliverIncomingChatMessage(recipientUserId, chatRoom, message));
+    }
+
+    private void deliverChatCreated(Long userId, ChatRoomDTO chatRoom) {
+        ChatRoomCreatedEvent event = new ChatRoomCreatedEvent(chatRoom);
+        sendToUserQueue(userId, QUEUE_CHATS_NEW, chatRoom);
+        sendToUserInbox(userId, event);
+        if (chatRoom != null && chatRoom.getId() != null && !chatRoom.getId().isBlank()) {
+            sendToChatTopic(TOPIC_CHAT_MESSAGES, chatRoom.getId(), event);
+        }
+        log.info("Chat {} created for user {}", chatRoom != null ? chatRoom.getId() : null, userId);
+    }
+
+    private void deliverChatUpdated(String chatId, ChatRoomDTO chatRoom, Set<Long> memberIds) {
+        ChatRoomUpdatedEvent event = new ChatRoomUpdatedEvent(chatRoom);
         for (Long memberId : memberIds) {
             sendToUserQueue(memberId, QUEUE_CHATS_UPDATED, chatRoom);
+            sendToUserInbox(memberId, event);
         }
         log.info("Chat {} updated, notified {} members", chatId, memberIds.size());
     }
 
-    public void notifyChatDeleted(String chatId, Set<Long> memberIds) {
-        ChatDeletedEvent event = new ChatDeletedEvent(chatId);
+    private void deliverChatDeleted(String chatId, Set<Long> memberIds) {
+        ChatRoomDeletedEvent event = new ChatRoomDeletedEvent(chatId);
         for (Long memberId : memberIds) {
             sendToUserQueue(memberId, QUEUE_CHATS_DELETED, event);
+            sendToUserInbox(memberId, event);
         }
+        sendToChatTopic(TOPIC_CHAT_MESSAGES, chatId, event);
         log.info("Chat {} deleted, notified {} members", chatId, memberIds.size());
+    }
+
+    private void deliverIncomingChatMessage(Long recipientUserId, ChatRoomDTO chatRoom, ChatMessageDTO message) {
+        IncomingChatMessageEvent event = new IncomingChatMessageEvent(chatRoom, message);
+        sendToUserQueue(recipientUserId, QUEUE_MESSAGES_INCOMING, event);
+        sendToUserInbox(recipientUserId, event);
+        log.debug("Incoming message {} delivered to user {} for chat {}", message.getId(), recipientUserId,
+                chatRoom.getId());
     }
 
     public void notifyUserLeftChatForAll(String chatId, Long userId, Set<Long> otherMembers) {
@@ -143,18 +180,29 @@ public class WebSocketService {
         );
     }
 
+    private void sendToUserInbox(Long userId, Object payload) {
+        messagingTemplate.convertAndSend(String.format(TOPIC_USER_INBOX, userId), payload);
+    }
+
+    private void runAfterCommit(Runnable task) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    task.run();
+                }
+            });
+        } else {
+            task.run();
+        }
+    }
+
     // Inner event classes
     @lombok.Data
     @lombok.AllArgsConstructor
     public static class UserLeftChatEvent {
         private String chatId;
         private Long userId;
-    }
-
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    public static class ChatDeletedEvent {
-        private String chatId;
     }
 
     @lombok.Data

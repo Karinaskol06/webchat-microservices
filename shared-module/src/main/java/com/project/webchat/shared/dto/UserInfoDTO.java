@@ -16,9 +16,13 @@ public class UserInfoDTO {
     private String lastName;
     private String profilePicture;
     private boolean online;
+    private boolean deleted;
 
     //helper method for displaying name
     public String getDisplayName() {
+        if (deleted) {
+            return DeletedAccountProfile.DISPLAY_LABEL;
+        }
         if (firstName != null && lastName != null) {
             return firstName + " " + lastName;
         } else if (firstName != null) {

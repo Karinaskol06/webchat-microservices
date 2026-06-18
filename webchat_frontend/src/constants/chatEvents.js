@@ -6,3 +6,9 @@ export const WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT = 'webchat:incoming-message-open
 
 /** Open a chat after forward completes. Detail: { chatId, message? } */
 export const WEBCHAT_ACTIVATE_CHAT = 'webchat:activate-chat';
+
+/** Chat removed for this user (delete-for-me or delete-for-everyone). Detail: { chatId } */
+export const WEBCHAT_CHAT_DELETED = 'webchat:chat-deleted';
+
+/** Chat created or first opened for this user. Detail: { chat } */
+export const WEBCHAT_CHAT_CREATED = 'webchat:chat-created';

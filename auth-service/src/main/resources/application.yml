@@ -88,7 +88,7 @@ management:
   health:
     mail:
       # Mail starter is on the classpath for optional password-reset emails; do not fail
-      # startup/health when SMTP is not configured (local dev uses log-only reset links).
+      # startup/health when SMTP is not configured (set MAIL_ENABLED=false to log reset links).
       enabled: ${MAIL_HEALTH_ENABLED:false}
   endpoints:
     web:

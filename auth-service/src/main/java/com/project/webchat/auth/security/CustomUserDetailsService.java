@@ -46,7 +46,7 @@ public class CustomUserDetailsService implements UserDetailsService {
                     .username(userInfo.getUsername())
                     .email(userInfo.getEmail())
                     .passwordHash(userInfo.getPassword())
-                    .active(true)
+                    .active(userInfo.isActive())
                     .build();
 
         } catch (ResponseStatusException e) {

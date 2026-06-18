@@ -12,6 +12,7 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import CloseIcon from '@mui/icons-material/Close';
 import { chatColors, chatGlassFieldSx } from '../../theme/chatDesignTokens';
+import useTranslation from '../../hooks/useTranslation';
 
 const ChatInMessageSearch = ({
   open,
@@ -23,16 +24,17 @@ const ChatInMessageSearch = ({
   onNextMatch,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const trimmed = query.trim();
   const hasQuery = trimmed.length > 0;
   const safeIndex =
     matchCount === 0 ? -1 : Math.min(Math.max(activeMatchIndex, 0), matchCount - 1);
 
   const statusLabel = !hasQuery
-    ? 'Type to search messages'
+    ? t('search.inChat.typeToSearch')
     : matchCount === 0
-      ? 'No matches'
-      : `${safeIndex + 1} of ${matchCount}`;
+      ? t('search.inChat.noMatches')
+      : t('search.inChat.matchOf', { current: safeIndex + 1, total: matchCount });
 
   return (
     <Collapse in={open} unmountOnExit>
@@ -50,7 +52,7 @@ const ChatInMessageSearch = ({
             size="small"
             fullWidth
             autoFocus
-            placeholder="Search in this chat"
+            placeholder={t('search.inChat.placeholder')}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={(e) => {
@@ -72,7 +74,7 @@ const ChatInMessageSearch = ({
               ),
             }}
             sx={chatGlassFieldSx}
-            inputProps={{ 'aria-label': 'Search in this chat' }}
+            inputProps={{ 'aria-label': t('search.inChat.placeholder') }}
           />
           <IconButton
             aria-label="Previous match"

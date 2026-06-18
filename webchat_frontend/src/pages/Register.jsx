@@ -6,7 +6,6 @@ import {
   Stack,
 } from '@mui/material';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
@@ -18,12 +17,15 @@ import AuthPageLayout from '../components/auth/AuthPageLayout';
 import AuthAnimatedItem from '../components/auth/AuthAnimatedItem';
 import AuthErrorAlert from '../components/auth/AuthErrorAlert';
 import GlassTextField from '../components/auth/GlassTextField';
+import GlassPasswordField from '../components/auth/GlassPasswordField';
 import {
   authLinkButtonSx,
   authPrimaryButtonSx,
 } from '../components/auth/authPageTheme';
+import useTranslation from '../hooks/useTranslation';
 
 const Register = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { login } = useAuthStore();
 
@@ -59,27 +61,27 @@ const Register = () => {
     e.preventDefault();
 
     if (!formData.username || !formData.email || !formData.password) {
-      showError('Please fill in all required fields.');
+      showError(t('auth.register.error.requiredFields'));
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      showError('Passwords do not match.');
+      showError(t('auth.register.error.passwordMismatch'));
       return;
     }
 
     if (formData.password.length < 6) {
-      showError('Password must be at least 6 characters long.');
+      showError(t('auth.register.error.passwordTooShort'));
       return;
     }
 
     const phone = (formData.phoneNumber || '').trim();
     if (!phone) {
-      showError('Phone number is required.');
+      showError(t('auth.register.error.phoneRequired'));
       return;
     }
     if (!isValidInternationalPhone(phone)) {
-      showError('Wrong phone number format');
+      showError(t('auth.register.error.phoneInvalid'));
       return;
     }
 
@@ -100,7 +102,7 @@ const Register = () => {
       login(userData, loginResponse.token);
       navigate('/chat');
     } catch (err) {
-      showError(err.message || 'Registration failed. Please try again.');
+      showError(err.message || t('auth.register.error.fallback'));
     } finally {
       setLoading(false);
     }
@@ -108,19 +110,19 @@ const Register = () => {
 
   return (
     <AuthPageLayout
-      title="Register"
+      title={t('auth.register.title')}
       maxWidth={440}
       shake={errorShake}
       footer={
         <>
-          Already have an account?{' '}
+          {t('auth.register.footer.hasAccount')}{' '}
           <Button
             component={RouterLink}
             to="/login"
             disableRipple
             sx={authLinkButtonSx}
           >
-            Login
+            {t('auth.register.footer.login')}
           </Button>
         </>
       }
@@ -131,7 +133,7 @@ const Register = () => {
         <AuthAnimatedItem index={0}>
           <GlassTextField
             name="username"
-            placeholder="Username"
+            placeholder={t('auth.register.username.placeholder')}
             autoComplete="username"
             value={formData.username}
             onChange={handleChange}
@@ -145,7 +147,7 @@ const Register = () => {
           <GlassTextField
             name="email"
             type="email"
-            placeholder="Email ID"
+            placeholder={t('auth.register.email.placeholder')}
             autoComplete="email"
             value={formData.email}
             onChange={handleChange}
@@ -158,7 +160,7 @@ const Register = () => {
         <AuthAnimatedItem index={2}>
           <GlassTextField
             name="firstName"
-            placeholder="First name"
+            placeholder={t('auth.register.firstName.placeholder')}
             autoComplete="given-name"
             value={formData.firstName}
             onChange={handleChange}
@@ -170,7 +172,7 @@ const Register = () => {
         <AuthAnimatedItem index={3}>
           <GlassTextField
             name="lastName"
-            placeholder="Last name"
+            placeholder={t('auth.register.lastName.placeholder')}
             autoComplete="family-name"
             value={formData.lastName}
             onChange={handleChange}
@@ -196,30 +198,26 @@ const Register = () => {
         </AuthAnimatedItem>
 
         <AuthAnimatedItem index={5}>
-          <GlassTextField
+          <GlassPasswordField
             name="password"
-            type="password"
-            placeholder="Password"
+            placeholder={t('auth.register.password.placeholder')}
             autoComplete="new-password"
             value={formData.password}
             onChange={handleChange}
             required
             disabled={loading}
-            endIcon={LockOutlinedIcon}
           />
         </AuthAnimatedItem>
 
         <AuthAnimatedItem index={6}>
-          <GlassTextField
+          <GlassPasswordField
             name="confirmPassword"
-            type="password"
-            placeholder="Confirm password"
+            placeholder={t('auth.register.confirmPassword.placeholder')}
             autoComplete="new-password"
             value={formData.confirmPassword}
             onChange={handleChange}
             required
             disabled={loading}
-            endIcon={LockOutlinedIcon}
             sx={{ mb: 0.5 }}
           />
         </AuthAnimatedItem>
@@ -236,7 +234,7 @@ const Register = () => {
             {loading ? (
               <CircularProgress size={24} sx={{ color: '#1a1a2e' }} />
             ) : (
-              'Register'
+              t('auth.register.submit')
             )}
           </Button>
         </AuthAnimatedItem>

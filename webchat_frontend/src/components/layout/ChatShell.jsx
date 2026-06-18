@@ -14,6 +14,7 @@ import {
   chatShellRootSx,
 } from '../../theme/chatDesignTokens';
 import { chatBgSettleSx, chatPanelEnterSx } from '../../theme/chatAnimations';
+import useTranslation from '../../hooks/useTranslation';
 
 /**
  * Glass bento chat workspace: login background + frosted nav/list + dark conversation.
@@ -36,6 +37,7 @@ const ChatShell = ({
   onPersonalSpaceSelect,
   onExitPersonalSpaceMode,
 }) => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isCompact = useMediaQuery(theme.breakpoints.down('lg'));
@@ -152,7 +154,7 @@ const ChatShell = ({
                 }}
               >
                 <IconButton
-                  aria-label="Back to chats"
+                  aria-label={t('nav.backToChats')}
                   onClick={onBackFromChat}
                   size="small"
                   sx={{ color: chatColors.textPrimary }}

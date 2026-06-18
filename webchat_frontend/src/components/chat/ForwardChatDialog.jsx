@@ -25,8 +25,10 @@ import {
 import { QuotedKindIcon } from './QuotedKindIcon';
 import UserAvatar from '../user/UserAvatar';
 import { resolveRoomAvatarSrc } from '../../utils/userAvatar';
+import useTranslation from '../../hooks/useTranslation';
 
 const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
+  const { t } = useTranslation();
   const chats = useChatStore((s) => s.chats);
   const [error, setError] = useState('');
   const [personalSpaces, setPersonalSpaces] = useState([]);
@@ -81,7 +83,7 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
   const previewAuthor =
     message?.sender?.firstName ||
     message?.sender?.username ||
-    'User';
+    t('common.user');
 
   const handleSelectChat = (chat) => {
     if (!message?.id || !chat?.id) return;
@@ -96,7 +98,7 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
       forwardSourceMessageId: sourceMessageId,
     });
     if (!ok) {
-      setError('Not connected. Wait for the connection to recover, then try again.');
+      setError(t('forward.error.notConnected'));
       return;
     }
     onClose?.();
@@ -104,7 +106,7 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Forward to…</DialogTitle>
+      <DialogTitle>{t('forward.title')}</DialogTitle>
       <DialogContent sx={{ pt: 0 }}>
         {message && (
           <Box
@@ -117,7 +119,7 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
             }}
           >
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-              Message will be sent as-is (including attachments).
+              {t('forward.preview.hint')}
             </Typography>
             <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>
               {previewAuthor}
@@ -141,7 +143,7 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
 
         {selectableChats.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            No chats yet. Start a conversation first.
+            {t('forward.empty')}
           </Typography>
         ) : (
           <List dense disablePadding sx={{ maxHeight: 360, overflow: 'auto' }}>

@@ -5,11 +5,13 @@ import { useShallow } from 'zustand/react/shallow';
 import { sendChatMessage, sendTypingEvent } from '../utils/websocket';
 import { getAttachmentUploadErrorMessage } from '../utils/attachmentUploadErrors';
 import { isChatAttachmentUploadUrl, validateAttachmentFiles } from '../utils/attachmentConstraints';
-import { WEBCHAT_MESSAGES_MARKED_READ } from '../constants/chatEvents';
+import { WEBCHAT_CHAT_CREATED, WEBCHAT_MESSAGES_MARKED_READ } from '../constants/chatEvents';
 import { canPostInChannel } from '../utils/channelPermissions';
-import { parseUserBanError } from '../utils/userBanError';
+import { parsePrivateMessageBlockedError, parseUserBanError } from '../utils/userBanError';
+import useTranslation from './useTranslation';
 
 const useMessages = (currentChat, composerRef) => {
+  const { t } = useTranslation();
   const { messages, setMessages } = useChatStore(
     useShallow((state) => ({
       messages: state.messages,
@@ -17,7 +19,6 @@ const useMessages = (currentChat, composerRef) => {
     }))
   );
   const setCurrentChat = useChatStore((state) => state.setCurrentChat);
-  const setChats = useChatStore((state) => state.setChats);
   const upsertChat = useChatStore((state) => state.upsertChat);
 
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -136,6 +137,11 @@ const useMessages = (currentChat, composerRef) => {
   const handleSendMessage = async (messageText) => {
     if (!currentChat || isSending) return;
 
+    if (currentChat.messagingBlocked) {
+      setComposerError(t('errors.composer.cannotMessageUser'));
+      return;
+    }
+
     if (!canPostInChannel(currentChat)) return;
 
     const trimmedMessage = String(messageText ?? '').trim();
@@ -153,6 +159,7 @@ const useMessages = (currentChat, composerRef) => {
     const previousText = String(messageText ?? '');
     const previousAttachments = [...selectedAttachments];
     const previousReply = replyToMessage;
+    const isNewPrivateChat = !currentChat.id && String(currentChat.type || '').toUpperCase() === 'PRIVATE';
 
     if (hasAttachments) {
       const validation = validateAttachmentFiles(previousAttachments);
@@ -187,7 +194,9 @@ const useMessages = (currentChat, composerRef) => {
         activeChatId = createdChat.id;
         setCurrentChat(createdChat);
         upsertChat(createdChat);
-        setChats(await chatService.getUserChats());
+        window.dispatchEvent(
+          new CustomEvent(WEBCHAT_CHAT_CREATED, { detail: { chat: createdChat } }),
+        );
 
         const sent = sendChatMessage({
           chatId: activeChatId,
@@ -219,18 +228,26 @@ const useMessages = (currentChat, composerRef) => {
       composerRef?.current?.setDraft(previousText);
       setSelectedAttachments(previousAttachments);
       setReplyToMessage(previousReply);
-      console.error('Failed to send message:', error);
       const userBan = parseUserBanError(error);
+      const privateMessageBlocked = parsePrivateMessageBlockedError(error, { isNewPrivateChat });
       const isUploadFailure =
         previousAttachments.length > 0 &&
         isChatAttachmentUploadUrl(error?.config?.url);
-      const message = userBan?.message
+      const message = privateMessageBlocked
+        ? t('errors.composer.cannotMessageUser')
+        : userBan?.message
         ? userBan.message
         : isUploadFailure
-        ? getAttachmentUploadErrorMessage(error, 'Could not upload the file. Please try again.')
+        ? getAttachmentUploadErrorMessage(error, t('errors.composer.upload'))
         : error?.message === 'WebSocket is not connected'
-          ? 'Not connected. Wait for the connection to recover, then try again.'
-          : 'Could not send the message. Please try again.';
+          ? t('errors.composer.notConnected')
+          : t('errors.composer.send');
+      if (!privateMessageBlocked && !userBan) {
+        console.error('Failed to send message:', error);
+      }
+      if (privateMessageBlocked) {
+        setCurrentChat({ ...currentChat, messagingBlocked: true });
+      }
       setComposerError(message);
     } finally {
       setIsSending(false);

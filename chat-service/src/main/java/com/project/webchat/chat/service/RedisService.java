@@ -180,6 +180,17 @@ public class RedisService {
         return null;
     }
 
+    public void evictUserInfo(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        try {
+            redisTemplate.delete(USER_INFO_PREFIX + userId);
+        } catch (Exception e) {
+            log.warn("Failed to evict user info cache for {}: {}", userId, e.getMessage());
+        }
+    }
+
     public void cacheChatParticipants(String chatId, Set<Long> participantIds) {
         if (chatId == null || chatId.isBlank() || participantIds == null || participantIds.isEmpty()) {
             return;

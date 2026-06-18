@@ -8,6 +8,7 @@ import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ChatMessageRepository extends MongoRepository<ChatMessage, String> {
@@ -22,6 +23,8 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
     //last 30 messages in the chat
     @Query(value = "{ 'chatId' : ?0 }", sort = "{ 'timestamp' : -1 }")
     List<ChatMessage> findLast30ByChatId(String chatId, Pageable pageable);
+
+    Optional<ChatMessage> findTopByChatIdOrderByTimestampDesc(String chatId);
 
     //amount of messages in the chat
     Long countByChatId(String chatId);

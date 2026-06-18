@@ -83,3 +83,8 @@ logging:
     com.zaxxer.hikari: WARN
     org.springframework.boot.actuate: WARN
     root: INFO
+
+feign:
+  client:
+    chat-service:
+      url: ${CHAT_SERVICE_URL:http://localhost:8083}

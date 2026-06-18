@@ -9,14 +9,16 @@ import {
   parseBirthdayDigits,
   toLocalDate,
 } from "../../utils/localDate";
+import useTranslation from "../../hooks/useTranslation";
 
 export default function BirthdayField({
-  label = "Birthday",
+  label,
   value,
   onChange,
   disabled = false,
   fullWidth = true,
 }) {
+  const { t } = useTranslation();
   const [text, setText] = useState("");
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [invalid, setInvalid] = useState(false);
@@ -88,22 +90,22 @@ export default function BirthdayField({
     <>
       <TextField
         fullWidth={fullWidth}
-        label={label}
-        placeholder="DD/MM/YYYY"
+        label={label ?? t("birthday.label")}
+        placeholder={t("birthday.placeholder")}
         value={text}
         disabled={disabled}
         inputRef={inputRef}
         onChange={handleTextChange}
         onBlur={handleBlur}
         error={invalid}
-        helperText={invalid ? "Enter a valid date (DD/MM/YYYY)" : undefined}
+        helperText={invalid ? t("birthday.error.invalid") : undefined}
         slotProps={{
           input: {
             inputMode: "numeric",
             endAdornment: disabled ? null : (
               <InputAdornment position="end">
                 <IconButton
-                  aria-label="Open calendar"
+                  aria-label={t("birthday.calendar")}
                   edge="end"
                   size="small"
                   disabled={disabled}

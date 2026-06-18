@@ -1,4 +1,5 @@
 import { getApiErrorMessage } from '../services/api';
+import { t } from '../i18n';
 
 /** Accept full app URL (/join/TOKEN), other URLs with ?token=, or raw token. */
 export function parseInviteToken(input) {
@@ -33,5 +34,5 @@ export function parseInviteToken(input) {
 export function joinInviteErrorMessage(err) {
   if (typeof err === 'string' && err.trim()) return err;
   if (err && typeof err.message === 'string' && err.message.trim()) return err.message;
-  return getApiErrorMessage(err, 'Could not join with this invite.');
+  return getApiErrorMessage(err, t('invite.join.error.fallback'));
 }

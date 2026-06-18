@@ -74,6 +74,16 @@ export function canLeaveRoom(chat) {
   return isGroupOrChannelType(chat);
 }
 
+/** Private chats: any member. Groups/channels: admins and owners only (not personal spaces). */
+export function canDeleteChat(chat) {
+  if (!chat) return false;
+  const t = String(chat?.type || '').toUpperCase();
+  if (t === 'PERSONAL_SPACE') return false;
+  if (t === 'PRIVATE') return true;
+  if (isGroupOrChannelType(chat)) return canDeleteRoom(chat);
+  return false;
+}
+
 /** Group admins or channel owner/moderators may ban and unban members. */
 export function canBanRoomMembers(chat, currentUserId = null) {
   return canEditRoomProfile(chat, currentUserId);

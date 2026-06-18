@@ -39,10 +39,19 @@ const chatService = {
   // create a new chat with the specified user
   createPrivateChat: async (createChatData) => {
     try {
-      const response = await api.post(`/api/chat/create`, createChatData);
+      const response = await api.post(`/api/chat/create`, createChatData, {
+        silentError: true,
+      });
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      const data = error.response?.data;
+      if (data && typeof data === 'object') {
+        const err = new Error(data.message || data.error || 'Request failed');
+        err.status = error.response?.status;
+        err.data = data;
+        throw err;
+      }
+      throw error;
     }
   },
 
@@ -453,9 +462,14 @@ const chatService = {
   // leave a chat
   leaveChat: async (chatId) => {
     try {
-      await api.post(`/api/chat/${chatId}/leave`);
+      await api.post(`/api/chat/${encodeURIComponent(chatId)}/leave`);
     } catch (error) {
-      throw error.response?.data || error.message;
+      const data = error.response?.data;
+      const message =
+        typeof data === 'string'
+          ? data
+          : data?.message || error.message || 'Failed to leave room';
+      throw new Error(message);
     }
   },
 
@@ -468,6 +482,32 @@ const chatService = {
         typeof data === 'string'
           ? data
           : data?.message || error.message || 'Failed to delete room';
+      throw new Error(message);
+    }
+  },
+
+  deleteChatForMe: async (chatId) => {
+    try {
+      await api.post(`/api/chat/${encodeURIComponent(chatId)}/delete-for-me`);
+    } catch (error) {
+      const data = error.response?.data;
+      const message =
+        typeof data === 'string'
+          ? data
+          : data?.message || error.message || 'Failed to delete chat';
+      throw new Error(message);
+    }
+  },
+
+  deleteChatForEveryone: async (chatId) => {
+    try {
+      await api.post(`/api/chat/${encodeURIComponent(chatId)}/delete-for-everyone`);
+    } catch (error) {
+      const data = error.response?.data;
+      const message =
+        typeof data === 'string'
+          ? data
+          : data?.message || error.message || 'Failed to delete chat';
       throw new Error(message);
     }
   },

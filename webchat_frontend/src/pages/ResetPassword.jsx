@@ -5,19 +5,20 @@ import {
   CircularProgress,
   Typography,
 } from '@mui/material';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import authService from '../services/authService';
 import AuthPageLayout from '../components/auth/AuthPageLayout';
 import AuthAnimatedItem from '../components/auth/AuthAnimatedItem';
 import AuthErrorAlert from '../components/auth/AuthErrorAlert';
-import GlassTextField from '../components/auth/GlassTextField';
+import GlassPasswordField from '../components/auth/GlassPasswordField';
 import {
   authLinkButtonSx,
   authPrimaryButtonSx,
 } from '../components/auth/authPageTheme';
+import useTranslation from '../hooks/useTranslation';
 
 const ResetPassword = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = useMemo(() => (searchParams.get('token') || '').trim(), [searchParams]);
@@ -49,17 +50,17 @@ const ResetPassword = () => {
     e.preventDefault();
 
     if (!token) {
-      showError('Reset link is invalid. Request a new password reset from the login page.');
+      showError(t('auth.reset.error.invalidToken'));
       return;
     }
 
     if (formData.newPassword.length < 6) {
-      showError('Password must be at least 6 characters long.');
+      showError(t('auth.reset.error.passwordTooShort'));
       return;
     }
 
     if (formData.newPassword !== formData.confirmPassword) {
-      showError('Passwords do not match.');
+      showError(t('auth.reset.error.passwordMismatch'));
       return;
     }
 
@@ -72,10 +73,10 @@ const ResetPassword = () => {
         confirmPassword: formData.confirmPassword,
       });
       setSuccessMessage(
-        response?.message || 'Your password has been updated. You can sign in now.'
+        response?.message || t('auth.reset.success.fallback')
       );
     } catch (err) {
-      showError(err.message || 'Unable to reset password. Please try again.');
+      showError(err.message || t('auth.reset.error.fallback'));
     } finally {
       setLoading(false);
     }
@@ -84,15 +85,15 @@ const ResetPassword = () => {
   if (!token && !successMessage) {
     return (
       <AuthPageLayout
-        title="Reset Password"
+        title={t('auth.reset.title')}
         footer={
           <>
             <Button component={RouterLink} to="/forgot-password" disableRipple sx={authLinkButtonSx}>
-              Request new link
+              {t('auth.reset.footer.requestNewLink')}
             </Button>
             {' · '}
             <Button component={RouterLink} to="/login" disableRipple sx={authLinkButtonSx}>
-              Back to Login
+              {t('auth.reset.footer.backToLogin')}
             </Button>
           </>
         }
@@ -102,7 +103,7 @@ const ResetPassword = () => {
           sx={{ color: 'rgba(255, 255, 255, 0.9)', textAlign: 'center', lineHeight: 1.6 }}
           role="alert"
         >
-          This reset link is missing or invalid. Request a new one from the forgot password page.
+          {t('auth.reset.invalidLink')}
         </Typography>
       </AuthPageLayout>
     );
@@ -110,7 +111,7 @@ const ResetPassword = () => {
 
   return (
     <AuthPageLayout
-      title="Reset Password"
+      title={t('auth.reset.title')}
       shake={errorShake}
       footer={
         successMessage ? (
@@ -121,13 +122,13 @@ const ResetPassword = () => {
             sx={authLinkButtonSx}
             onClick={() => navigate('/login')}
           >
-            Go to Login
+            {t('auth.reset.footer.goToLogin')}
           </Button>
         ) : (
           <>
-            Need a new link?{' '}
+            {t('auth.reset.footer.needNewLink')}{' '}
             <Button component={RouterLink} to="/forgot-password" disableRipple sx={authLinkButtonSx}>
-              Forgot Password
+              {t('auth.reset.footer.forgotPassword')}
             </Button>
           </>
         )
@@ -153,30 +154,26 @@ const ResetPassword = () => {
       ) : (
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <AuthAnimatedItem index={0}>
-            <GlassTextField
+            <GlassPasswordField
               name="newPassword"
-              type="password"
-              placeholder="New password"
+              placeholder={t('auth.reset.newPassword.placeholder')}
               autoComplete="new-password"
               value={formData.newPassword}
               onChange={handleChange}
               required
               disabled={loading}
-              endIcon={LockOutlinedIcon}
             />
           </AuthAnimatedItem>
 
           <AuthAnimatedItem index={1}>
-            <GlassTextField
+            <GlassPasswordField
               name="confirmPassword"
-              type="password"
-              placeholder="Confirm new password"
+              placeholder={t('auth.reset.confirmPassword.placeholder')}
               autoComplete="new-password"
               value={formData.confirmPassword}
               onChange={handleChange}
               required
               disabled={loading}
-              endIcon={LockOutlinedIcon}
             />
           </AuthAnimatedItem>
 
@@ -192,7 +189,7 @@ const ResetPassword = () => {
               {loading ? (
                 <CircularProgress size={24} sx={{ color: '#1a1a2e' }} />
               ) : (
-                'Update Password'
+                t('auth.reset.submit')
               )}
             </Button>
           </AuthAnimatedItem>

@@ -1,0 +1,20 @@
+export default {
+  'nav.ariaLabel': 'Chat navigation',
+  'nav.findUsers': 'Find users & rooms',
+  'nav.allChats': 'All chats',
+  'nav.direct': 'Direct',
+  'nav.groups': 'Groups',
+  'nav.channels': 'Channels',
+  'nav.personalSpace': 'Personal Space',
+  'nav.myProfile': 'My profile',
+  'nav.settings': 'Settings',
+  'nav.logout': 'Log out',
+  'nav.login': 'Login',
+  'nav.register': 'Register',
+  'nav.backToChats': 'Back to chats',
+
+  'folders.title': 'Folders',
+  'folders.expand': 'Expand folders',
+  'folders.collapse': 'Collapse folders',
+  'folders.unreadTooltip': '{{name}} ({{count}} unread)',
+};

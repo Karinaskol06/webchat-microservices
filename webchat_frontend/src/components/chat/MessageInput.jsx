@@ -12,6 +12,7 @@ import { parseQuotedSnippetFromMessage } from '../../utils/quotedMessagePreview'
 import { QuotedKindIcon } from './QuotedKindIcon';
 import { chatColors, chatRadii, muiTransparent } from '../../theme/chatDesignTokens';
 import { ATTACHMENT_ACCEPT } from '../../utils/attachmentConstraints';
+import useTranslation from '../../hooks/useTranslation';
 
 const TYPING_NOTIFY_MS = 400;
 
@@ -76,13 +77,14 @@ const MessageInput = forwardRef(function MessageInput(
     composerError,
     onDismissComposerError,
     channelReadOnly = false,
-    channelReadOnlyHint = 'Only the channel owner or admins can post in this channel.',
+    channelReadOnlyHint,
     onInsertRichMessage,
     richMessageSending = false,
     showPollOption = false,
   },
   ref,
 ) {
+  const { t } = useTranslation();
   const fileInputRef = useRef(null);
   const pinButtonRef = useRef(null);
   const [pinMenuOpen, setPinMenuOpen] = useState(false);
@@ -208,7 +210,9 @@ const MessageInput = forwardRef(function MessageInput(
   const replyAuthor =
     replyToMessage?.sender?.firstName ||
     replyToMessage?.sender?.username ||
-    'User';
+    t('common.user');
+
+  const readOnlyHint = channelReadOnlyHint || t('composer.channelReadOnly');
 
   const quotedComposer = replyToMessage ? parseQuotedSnippetFromMessage(replyToMessage) : null;
 
@@ -296,7 +300,7 @@ const MessageInput = forwardRef(function MessageInput(
                 </Typography>
               </Box>
             </Box>
-            <IconButton size="small" onClick={onCancelReply} aria-label="Cancel reply">
+            <IconButton size="small" onClick={onCancelReply} aria-label={t('composer.reply.cancel')}>
               <CloseIcon fontSize="small" />
             </IconButton>
           </Box>
@@ -316,7 +320,7 @@ const MessageInput = forwardRef(function MessageInput(
       )}
       {channelReadOnly ? (
         <Typography variant="body2" sx={{ py: 0.5, color: chatColors.textSecondary }}>
-          {channelReadOnlyHint}
+          {readOnlyHint}
         </Typography>
       ) : (
         <Box
@@ -354,15 +358,15 @@ const MessageInput = forwardRef(function MessageInput(
             onChange={handleFileSelection}
             accept={ATTACHMENT_ACCEPT}
           />
-          <IconButton onClick={handleOpenFilePicker} aria-label="Attach file" size="small">
+          <IconButton onClick={handleOpenFilePicker} aria-label={t('composer.attach')} size="small">
             <AttachFileIcon />
           </IconButton>
 
-          <Tooltip title="Insert to-do, sticky note, or reminder">
+          <Tooltip title={t('composer.insertBlock.tooltip')}>
             <span>
               <IconButton
                 ref={pinButtonRef}
-                aria-label="Insert workspace block"
+                aria-label={t('composer.insertBlock')}
                 size="small"
                 disabled={channelReadOnly || richMessageSending || !onInsertRichMessage}
                 onClick={() => setPinMenuOpen(true)}
@@ -382,8 +386,8 @@ const MessageInput = forwardRef(function MessageInput(
             }}
           />
 
-          <Tooltip title={emojiSidebarOpen ? 'Hide emoji sidebar' : 'Show emoji sidebar'}>
-            <IconButton onClick={onToggleEmojiSidebar} aria-label="Toggle emoji picker" size="small">
+          <Tooltip title={emojiSidebarOpen ? t('composer.emoji.hide') : t('composer.emoji.show')}>
+            <IconButton onClick={onToggleEmojiSidebar} aria-label={emojiSidebarOpen ? t('composer.emoji.hide') : t('composer.emoji.show')} size="small">
               {emojiSidebarOpen ? <ChevronLeftIcon /> : <EmojiEmotionsOutlinedIcon />}
             </IconButton>
           </Tooltip>
@@ -392,7 +396,7 @@ const MessageInput = forwardRef(function MessageInput(
             fullWidth
             multiline
             maxRows={4}
-            placeholder="Your message"
+            placeholder={t('composer.placeholder')}
             value={draft}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
@@ -414,7 +418,7 @@ const MessageInput = forwardRef(function MessageInput(
             color="primary"
             onClick={handleSend}
             disabled={!canSend}
-            aria-label="Send message"
+            aria-label={t('composer.send')}
             size="small"
             sx={{
               bgcolor: canSend ? chatColors.primary : muiTransparent,

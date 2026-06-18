@@ -1,0 +1,20 @@
+export default {
+  'nav.ariaLabel': 'Навігація чату',
+  'nav.findUsers': 'Знайти користувачів і кімнати',
+  'nav.allChats': 'Усі чати',
+  'nav.direct': 'Особисті',
+  'nav.groups': 'Групи',
+  'nav.channels': 'Канали',
+  'nav.personalSpace': 'Особистий простір',
+  'nav.myProfile': 'Мій профіль',
+  'nav.settings': 'Налаштування',
+  'nav.logout': 'Вийти',
+  'nav.login': 'Увійти',
+  'nav.register': 'Зареєструватися',
+  'nav.backToChats': 'Назад до чатів',
+
+  'folders.title': 'Папки',
+  'folders.expand': 'Розгорнути папки',
+  'folders.collapse': 'Згорнути папки',
+  'folders.unreadTooltip': '{{name}} ({{count}} непрочитаних)',
+};

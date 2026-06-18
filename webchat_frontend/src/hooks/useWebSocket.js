@@ -10,6 +10,8 @@ import {
 } from '../utils/websocket';
 import {
   WEBCHAT_ACTIVATE_CHAT,
+  WEBCHAT_CHAT_CREATED,
+  WEBCHAT_CHAT_DELETED,
   WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT,
   WEBCHAT_MESSAGES_MARKED_READ,
 } from '../constants/chatEvents';
@@ -18,10 +20,96 @@ import { getMessagePreviewText } from '../utils/personalSpace';
 const normalizeWsMessagePayload = (event) =>
   event?.type === 'MESSAGE_SENT' && event.message != null ? event.message : event;
 
+const applyRemoteChatDeleted = (chatId) => {
+  const key = chatId != null ? String(chatId) : '';
+  if (!key) return;
+  useChatStore.getState().removeChat(key);
+  useChatFolderStore.getState().assignChatToFolder(key, null);
+  window.dispatchEvent(new CustomEvent(WEBCHAT_CHAT_DELETED, { detail: { chatId: key } }));
+};
+
+const applyRemoteChatUpsert = (chat) => {
+  if (!chat?.id) return;
+  useChatStore.getState().upsertChat(chat);
+  window.dispatchEvent(new CustomEvent(WEBCHAT_CHAT_CREATED, { detail: { chat } }));
+};
+
+const resolveChatPayload = (payload) => payload?.chat ?? payload;
+
 /** Last-line preview — must match sidebar + server fields */
 const getLastMessagePreview = (message) => {
   const text = getMessagePreviewText(message);
   return text || 'Attachment';
+};
+
+const processIncomingMessage = (message, topicChatIdFallback, routingRef, markReadTimeoutRef) => {
+  if (!message || typeof message !== 'object') return;
+
+  const store = useChatStore.getState();
+  const routing = routingRef.current;
+  const sid = routing.userId;
+  const openId = store.currentChat?.id;
+
+  const senderId = message.senderId || message.sender?.id;
+  const isIncoming = Boolean(senderId && Number(senderId) !== Number(sid));
+  const lastMessageText = getLastMessagePreview(message);
+  const topicChatId = String(message.chatId ?? topicChatIdFallback ?? '');
+
+  store.updateChatLastMessage(topicChatId, {
+    content: lastMessageText,
+    timestamp: message.timestamp,
+    senderId,
+    messageType: message.messageType,
+  });
+
+  if (message.sender) {
+    store.mergeChatSenderIntoOtherUser(topicChatId, message.sender);
+  }
+
+  const isOwnForward = Boolean(
+    !isIncoming && (message.forwardedFrom != null || message.forwardedFromUserId != null),
+  );
+
+  const isFocused =
+    openId != null && openId !== '' && String(openId) === topicChatId;
+
+  if (isOwnForward && !isFocused) {
+    window.dispatchEvent(
+      new CustomEvent(WEBCHAT_ACTIVATE_CHAT, {
+        detail: { chatId: topicChatId, message },
+      }),
+    );
+    return;
+  }
+
+  if (isFocused) {
+    store.addMessage(message);
+    if (isIncoming) {
+      window.dispatchEvent(
+        new CustomEvent(WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT, {
+          detail: { chatId: topicChatId, message },
+        }),
+      );
+      if (markReadTimeoutRef.current) {
+        clearTimeout(markReadTimeoutRef.current);
+      }
+      markReadTimeoutRef.current = window.setTimeout(() => {
+        chatService
+          .markAsRead(topicChatId)
+          .then(() => {
+            window.dispatchEvent(
+              new CustomEvent(WEBCHAT_MESSAGES_MARKED_READ, {
+                detail: { chatId: topicChatId },
+              }),
+            );
+            useChatStore.getState().resetUnreadCount(topicChatId);
+          })
+          .catch(() => {});
+      }, 500);
+    }
+  } else if (isIncoming) {
+    store.incrementUnreadCount(topicChatId);
+  }
 };
 
 const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}) => {
@@ -87,80 +175,15 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
 
     const unsubs = ids.map((id) =>
       subscribeToChat(id, {
+        onChatCreated: (payload) => {
+          applyRemoteChatUpsert(resolveChatPayload(payload));
+        },
+        onChatDeleted: (event) => {
+          applyRemoteChatDeleted(event?.chatId ?? event?.id ?? id);
+        },
         onMessage: (rawPayload) => {
           const message = normalizeWsMessagePayload(rawPayload);
-          if (!message || typeof message !== 'object') return;
-
-          const store = useChatStore.getState();
-          const routing = routingRef.current;
-          const sid = routing.userId;
-          // Use live store id: routingRef updates on the next render and lags behind after setCurrentChat
-          // (e.g. forward-to-another-chat), which would skip addMessage for the forwarded message.
-          const openId = store.currentChat?.id;
-
-          const senderId = message.senderId || message.sender?.id;
-          const isIncoming = Boolean(senderId && Number(senderId) !== Number(sid));
-          const lastMessageText = getLastMessagePreview(message);
-
-          const topicChatId = String(message.chatId ?? id);
-
-          store.updateChatLastMessage(topicChatId, {
-            content: lastMessageText,
-            timestamp: message.timestamp,
-            senderId,
-          });
-
-          if (message.sender) {
-            store.mergeChatSenderIntoOtherUser(topicChatId, message.sender);
-          }
-
-          const isOwnForward = Boolean(
-            !isIncoming &&
-              (message.forwardedFrom != null || message.forwardedFromUserId != null),
-          );
-
-          const isFocused =
-            openId != null &&
-            openId !== '' &&
-            String(openId) === topicChatId;
-
-          if (isOwnForward && !isFocused) {
-            window.dispatchEvent(
-              new CustomEvent(WEBCHAT_ACTIVATE_CHAT, {
-                detail: { chatId: topicChatId, message },
-              }),
-            );
-            return;
-          }
-
-          if (isFocused) {
-            store.addMessage(message);
-            if (isIncoming) {
-              window.dispatchEvent(
-                new CustomEvent(WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT, {
-                  detail: { chatId: topicChatId, message },
-                }),
-              );
-              if (markReadTimeoutRef.current) {
-                clearTimeout(markReadTimeoutRef.current);
-              }
-              markReadTimeoutRef.current = window.setTimeout(() => {
-                chatService
-                  .markAsRead(topicChatId)
-                  .then(() => {
-                    window.dispatchEvent(
-                      new CustomEvent(WEBCHAT_MESSAGES_MARKED_READ, {
-                        detail: { chatId: topicChatId },
-                      }),
-                    );
-                    useChatStore.getState().resetUnreadCount(topicChatId);
-                  })
-                  .catch(() => {});
-              }, 500);
-            }
-          } else if (isIncoming) {
-            store.incrementUnreadCount(topicChatId);
-          }
+          processIncomingMessage(message, id, routingRef, markReadTimeoutRef);
         },
         onPresence: () => {
           bumpPresenceLater(id);
@@ -238,17 +261,23 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
   useEffect(() => {
     if (!user) return;
     const unsubscribe = subscribeToUserChatEvents({
-      onChatCreated: (chat) => {
-        useChatStore.getState().upsertChat(chat);
+      userId: user?.id,
+      onChatCreated: (payload) => {
+        applyRemoteChatUpsert(resolveChatPayload(payload));
       },
       onChatUpdated: (chat) => {
-        useChatStore.getState().upsertChat(chat);
+        applyRemoteChatUpsert(chat);
       },
       onChatDeleted: (event) => {
-        const chatId = event?.chatId ?? event?.id;
-        if (!chatId) return;
-        useChatStore.getState().removeChat(chatId);
-        useChatFolderStore.getState().assignChatToFolder(chatId, null);
+        applyRemoteChatDeleted(event?.chatId ?? event?.id);
+      },
+      onIncomingChatMessage: (event) => {
+        const chat = event?.chat;
+        const message = event?.message;
+        if (chat?.id) {
+          applyRemoteChatUpsert(chat);
+        }
+        processIncomingMessage(message, chat?.id, routingRef, markReadTimeoutRef);
       },
       onRoomMemberInvite,
     });

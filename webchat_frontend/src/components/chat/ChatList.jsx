@@ -38,7 +38,6 @@ import CreateNewFolderOutlinedIcon from '@mui/icons-material/CreateNewFolderOutl
 import LinkIcon from '@mui/icons-material/Link';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
 import GroupsIcon from '@mui/icons-material/Groups';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -53,7 +52,10 @@ import {
 import UserAvatar from '../user/UserAvatar';
 import { resolveRoomAvatarSrc } from '../../utils/userAvatar';
 import { getMessagePreviewText } from '../../utils/personalSpace';
+import { isDeletedAccountUser } from '../../utils/chatDisplay';
 import RoomMemberInvitesPanel from './RoomMemberInvitesPanel';
+import useTranslation from '../../hooks/useTranslation';
+import { getApiErrorMessage } from '../../services/api';
 
 const matchesChatFilter = (chat, filter) => {
   const t = String(chat?.type || 'PRIVATE').toUpperCase();
@@ -78,6 +80,7 @@ const ChatList = ({
   onAcceptRoomMemberInvite,
   onDeclineRoomMemberInvite,
 }) => {
+  const { t } = useTranslation();
   const { user } = useAuthStore();
 
   const chats = useChatStore(useShallow((state) => state.chats));
@@ -100,8 +103,6 @@ const ChatList = ({
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [deleteFolderTarget, setDeleteFolderTarget] = useState(null);
   const [draggingChatId, setDraggingChatId] = useState(null);
-  const [chatMenuAnchor, setChatMenuAnchor] = useState(null);
-  const [chatMenuTarget, setChatMenuTarget] = useState(null);
   const [folderMenuAnchor, setFolderMenuAnchor] = useState(null);
   const previousUserIdRef = useRef(null);
 
@@ -117,7 +118,6 @@ const ChatList = ({
   const deleteFolder = useChatFolderStore((s) => s.deleteFolder);
   const setActiveFolderId = useChatFolderStore((s) => s.setActiveFolderId);
   const getFolderIdForChat = useChatFolderStore((s) => s.getFolderIdForChat);
-  const assignChatToFolder = useChatFolderStore((s) => s.assignChatToFolder);
 
   const activeFolder = React.useMemo(
     () => folders.find((f) => f.id === activeFolderId) || null,
@@ -157,10 +157,12 @@ const ChatList = ({
           }
         }
 
-        setChats(chatsArray);
+        const localChats = useChatStore.getState().chats;
+        const mergedChats = useChatStore.getState().mergeChatsFromServer(chatsArray, localChats);
+        setChats(mergedChats);
 
         const allowed = new Set(
-          chatsArray.map((c) => (c?.id != null ? String(c.id) : '')).filter(Boolean),
+          mergedChats.map((c) => (c?.id != null ? String(c.id) : '')).filter(Boolean),
         );
         const current = useChatStore.getState().currentChat;
         if (current?.id != null && !allowed.has(String(current.id))) {
@@ -174,7 +176,7 @@ const ChatList = ({
         }
       } catch (error) {
         console.error('Failed to load chats:', error);
-        setError(error.response?.data?.message || error.message || 'Failed to load chats');
+        setError(getApiErrorMessage(error, t('chatList.error.loadFailed')));
         setChats([]);
       } finally {
         setLoadingChats(false);
@@ -281,25 +283,6 @@ const ChatList = ({
     setMenuAnchor(null);
   };
 
-  const openChatMenu = (event, chat) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setChatMenuAnchor(event.currentTarget);
-    setChatMenuTarget(chat);
-  };
-
-  const closeChatMenu = () => {
-    setChatMenuAnchor(null);
-    setChatMenuTarget(null);
-  };
-
-  const handleRemoveChatFromFolder = () => {
-    if (chatMenuTarget?.id && activeFolderId) {
-      assignChatToFolder(chatMenuTarget.id, null);
-    }
-    closeChatMenu();
-  };
-
   const openFolderMenu = (event) => {
     event.stopPropagation();
     setFolderMenuAnchor(event.currentTarget);
@@ -329,7 +312,7 @@ const ChatList = ({
           <ListItemIcon>
             <LinkIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Join via link" />
+          <ListItemText primary={t('chatList.menu.joinViaLink')} />
         </MenuItem>
         <MenuItem
           onClick={() => {
@@ -340,7 +323,7 @@ const ChatList = ({
           <ListItemIcon>
             <GroupsIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Create a group chat" />
+          <ListItemText primary={t('chatList.menu.createGroup')} />
         </MenuItem>
         <MenuItem
           onClick={() => {
@@ -351,7 +334,7 @@ const ChatList = ({
           <ListItemIcon>
             <CampaignOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Create a channel" />
+          <ListItemText primary={t('chatList.menu.createChannel')} />
         </MenuItem>
         <MenuItem
           onClick={() => {
@@ -362,7 +345,7 @@ const ChatList = ({
           <ListItemIcon>
             <CreateNewFolderOutlinedIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Create folder" />
+          <ListItemText primary={t('chatList.menu.createFolder')} />
         </MenuItem>
       </Menu>
       <CreateRoomDialog
@@ -396,7 +379,7 @@ const ChatList = ({
             severity="error"
             action={
               <Button color="inherit" size="small" onClick={handleRetry} startIcon={<RefreshIcon />}>
-                Retry
+                {t('common.retry')}
               </Button>
             }
           >
@@ -462,11 +445,11 @@ const ChatList = ({
   };
 
   const emptyTitle = activeFolder
-    ? `No chats in “${activeFolder.name}”`
-    : "You don't have any chats yet";
+    ? t('chatList.empty.noChatsInFolder', { folderName: activeFolder.name })
+    : t('chatList.empty.noChats');
   const emptyHint = activeFolder
-    ? 'Use the menu on a chat to remove it from this folder, or add chats from All chats via drag-and-drop.'
-    : 'Start a conversation, create a group or channel, or find users and public rooms.';
+    ? t('chatList.empty.hintFolder')
+    : t('chatList.empty.hintDefault');
 
   const listSection =
     chatList.length === 0 ? (
@@ -483,7 +466,7 @@ const ChatList = ({
           onClick={onFindUsers}
           sx={{ mt: 1, display: { xs: 'inline-flex', md: 'none' } }}
         >
-          Find users & rooms
+          {t('chatList.empty.findUsers')}
         </Button>
       </Box>
     ) : (
@@ -495,12 +478,14 @@ const ChatList = ({
           const isGroupOrChannel = isGroup || isChannel;
           const otherUser = !isGroupOrChannel ? chat.otherUser : null;
           const otherUserName = isChannel
-            ? chat.groupName || 'Channel'
+            ? chat.groupName || t('roomType.channel')
             : isGroup
-              ? chat.groupName || 'Group chat'
-              : (otherUser?.firstName || otherUser?.lastName)
-                  ? `${otherUser?.firstName || ''} ${otherUser?.lastName || ''}`.trim()
-                  : otherUser?.username || 'Unknown User';
+              ? chat.groupName || t('roomType.group')
+              : isDeletedAccountUser(otherUser)
+                ? t('common.deletedAccount')
+                : (otherUser?.firstName || otherUser?.lastName)
+                    ? `${otherUser?.firstName || ''} ${otherUser?.lastName || ''}`.trim()
+                    : otherUser?.username || t('common.unknownUser');
           const otherUserId = !isGroupOrChannel ? otherUser?.id : null;
           const presence = presenceByChatId[chat.id];
           const presenceState = derivePresenceState(presence);
@@ -513,7 +498,7 @@ const ChatList = ({
             ? lastMessage.length > 30
               ? `${lastMessage.substring(0, 30)}...`
               : lastMessage
-            : 'No messages yet';
+            : t('chatList.preview.noMessages');
 
           const unreadCount = chat.unreadCount || 0;
           const isSelected = String(activeChatId) === String(chat.id);
@@ -577,7 +562,7 @@ const ChatList = ({
                 }}
                 role={isGroupOrChannel ? 'button' : undefined}
                 tabIndex={isGroupOrChannel ? 0 : undefined}
-                aria-label={isGroupOrChannel ? 'View room details' : undefined}
+                aria-label={isGroupOrChannel ? t('chatList.aria.viewRoomDetails') : undefined}
                 sx={{
                   cursor: isGroupOrChannel ? 'pointer' : 'default',
                   minWidth: 56,
@@ -625,18 +610,18 @@ const ChatList = ({
                 primary={
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
                     {isChannel ? (
-                      <Tooltip title="Channel">
+                      <Tooltip title={t('roomType.channel')}>
                         <CampaignOutlinedIcon
                           sx={{ fontSize: 18, color: chatColors.primary, flexShrink: 0 }}
-                          aria-label="Channel"
+                          aria-label={t('roomType.channel')}
                         />
                       </Tooltip>
                     ) : null}
                     {isGroup ? (
-                      <Tooltip title="Group chat">
+                      <Tooltip title={t('roomType.group')}>
                         <GroupsIcon
                           sx={{ fontSize: 18, color: chatColors.glassPanelTextMuted, flexShrink: 0 }}
-                          aria-label="Group chat"
+                          aria-label={t('roomType.group')}
                         />
                       </Tooltip>
                     ) : null}
@@ -666,30 +651,16 @@ const ChatList = ({
               {unreadCount > 0 ? (
                 <Box
                   component="span"
-                  aria-label={`${unreadCount} unread`}
+                  aria-label={t('chatList.aria.unread', { count: unreadCount })}
                   sx={{
                     ...chatUnreadCountBadgeSx,
                     mr: activeFolderId ? 0.75 : 1.5,
                   }}
                 >
-                  {unreadCount > 99 ? '99+' : unreadCount}
+                  {unreadCount > 99 ? t('common.badgeOverflow') : unreadCount}
                 </Box>
               ) : null}
 
-              {activeFolderId ? (
-                <IconButton
-                  size="small"
-                  aria-label={`Options for ${otherUserName}`}
-                  onClick={(event) => openChatMenu(event, chat)}
-                  sx={{
-                    ...listMenuButtonSx,
-                    flexShrink: 0,
-                    '&:hover': { color: chatColors.glassPanelText, bgcolor: 'rgba(16, 8, 26, 0.06)' },
-                  }}
-                >
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-              ) : null}
             </ListItem>
           );
         })}
@@ -729,7 +700,7 @@ const ChatList = ({
             </Typography>
             <IconButton
               size="small"
-              aria-label={`Folder options for ${activeFolder.name}`}
+              aria-label={t('chatList.aria.folderOptions', { folderName: activeFolder.name })}
               onClick={openFolderMenu}
               sx={{
                 ...listMenuButtonSx,
@@ -744,7 +715,7 @@ const ChatList = ({
           <TextField
             size="small"
             fullWidth
-            placeholder="Search"
+            placeholder={t('chatList.search.placeholder')}
             value={listSearch}
             onChange={(e) => setListSearch(e.target.value)}
             InputProps={{
@@ -763,11 +734,11 @@ const ChatList = ({
                 '& fieldset': { border: 'none' },
               },
             }}
-            inputProps={{ 'aria-label': 'Search chats' }}
+            inputProps={{ 'aria-label': t('chatList.search.ariaLabel') }}
           />
-          <Tooltip title="Find users & rooms">
+          <Tooltip title={t('chatList.empty.findUsers')}>
             <IconButton
-              aria-label="Find users and rooms"
+              aria-label={t('chatList.aria.findUsers')}
               onClick={onFindUsers}
               sx={{
                 display: { xs: 'inline-flex', md: 'none' },
@@ -783,7 +754,7 @@ const ChatList = ({
                 badgeContent={
                   roomMemberInvites.length > 0
                     ? roomMemberInvites.length > 9
-                      ? '9+'
+                      ? t('common.badgeOverflow')
                       : roomMemberInvites.length
                     : 0
                 }
@@ -802,9 +773,9 @@ const ChatList = ({
             </IconButton>
           </Tooltip>
           {!activeFolder ? (
-            <Tooltip title="Chat list options">
+            <Tooltip title={t('chatList.tooltip.listOptions')}>
               <IconButton
-                aria-label="Chat list options"
+                aria-label={t('chatList.aria.listOptions')}
                 onClick={openListMenu}
                 sx={{
                   flexShrink: 0,
@@ -852,26 +823,9 @@ const ChatList = ({
           sx={{ color: 'error.main' }}
         >
           <ListItemIcon sx={{ color: 'inherit' }}>
-            <DeleteOutlineIcon fontSize="small" />
+              <DeleteOutlineIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="Delete folder" />
-        </MenuItem>
-      </Menu>
-
-      <Menu
-        id="chat-folder-item-menu"
-        anchorEl={chatMenuAnchor}
-        open={Boolean(chatMenuAnchor)}
-        onClose={closeChatMenu}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { minWidth: 200 } } }}
-      >
-        <MenuItem onClick={handleRemoveChatFromFolder}>
-          <ListItemIcon>
-            <DriveFileMoveOutlinedIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Remove from folder" />
+          <ListItemText primary={t('chatList.menu.deleteFolder')} />
         </MenuItem>
       </Menu>
 
@@ -881,15 +835,14 @@ const ChatList = ({
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>Delete folder?</DialogTitle>
+        <DialogTitle>{t('chatList.deleteFolder.title')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Delete <strong>{deleteFolderTarget?.name}</strong>? Chats in this folder will stay in your
-            chat list — only the folder is removed.
+            {t('chatList.deleteFolder.body', { folderName: deleteFolderTarget?.name })}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDeleteFolderTarget(null)}>Cancel</Button>
+          <Button onClick={() => setDeleteFolderTarget(null)}>{t('common.cancel')}</Button>
           <Button
             color="error"
             variant="contained"
@@ -903,7 +856,7 @@ const ChatList = ({
               setDeleteFolderTarget(null);
             }}
           >
-            Delete folder
+            {t('chatList.deleteFolder.confirm')}
           </Button>
         </DialogActions>
       </Dialog>

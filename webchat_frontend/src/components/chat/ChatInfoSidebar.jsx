@@ -39,16 +39,11 @@ import {
 } from '../../theme/chatDesignTokens';
 import { derivePresenceState, getPresenceLabel } from '../../utils/presence';
 import UserAvatar from '../user/UserAvatar';
-
-const FILE_SECTIONS = [
-  { key: 'photos', label: 'Photos', icon: ImageOutlinedIcon },
-  { key: 'videos', label: 'Videos', icon: VideocamOutlinedIcon },
-  { key: 'files', label: 'Documents', icon: InsertDriveFileOutlinedIcon },
-  { key: 'links', label: 'Links', icon: LinkOutlinedIcon },
-];
+import useTranslation from '../../hooks/useTranslation';
+import { t as translateStatic } from '../../i18n';
 
 const displayName = (u) => {
-  if (!u) return 'Unknown';
+  if (!u) return translateStatic('common.unknown');
   const full = `${u.firstName || ''} ${u.lastName || ''}`.trim();
   return full || u.username || `User ${u.id}`;
 };
@@ -273,6 +268,16 @@ const ChatInfoSidebar = ({
   onCloseGroupInfo,
   onCloseMembers,
 }) => {
+  const { t } = useTranslation();
+  const fileSections = useMemo(
+    () => [
+      { key: 'photos', label: t('sidebar.media.photos'), icon: ImageOutlinedIcon },
+      { key: 'videos', label: t('sidebar.media.videos'), icon: VideocamOutlinedIcon },
+      { key: 'files', label: t('sidebar.media.documents'), icon: InsertDriveFileOutlinedIcon },
+      { key: 'links', label: t('sidebar.media.links'), icon: LinkOutlinedIcon },
+    ],
+    [t],
+  );
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [roomAccessVerified, setRoomAccessVerified] = useState(false);
@@ -296,13 +301,13 @@ const ChatInfoSidebar = ({
   const chatType = String(room?.type || '').toUpperCase();
   const isPrivateChat = chatType === 'PRIVATE';
   const isPersonalSpace = chatType === 'PERSONAL_SPACE';
-  const roomKind = isPersonalSpace
-    ? 'Space'
+  const infoPanelTitle = isPersonalSpace
+    ? t('chat.sidebar.spaceInfo')
     : isPrivateChat
-      ? 'Chat'
+      ? t('chat.sidebar.chatInfo')
       : chatType === 'CHANNEL'
-        ? 'Channel'
-        : 'Group';
+        ? t('chat.sidebar.channelInfo')
+        : t('chat.sidebar.groupInfo');
   const linksSectionExpanded = expandedSections.includes('links');
   const sharedMedia = useRoomSharedMedia(roomId, {
     enabled: roomAccessVerified && groupInfoOpen,
@@ -527,11 +532,11 @@ const ChatInfoSidebar = ({
     >
       {groupInfoOpen ? (
         <SidePanel
-          title={`${roomKind} info`}
+          title={infoPanelTitle}
           folded={mediaFolded}
           onToggleFold={() => setMediaFolded((v) => !v)}
           onClose={closeMediaPanel}
-          ariaLabel={`${roomKind} shared media`}
+          ariaLabel={infoPanelTitle}
           flex={groupInfoFlex}
           maxHeight={groupInfoMaxHeight}
         >
@@ -556,7 +561,7 @@ const ChatInfoSidebar = ({
                 ...chatHideScrollbarSx,
               }}
             >
-              {FILE_SECTIONS.map(({ key, label, icon: Icon }) => {
+              {fileSections.map(({ key, label, icon: Icon }) => {
                 const count = sectionCounts[key] ?? 0;
                 const isExpanded = expandedSections.includes(key);
                 const fillSpace =
@@ -584,7 +589,7 @@ const ChatInfoSidebar = ({
               })}
               {showBannedSection ? (
                 <MediaSection
-                  label="Banned"
+                  label={t('sidebar.banned')}
                   icon={BlockOutlinedIcon}
                   count={bannedUsers.length}
                   expanded={bannedExpanded}
@@ -626,12 +631,11 @@ const ChatInfoSidebar = ({
                   '&:hover': { color: chatColors.glassPanelText, textDecoration: 'underline' },
                 }}
               >
-                View{' '}
                 {isPersonalSpace
-                  ? 'personal space details'
+                  ? t('sidebar.viewDetails.personalSpace')
                   : isPrivateChat
-                    ? 'profile'
-                    : 'full room details'}
+                    ? t('sidebar.viewDetails.profile')
+                    : t('sidebar.viewDetails.room')}
               </Typography>
             </Box>
           </Box>
@@ -640,12 +644,14 @@ const ChatInfoSidebar = ({
 
       {membersPanelVisible ? (
         <SidePanel
-          title="Members"
-          subtitle={`${data?.memberCount ?? members.length} members`}
+          title={t('sidebar.members.title')}
+          subtitle={t('sidebar.members.subtitle', {
+            count: data?.memberCount ?? members.length,
+          })}
           folded={membersFolded}
           onToggleFold={() => setMembersFolded((v) => !v)}
           onClose={closeMembersPanel}
-          ariaLabel="Chat members"
+          ariaLabel={t('sidebar.members.ariaLabel')}
           flex={membersFlex}
           maxHeight={bothPanelsOpen && membersExpanded && groupInfoExpanded ? undefined : '100%'}
           pushToBottom={membersPushToBottom}
@@ -666,7 +672,7 @@ const ChatInfoSidebar = ({
               </Box>
             ) : members.length === 0 ? (
               <Typography variant="body2" sx={{ px: 0.5, color: chatColors.glassPanelTextMuted }}>
-                No members loaded.
+                {t('sidebar.members.empty')}
               </Typography>
             ) : (
               members.map((member) => {

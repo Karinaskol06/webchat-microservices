@@ -63,6 +63,7 @@ public class ChatRoomManagementService {
         List<ChatRoomDTO> chatRooms = chatPage.getContent()
                 .stream()
                 .filter(chat -> chat.getType() != ChatType.PERSONAL_SPACE)
+                .filter(chat -> !chat.isHiddenFor(userId))
                 .filter(chat -> !userBanGuardService.isPrivateChatHiddenForViewer(
                         chat, userId, bannedUserIds, banningUserIds))
                 .map(chat -> roomEnrichmentService.enrichChatWithUserData(
@@ -111,6 +112,7 @@ public class ChatRoomManagementService {
 
         redisService.markUserOffline(userId);
         webSocketService.notifyUserLeftChat(chatId, userId);
+        webSocketService.notifyChatDeleted(chatId, Set.of(userId));
     }
 
     @Transactional
@@ -139,17 +141,87 @@ public class ChatRoomManagementService {
         }
 
         // delete attachments, messages, invites and chat
-        Set<Long> members = new HashSet<>(room.getMemberIds());
+        purgeRoom(room);
+        log.info("Room {} deleted by user {}", roomId, userId);
+    }
+
+    @Transactional
+    public void deleteChatForMe(String chatId, Long userId) {
+        ChatRoom room = loadRoom(chatId);
+        if (!room.isMember(userId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+
+        ChatType type = room.getType() == null ? ChatType.PRIVATE : room.getType();
+        if (type == ChatType.PERSONAL_SPACE) {
+            throw new IllegalArgumentException("Personal spaces cannot be hidden this way");
+        }
+        if (type == ChatType.GROUP || type == ChatType.CHANNEL) {
+            leaveChat(chatId, userId);
+            return;
+        }
+
+        if (room.getHiddenForMemberIds() == null) {
+            room.setHiddenForMemberIds(new HashSet<>());
+        }
+        room.getHiddenForMemberIds().add(userId);
+        chatRoomRepository.save(room);
+        webSocketService.notifyChatDeleted(chatId, Set.of(userId));
+    }
+
+    @Transactional
+    public void deleteChatForEveryone(String chatId, Long userId) {
+        ChatRoom room = loadRoom(chatId);
+        if (!room.isMember(userId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+
+        ChatType type = room.getType() == null ? ChatType.PRIVATE : room.getType();
+        if (type == ChatType.PERSONAL_SPACE || type == ChatType.GROUP || type == ChatType.CHANNEL) {
+            deleteRoom(chatId, userId);
+            return;
+        }
+
+        purgeRoom(room);
+    }
+
+    @Transactional
+    public void revealChatForMember(String chatId, Long userId) {
+        ChatRoom room = loadRoom(chatId);
+        if (!room.isMember(userId) || !room.isHiddenFor(userId)) {
+            return;
+        }
+        room.getHiddenForMemberIds().removeIf(id -> id != null && id.longValue() == userId.longValue());
+        chatRoomRepository.save(room);
+        roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+    }
+
+    @Transactional
+    public void revealChatOnNewMessage(String chatId) {
+        chatRoomRepository.findById(chatId).ifPresent(room -> {
+            if (room.getHiddenForMemberIds() == null || room.getHiddenForMemberIds().isEmpty()) {
+                return;
+            }
+            room.getHiddenForMemberIds().clear();
+            chatRoomRepository.save(room);
+            roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+        });
+    }
+
+    public void purgeRoom(ChatRoom room) {
+        if (room == null || room.getId() == null || room.getId().isBlank()) {
+            return;
+        }
+        String roomId = room.getId();
+        Set<Long> members = room.getMemberIds() == null ? Set.of() : new HashSet<>(room.getMemberIds());
         attachmentRepository.deleteByChatId(roomId);
         chatMessageRepository.deleteByChatId(roomId);
         roomMemberInviteRepository.deleteByRoomId(roomId);
-        // delete chat
         chatRoomRepository.delete(room);
-        // evict cached chat participants
         redisService.evictChatParticipants(roomId);
-        // notify users that chat was deleted
-        webSocketService.notifyChatDeleted(roomId, members);
-        log.info("Room {} deleted by user {}", roomId, userId);
+        if (!members.isEmpty()) {
+            webSocketService.notifyChatDeleted(roomId, members);
+        }
     }
 
     @Transactional
@@ -196,6 +268,10 @@ public class ChatRoomManagementService {
             Long otherId = userBanGuardService.getOtherPrivateChatMemberId(room, userId);
             UserInfoDTO otherUser = otherId != null ? chatUserInfoService.getUserInfo(otherId) : null;
             userBanGuardService.assertPrivateChatAccessible(room, userId, otherUser);
+        }
+        if (room.isHiddenFor(userId)) {
+            revealChatForMember(roomId, userId);
+            room = loadRoom(roomId);
         }
         return roomEnrichmentService.enrichChatWithUserData(
                 room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));

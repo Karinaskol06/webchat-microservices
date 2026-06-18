@@ -26,8 +26,12 @@ import PersonAddAlt1OutlinedIcon from '@mui/icons-material/PersonAddAlt1Outlined
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import TranslateOutlinedIcon from '@mui/icons-material/TranslateOutlined';
 import AccountCredentialsPanel from '../settings/AccountCredentialsPanel';
+import DeleteAccountPanel from '../settings/DeleteAccountPanel';
 import ThemePickerDialog from '../settings/ThemePickerDialog';
+import LanguageSettingsPanel from '../settings/LanguageSettingsPanel';
 import chatService from '../../services/chatService';
 import contactsService from '../../services/contactsService';
 import userBanService from '../../services/userBanService';
@@ -37,6 +41,9 @@ import RoomBanDialog from './RoomBanDialog';
 import BannedUsersPanel from './BannedUsersPanel';
 import { getApiErrorMessage } from '../../services/api';
 import UserAvatar from '../user/UserAvatar';
+import useTranslation from '../../hooks/useTranslation';
+import { t as translateStatic } from '../../i18n';
+import { chatHideScrollbarSx } from '../../theme/chatDesignTokens';
 
 const VIEW_MENU = 'menu';
 const VIEW_INVITE = 'invite';
@@ -44,9 +51,11 @@ const VIEW_CONTACTS = 'contacts';
 const VIEW_ACCOUNT = 'account';
 const VIEW_THEMES = 'themes';
 const VIEW_BANNED = 'banned';
+const VIEW_LANGUAGE = 'language';
+const VIEW_DELETE = 'delete';
 
 const displayName = (user) => {
-  if (!user) return 'Unknown user';
+  if (!user) return translateStatic('common.unknownUser');
   const full = `${user.firstName || ''} ${user.lastName || ''}`.trim();
   return full || user.username || `User ${user.id}`;
 };
@@ -68,6 +77,7 @@ const ChatSettingsDialog = ({
   variant = 'settings',
 }) => {
   const joinOnly = variant === 'join';
+  const { t } = useTranslation();
   const [view, setView] = useState(joinOnly ? VIEW_INVITE : VIEW_MENU);
   const [inviteInput, setInviteInput] = useState('');
   const [inviteBusy, setInviteBusy] = useState(false);
@@ -90,35 +100,51 @@ const ChatSettingsDialog = ({
       {
         key: VIEW_CONTACTS,
         icon: ContactsOutlinedIcon,
-        primary: 'Contacts',
-        secondary: 'Open chats with saved contacts and review pending requests',
+        primary: t('settings.menu.contacts.title'),
+        secondary: t('settings.menu.contacts.subtitle'),
       },
       {
         key: VIEW_INVITE,
         icon: LinkIcon,
-        primary: 'Join via link',
-        secondary: 'Paste a group or channel invite',
+        primary: t('settings.menu.join.title'),
+        secondary: t('settings.menu.join.subtitle'),
       },
       {
         key: VIEW_ACCOUNT,
         icon: ManageAccountsOutlinedIcon,
-        primary: 'Change username or password',
-        secondary: 'Update sign-in username, email, or password',
+        primary: t('settings.menu.account.title'),
+        secondary: t('settings.menu.account.subtitle'),
       },
       {
         key: VIEW_THEMES,
         icon: PaletteOutlinedIcon,
-        primary: 'Themes',
-        secondary: 'Browse system themes and pick your favorite look',
+        primary: t('settings.menu.themes.title'),
+        secondary: t('settings.menu.themes.subtitle'),
+      },
+      {
+        key: VIEW_LANGUAGE,
+        icon: TranslateOutlinedIcon,
+        primary: t('settings.menu.language.title'),
+        secondary: t('settings.menu.language.subtitle'),
       },
       {
         key: VIEW_BANNED,
         icon: BlockOutlinedIcon,
-        primary: 'Banned users',
-        secondary: 'See users you banned and restore private chats',
+        primary: t('settings.menu.banned.title'),
+        secondary: t('settings.menu.banned.subtitle'),
       },
     ],
-    [],
+    [t],
+  );
+
+  const dangerMenuItem = useMemo(
+    () => ({
+      key: VIEW_DELETE,
+      icon: DeleteOutlineIcon,
+      primary: t('settings.menu.delete.title'),
+      secondary: t('settings.menu.delete.subtitle'),
+    }),
+    [t],
   );
 
   useEffect(() => {
@@ -163,7 +189,7 @@ const ChatSettingsDialog = ({
         setPendingRequests(Array.isArray(incomingRequests) ? incomingRequests : []);
       } catch (error) {
         if (cancelled) return;
-        setContactsError(getApiErrorMessage(error, 'Failed to load contacts.'));
+        setContactsError(getApiErrorMessage(error, t('settings.error.loadContacts')));
       } finally {
         if (!cancelled) setContactsBusy(false);
       }
@@ -193,7 +219,7 @@ const ChatSettingsDialog = ({
       } catch (error) {
         if (!cancelled) {
           setBannedListError(true);
-          setBannedError(getApiErrorMessage(error, 'Failed to load banned users.'));
+          setBannedError(getApiErrorMessage(error, t('settings.error.loadBanned')));
         }
       } finally {
         if (!cancelled) setBannedLoading(false);
@@ -214,7 +240,7 @@ const ChatSettingsDialog = ({
       setBannedUsers((prev) => prev.filter((item) => Number(item.id) !== Number(bannedUser.id)));
       onUserBanStateChange?.({ userId: bannedUser.id, banned: false });
     } catch (error) {
-      setBannedError(getApiErrorMessage(error, 'Could not unban this user.'));
+      setBannedError(getApiErrorMessage(error, t('settings.error.unban')));
     } finally {
       setUnbanLoadingId(null);
     }
@@ -227,7 +253,7 @@ const ChatSettingsDialog = ({
   const handleJoinInvite = async () => {
     const token = parseInviteToken(inviteInput);
     if (!token) {
-      setInviteError('Paste an invite link or token.');
+      setInviteError(t('settings.join.error.paste'));
       return;
     }
     setInviteBusy(true);
@@ -235,7 +261,7 @@ const ChatSettingsDialog = ({
     try {
       const dto = await chatService.joinByInvite(token);
       if (!dto?.id) {
-        setInviteError('Join succeeded but room data was missing.');
+        setInviteError(t('settings.join.error.missingRoom'));
         return;
       }
       onJoinedRoom?.(dto);
@@ -275,7 +301,7 @@ const ChatSettingsDialog = ({
         });
       }
     } catch (error) {
-      setContactsError(getApiErrorMessage(error, 'Could not accept the contact request.'));
+      setContactsError(getApiErrorMessage(error, t('settings.error.acceptRequest')));
     } finally {
       setRequestBusyId(null);
     }
@@ -289,7 +315,7 @@ const ChatSettingsDialog = ({
       await contactsService.declineRequest(request.id, currentUserId);
       setPendingRequests((prev) => prev.filter((item) => item.id !== request.id));
     } catch (error) {
-      setContactsError(getApiErrorMessage(error, 'Could not decline the contact request.'));
+      setContactsError(getApiErrorMessage(error, t('settings.error.declineRequest')));
     } finally {
       setRequestBusyId(null);
     }
@@ -301,12 +327,12 @@ const ChatSettingsDialog = ({
       open={open}
       onClose={handleClose}
       fullWidth
-      maxWidth={view === VIEW_CONTACTS || view === VIEW_ACCOUNT || view === VIEW_BANNED ? 'sm' : 'xs'}
+      maxWidth={view === VIEW_CONTACTS || view === VIEW_ACCOUNT || view === VIEW_BANNED || view === VIEW_LANGUAGE || view === VIEW_DELETE ? 'sm' : 'xs'}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: 1 }}>
         {view !== VIEW_MENU ? (
           <IconButton
-            aria-label={joinOnly ? 'Close' : 'Back to settings'}
+            aria-label={joinOnly ? t('common.close') : t('settings.back')}
             onClick={() => (joinOnly && view === VIEW_INVITE ? handleClose() : setView(VIEW_MENU))}
             edge="start"
             size="small"
@@ -316,21 +342,32 @@ const ChatSettingsDialog = ({
         ) : null}
         <Typography component="span" variant="h6" sx={{ flex: 1 }}>
           {view === VIEW_INVITE
-            ? 'Join via link'
+            ? t('settings.menu.join.title')
             : view === VIEW_CONTACTS
-              ? 'Contacts'
+              ? t('settings.menu.contacts.title')
               : view === VIEW_ACCOUNT
-                ? 'Change username or password'
+                ? t('settings.menu.account.title')
                 : view === VIEW_BANNED
-                  ? 'Banned users'
-                  : 'Settings'}
+                  ? t('settings.menu.banned.title')
+                  : view === VIEW_LANGUAGE
+                    ? t('settings.menu.language.title')
+                    : view === VIEW_DELETE
+                      ? t('settings.menu.delete.title')
+                      : t('settings.title')}
         </Typography>
-        <IconButton aria-label="Close settings" onClick={handleClose} size="small">
+        <IconButton aria-label={t('settings.close')} onClick={handleClose} size="small">
           <CloseIcon />
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers sx={{ pt: view === VIEW_MENU ? 0 : 2 }}>
+      <DialogContent
+        dividers
+        sx={{
+          pt: view === VIEW_MENU ? 0 : 2,
+          ...chatHideScrollbarSx,
+          overflowX: 'hidden',
+        }}
+      >
         {view === VIEW_MENU ? (
           <List disablePadding>
             {menuItems.map(({ key, icon: Icon, primary, secondary }) => (
@@ -344,14 +381,28 @@ const ChatSettingsDialog = ({
                 <ListItemText primary={primary} secondary={secondary} />
               </ListItemButton>
             ))}
+            <Divider sx={{ my: 1 }} />
+            <ListItemButton onClick={() => setView(VIEW_DELETE)}>
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <dangerMenuItem.icon color="error" />
+              </ListItemIcon>
+              <ListItemText
+                primary={dangerMenuItem.primary}
+                secondary={dangerMenuItem.secondary}
+                primaryTypographyProps={{ color: 'error.main', fontWeight: 600 }}
+              />
+            </ListItemButton>
           </List>
         ) : view === VIEW_ACCOUNT ? (
           <AccountCredentialsPanel currentUser={currentUser} onClose={handleClose} />
+        ) : view === VIEW_DELETE ? (
+          <DeleteAccountPanel currentUser={currentUser} onClose={handleClose} />
+        ) : view === VIEW_LANGUAGE ? (
+          <LanguageSettingsPanel />
         ) : view === VIEW_BANNED ? (
           <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary">
-              Users you banned cannot message you privately. Unban someone to restore your private chat.
-              You still see their messages in groups and channels you share.
+              {t('settings.banned.intro')}
             </Typography>
             {bannedError ? (
               <Alert severity="error" onClose={() => setBannedError('')}>
@@ -362,7 +413,7 @@ const ChatSettingsDialog = ({
               <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                 <BlockOutlinedIcon color="primary" fontSize="small" />
                 <Typography variant="subtitle2" fontWeight={700} sx={{ color: 'text.primary' }}>
-                  Banned users
+                  {t('settings.banned.sectionTitle')}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
                   {bannedUsers.length}
@@ -381,13 +432,13 @@ const ChatSettingsDialog = ({
         ) : view === VIEW_INVITE ? (
           <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary">
-              Paste an invite link or token from a group or channel admin.
+              {t('settings.join.intro')}
             </Typography>
             <TextField
               size="small"
               fullWidth
-              label="Invite link or token"
-              placeholder="Paste link or token"
+              label={t('settings.join.label')}
+              placeholder={t('settings.join.placeholder')}
               value={inviteInput}
               disabled={inviteBusy}
               onChange={(e) => {
@@ -411,21 +462,21 @@ const ChatSettingsDialog = ({
                 onClick={() => (joinOnly ? handleClose() : setView(VIEW_MENU))}
                 disabled={inviteBusy}
               >
-                {joinOnly ? 'Cancel' : 'Back'}
+                {joinOnly ? t('common.cancel') : t('common.back')}
               </Button>
               <Button
                 variant="contained"
                 disabled={inviteBusy || !String(inviteInput).trim()}
                 onClick={() => void handleJoinInvite()}
               >
-                {inviteBusy ? 'Joining…' : 'Join'}
+                {inviteBusy ? t('common.joining') : t('common.join')}
               </Button>
             </Box>
           </Stack>
         ) : (
           <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary">
-              Open chats with people already in your contacts or manage incoming contact requests.
+              {t('settings.contacts.intro')}
             </Typography>
             {contactsError ? (
               <Alert severity="error" onClose={() => setContactsError('')}>
@@ -442,7 +493,7 @@ const ChatSettingsDialog = ({
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                     <ContactsOutlinedIcon color="primary" fontSize="small" />
                     <Typography variant="subtitle2" fontWeight={700}>
-                      Contacts
+                      {t('settings.contacts.section')}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {contacts.length}
@@ -450,7 +501,7 @@ const ChatSettingsDialog = ({
                   </Stack>
                   {contacts.length === 0 ? (
                     <Typography variant="body2" color="text.secondary">
-                      No contacts yet.
+                      {t('settings.contacts.empty')}
                     </Typography>
                   ) : (
                     <List disablePadding sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
@@ -478,7 +529,7 @@ const ChatSettingsDialog = ({
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
                     <PersonAddAlt1OutlinedIcon color="primary" fontSize="small" />
                     <Typography variant="subtitle2" fontWeight={700}>
-                      Pending requests
+                      {t('settings.contacts.pending')}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {pendingRequests.length}
@@ -486,7 +537,7 @@ const ChatSettingsDialog = ({
                   </Stack>
                   {pendingRequests.length === 0 ? (
                     <Typography variant="body2" color="text.secondary">
-                      No pending contact requests.
+                      {t('settings.contacts.pending.empty')}
                     </Typography>
                   ) : (
                     <Stack spacing={1.25}>
@@ -511,7 +562,7 @@ const ChatSettingsDialog = ({
                                   {displayName(requestUser)}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary" noWrap display="block">
-                                  {requestUser?.username ? `@${requestUser.username}` : 'Incoming contact request'}
+                                  {requestUser?.username ? `@${requestUser.username}` : t('settings.contacts.request.incoming')}
                                 </Typography>
                               </Box>
                             </Stack>
@@ -521,7 +572,7 @@ const ChatSettingsDialog = ({
                                 onClick={() => void handleDeclineRequest(request)}
                                 disabled={busy}
                               >
-                                Decline
+                                {t('common.decline')}
                               </Button>
                               <Button
                                 size="small"
@@ -529,7 +580,7 @@ const ChatSettingsDialog = ({
                                 onClick={() => void handleAcceptRequest(request)}
                                 disabled={busy}
                               >
-                                {busy ? 'Saving…' : 'Accept'}
+                                {busy ? t('common.saving') : t('common.accept')}
                               </Button>
                             </Box>
                           </Box>

@@ -7,8 +7,10 @@ import {
   DialogTitle,
   TextField,
 } from '@mui/material';
+import useTranslation from '../../hooks/useTranslation';
 
 const CreateFolderDialog = ({ open, onClose, onCreate }) => {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -31,25 +33,25 @@ const CreateFolderDialog = ({ open, onClose, onCreate }) => {
       fullWidth
     >
       <form onSubmit={handleSubmit}>
-        <DialogTitle>New chat folder</DialogTitle>
+        <DialogTitle>{t('folder.create.title')}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             fullWidth
             margin="dense"
-            label="Folder name"
-            placeholder="e.g. Work, Family"
+            label={t('folder.create.name.label')}
+            placeholder={t('folder.create.name.placeholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            inputProps={{ maxLength: 48, 'aria-label': 'Folder name' }}
+            inputProps={{ maxLength: 48, 'aria-label': t('folder.create.name.label') }}
           />
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={onClose} color="inherit">
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" variant="contained" disabled={!name.trim() || submitting}>
-            Create
+            {t('common.create')}
           </Button>
         </DialogActions>
       </form>

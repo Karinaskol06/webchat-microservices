@@ -37,4 +37,8 @@ public class UserDTO {
 
     private String countryCode;
 
+    private boolean active = true;
+
+    private boolean deleted;
+
 }

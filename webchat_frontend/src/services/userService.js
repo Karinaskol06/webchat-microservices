@@ -58,6 +58,13 @@ const userService = {
     return response.data;
   },
 
+  deleteAccount: async ({ password, confirmUsername }) => {
+    const response = await api.delete("/api/users/account", {
+      data: { password, confirmUsername },
+    });
+    return response.data;
+  },
+
   uploadAvatar: async (file) => {
     const formData = new FormData();
     formData.append("file", file);

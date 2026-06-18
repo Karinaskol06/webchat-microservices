@@ -14,10 +14,12 @@ import userService from '../../services/userService';
 import { getApiErrorMessage } from '../../services/api';
 import useAuthStore from '../../store/useAuthStore';
 import useDebouncedValue from '../../hooks/useDebouncedValue';
+import useTranslation from '../../hooks/useTranslation';
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 const AccountCredentialsPanel = ({ currentUser, onClose }) => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
   const setUser = useAuthStore((s) => s.setUser);
@@ -50,12 +52,12 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
   const usernameLocalError = useMemo(() => {
     const value = username.trim();
     if (!usernameDirty) return '';
-    if (value.length < 3 || value.length > 50) return 'Username must be between 3 and 50 characters';
+    if (value.length < 3 || value.length > 50) return t('account.username.error.length');
     if (!USERNAME_PATTERN.test(value)) {
-      return 'Only letters, numbers, dots, underscores, and hyphens';
+      return t('account.username.error.chars');
     }
     return '';
-  }, [username, usernameDirty]);
+  }, [username, usernameDirty, t]);
 
   useEffect(() => {
     if (!usernameDirty || usernameLocalError) {
@@ -123,7 +125,7 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
     if (usernameDirty) payload.username = username.trim();
     if (emailDirty) payload.email = email.trim();
     if (!payload.username && !payload.email) {
-      setError('Change your username or email before saving.');
+      setError(t('account.error.changeBeforeSave'));
       return;
     }
 
@@ -131,7 +133,7 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
     try {
       const result = await userService.updateAccount(payload);
       if (result?.usernameChanged) {
-        setSuccess(result.message || 'Username updated. Please sign in again.');
+        setSuccess(result.message || t('account.success.usernameChanged'));
         window.setTimeout(() => {
           logout();
           onClose?.();
@@ -147,11 +149,11 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
       if (result?.user) {
         setUser(result.user);
       }
-      setSuccess(result?.message || 'Account details updated.');
+      setSuccess(result?.message || t('account.success.updated'));
       setUsername(result?.user?.username || username.trim());
       setEmail(result?.user?.email || email.trim());
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Could not update account.'));
+      setError(getApiErrorMessage(err, t('account.error.update')));
     } finally {
       setAccountBusy(false);
     }
@@ -161,11 +163,11 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
     setError('');
     setSuccess('');
     if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters long.');
+      setError(t('account.error.passwordTooShort'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match.');
+      setError(t('account.error.passwordMismatch'));
       return;
     }
 
@@ -176,7 +178,7 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
         newPassword,
         repeatPassword: confirmPassword,
       });
-      setSuccess(result?.message || 'Password updated. Please sign in again.');
+      setSuccess(result?.message || t('account.success.passwordChanged'));
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -188,25 +190,24 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
         });
       }, 1200);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Could not change password.'));
+      setError(getApiErrorMessage(err, t('account.error.changePassword')));
     } finally {
       setPasswordBusy(false);
     }
   };
 
   const usernameHelper = usernameLocalError
-    || (usernameChecking ? 'Checking availability…' : usernameStatus?.message)
+    || (usernameChecking ? t('account.username.checking') : usernameStatus?.message)
     || (usernameDirty ? '' : '');
 
   const emailHelper = emailChecking
-    ? 'Checking availability…'
+    ? t('account.username.checking')
     : emailStatus?.message || '';
 
   return (
     <Stack spacing={2.5}>
       <Typography variant="body2" color="text.secondary">
-        Update your sign-in details. After a username or password change you will need to sign in
-        again with the new credentials.
+        {t('account.intro')}
       </Typography>
 
       {error ? (
@@ -220,11 +221,11 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
 
       <Box>
         <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-          Username &amp; email
+          {t('account.usernameEmail.title')}
         </Typography>
         <Stack spacing={2}>
           <TextField
-            label="Username"
+            label={t('account.username.label')}
             size="small"
             fullWidth
             value={username}
@@ -240,7 +241,7 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
             autoComplete="username"
           />
           <TextField
-            label="Email"
+            label={t('account.email.label')}
             type="email"
             size="small"
             fullWidth
@@ -259,7 +260,7 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
               disabled={accountBusy || !canSaveAccount}
               onClick={() => void handleSaveAccount()}
             >
-              {accountBusy ? 'Saving…' : 'Save username & email'}
+              {accountBusy ? t('common.saving') : t('account.save.usernameEmail')}
             </Button>
           </Box>
         </Stack>
@@ -269,11 +270,11 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
 
       <Box>
         <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.5 }}>
-          Password
+          {t('account.password.title')}
         </Typography>
         <Stack spacing={2}>
           <TextField
-            label="Current password"
+            label={t('account.password.current')}
             type="password"
             size="small"
             fullWidth
@@ -285,7 +286,7 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
             autoComplete="current-password"
           />
           <TextField
-            label="New password"
+            label={t('account.password.new')}
             type="password"
             size="small"
             fullWidth
@@ -294,11 +295,11 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
               setNewPassword(e.target.value);
               setError('');
             }}
-            helperText="At least 6 characters"
+            helperText={t('account.password.hint')}
             autoComplete="new-password"
           />
           <TextField
-            label="Confirm new password"
+            label={t('account.password.confirm')}
             type="password"
             size="small"
             fullWidth
@@ -310,7 +311,7 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
             error={confirmPassword.length > 0 && confirmPassword !== newPassword}
             helperText={
               confirmPassword.length > 0 && confirmPassword !== newPassword
-                ? 'Passwords do not match'
+                ? t('account.password.mismatch')
                 : ''
             }
             autoComplete="new-password"
@@ -321,7 +322,7 @@ const AccountCredentialsPanel = ({ currentUser, onClose }) => {
               disabled={passwordBusy || !canSavePassword}
               onClick={() => void handleSavePassword()}
             >
-              {passwordBusy ? 'Saving…' : 'Change password'}
+              {passwordBusy ? t('common.saving') : t('account.password.change')}
             </Button>
           </Box>
         </Stack>

@@ -24,6 +24,7 @@ import userService from "../../services/userService";
 import chatService from "../../services/chatService";
 import RoomBanDialog from "./RoomBanDialog";
 import { parseRoomBanError } from "../../utils/roomBanError";
+import useTranslation from "../../hooks/useTranslation";
 
 const TAB_USERS = 0;
 const TAB_ROOMS = 1;
@@ -51,6 +52,7 @@ const UserSearchDialog = ({
   onOpenExistingRoom,
   currentUserId,
 }) => {
+  const { t } = useTranslation();
   const [tab, setTab] = useState(TAB_USERS);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -89,7 +91,7 @@ const UserSearchDialog = ({
         console.error("Failed to search users:", loadError);
         if (!cancelled) {
           setResults([]);
-          setError(loadError?.error || loadError?.message || "Failed to search users");
+          setError(loadError?.error || loadError?.message || t("search.dialog.error.searchUsers"));
         }
       } finally {
         if (!cancelled) {
@@ -135,7 +137,7 @@ const UserSearchDialog = ({
           setError(
             loadError?.message ||
               loadError?.error ||
-              "Failed to search groups and channels",
+              t("search.dialog.error.searchRooms"),
           );
         }
       } finally {
@@ -199,7 +201,7 @@ const UserSearchDialog = ({
       const msg =
         e?.response?.data?.message ||
         e?.message ||
-        (typeof e === "string" ? e : "Could not join this room");
+        (typeof e === "string" ? e : t("search.dialog.error.join"));
       setJoinError(msg);
     } finally {
       setJoinLoading(false);
@@ -218,7 +220,7 @@ const UserSearchDialog = ({
       const msg =
         e?.response?.data?.message ||
         e?.message ||
-        (typeof e === "string" ? e : "Could not open this room");
+        (typeof e === "string" ? e : t("search.dialog.error.open"));
       setJoinError(msg);
     } finally {
       setJoinLoading(false);
@@ -234,15 +236,15 @@ const UserSearchDialog = ({
     <>
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
       <DialogTitle sx={{ display: "flex", alignItems: "center", pr: 1 }}>
-        Find users & rooms
-        <IconButton onClick={handleClose} sx={{ ml: "auto" }} aria-label="Close dialog">
+        {t("search.dialog.title")}
+        <IconButton onClick={handleClose} sx={{ ml: "auto" }} aria-label={t("search.dialog.aria.close")}>
           <CloseIcon />
         </IconButton>
       </DialogTitle>
       <DialogContent>
-        <Tabs value={tab} onChange={handleTabChange} sx={{ mb: 2 }} aria-label="Search category">
-          <Tab label="Users" id="search-tab-users" />
-          <Tab label="Groups & channels" id="search-tab-rooms" />
+        <Tabs value={tab} onChange={handleTabChange} sx={{ mb: 2 }} aria-label={t("search.dialog.aria.category")}>
+          <Tab label={t("search.dialog.tab.users")} id="search-tab-users" />
+          <Tab label={t("search.dialog.tab.rooms")} id="search-tab-rooms" />
         </Tabs>
 
         <TextField
@@ -251,7 +253,7 @@ const UserSearchDialog = ({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={
-            tab === TAB_USERS ? "Search by username" : "Search by group or channel name"
+            tab === TAB_USERS ? t("search.dialog.users.placeholder") : t("search.dialog.rooms.placeholder")
           }
           InputProps={{
             startAdornment: (
@@ -277,26 +279,25 @@ const UserSearchDialog = ({
 
         {!loading && tab === TAB_USERS && !error && canSearchUsers && results.length === 0 && (
           <Typography variant="body2" color="text.secondary">
-            No users found.
+            {t("search.dialog.users.empty")}
           </Typography>
         )}
 
         {!loading && tab === TAB_USERS && !canSearchUsers && (
           <Typography variant="body2" color="text.secondary">
-            Type at least 2 characters.
+            {t("search.dialog.users.minChars")}
           </Typography>
         )}
 
         {!loading && tab === TAB_ROOMS && !error && !canSearchRooms && (
           <Typography variant="body2" color="text.secondary">
-            Enter at least one character to search your groups and channels and discover public rooms
-            you can join.
+            {t("search.dialog.rooms.hint")}
           </Typography>
         )}
 
         {!loading && tab === TAB_ROOMS && canSearchRooms && !error && results.length === 0 && (
           <Typography variant="body2" color="text.secondary">
-            No groups or channels match that name.
+            {t("search.dialog.rooms.empty")}
           </Typography>
         )}
 
@@ -318,7 +319,13 @@ const UserSearchDialog = ({
 
         {!loading && results.length > 0 && tab === TAB_ROOMS && (
           <List>
-            {results.map((room) => (
+            {results.map((room) => {
+              const roomTypeLabel =
+                String(room.type || "").toUpperCase() === "CHANNEL"
+                  ? t("roomType.channel")
+                  : t("roomType.groupShort");
+
+              return (
               <ListItemButton
                 key={room.id}
                 selected={selectedRoom?.id === room.id}
@@ -334,26 +341,27 @@ const UserSearchDialog = ({
                   primary={
                     <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
                       <Typography component="span" variant="body2" fontWeight={600}>
-                        {room.groupName || "Unnamed"}
+                        {room.groupName || t("search.dialog.room.unnamed")}
                       </Typography>
                       {room.type ? (
-                        <Chip size="small" label={String(room.type).toLowerCase()} />
+                        <Chip size="small" label={roomTypeLabel} />
                       ) : null}
                       {room.alreadyMember ? (
-                        <Chip size="small" label="Yours" color="success" variant="outlined" />
+                        <Chip size="small" label={t("search.dialog.room.yours")} color="success" variant="outlined" />
                       ) : (
-                        <Chip size="small" label="Public" variant="outlined" />
+                        <Chip size="small" label={t("common.public")} variant="outlined" />
                       )}
                     </Box>
                   }
                   secondary={
                     typeof room.memberCount === "number"
-                      ? `${room.memberCount} members`
+                      ? t("common.members", { count: room.memberCount })
                       : null
                   }
                 />
               </ListItemButton>
-            ))}
+            );
+            })}
           </List>
         )}
 
@@ -368,15 +376,25 @@ const UserSearchDialog = ({
             }}
           >
             <Typography variant="subtitle2" gutterBottom>
-              {selectedRoom.groupName || "Room"}
+              {selectedRoom.groupName || t("search.dialog.room.fallback")}
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block">
-              {selectedRoom.type ? `${String(selectedRoom.type)} · ` : ""}
+              {selectedRoom.type
+                ? `${
+                    String(selectedRoom.type).toUpperCase() === "CHANNEL"
+                      ? t("roomType.channel")
+                      : t("roomType.groupShort")
+                  } · `
+                : ""}
               {typeof selectedRoom.memberCount === "number"
-                ? `${selectedRoom.memberCount} members`
+                ? t("common.members", { count: selectedRoom.memberCount })
                 : null}
               {selectedRoom.visibility
-                ? ` · ${String(selectedRoom.visibility).toLowerCase()}`
+                ? ` · ${
+                    String(selectedRoom.visibility).toUpperCase() === "PUBLIC"
+                      ? t("common.public")
+                      : t("common.private")
+                  }`
                 : ""}
             </Typography>
             {joinError ? (
@@ -398,7 +416,7 @@ const UserSearchDialog = ({
                   onClick={handleOpenExistingRoom}
                   sx={{ alignSelf: "center" }}
                 >
-                  {joinLoading ? "Opening…" : "Open"}
+                  {joinLoading ? t("search.dialog.opening") : t("search.dialog.open")}
                 </Button>
               ) : isPublicJoinable ? (
                 <Button
@@ -407,11 +425,11 @@ const UserSearchDialog = ({
                   onClick={handleJoinPublicRoom}
                   sx={{ alignSelf: "center" }}
                 >
-                  {joinLoading ? "Joining…" : "Join"}
+                  {joinLoading ? t("common.joining") : t("common.join")}
                 </Button>
               ) : (
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: "center" }}>
-                  This room is private. Ask an admin for an invite link.
+                  {t("search.dialog.private.hint")}
                 </Typography>
               )}
             </Box>

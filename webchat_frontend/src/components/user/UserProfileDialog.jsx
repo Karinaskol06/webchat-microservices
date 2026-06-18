@@ -15,6 +15,7 @@ import {
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { enUS, uk } from "date-fns/locale";
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import userService from "../../services/userService";
@@ -34,6 +35,7 @@ import {
 } from "../../utils/profileImageConstraints";
 import { getProfileImageUploadErrorMessage } from "../../utils/profileUploadErrors";
 import { chatHideScrollbarSx, chatColors } from "../../theme/chatDesignTokens";
+import useTranslation from "../../hooks/useTranslation";
 
 const detailDialogPaperSx = {
   bgcolor: chatColors.detailPageBg,
@@ -72,6 +74,7 @@ const UserProfileDialog = ({
   /** Ban/unban controls are only for private-chat partner profiles (Settings has its own list). */
   allowBanActions = false,
 }) => {
+  const { t, locale } = useTranslation();
   const setUser = useAuthStore((state) => state.setUser);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -137,7 +140,7 @@ const UserProfileDialog = ({
       })
       .catch((err) => {
         if (cancelled) return;
-        setFetchError(getApiErrorMessage(err, "Failed to load profile"));
+        setFetchError(getApiErrorMessage(err, t("profile.error.load")));
       })
       .finally(() => {
         if (!cancelled) {
@@ -218,7 +221,7 @@ const UserProfileDialog = ({
     try {
       const phone = (profile.phoneNumber || "").trim();
       if (phone && !isValidInternationalPhone(phone)) {
-        setError("Wrong phone number format");
+        setError(t("phone.error.invalid"));
         return;
       }
       const payload = {
@@ -234,7 +237,7 @@ const UserProfileDialog = ({
       );
       if (Object.keys(dirtyPayload).length === 0) {
         setIsEditing(false);
-        setSnackbar("No changes to save");
+        setSnackbar(t("profile.noChanges"));
         return;
       }
       const updated = await userService.updateProfile(dirtyPayload);
@@ -253,9 +256,9 @@ const UserProfileDialog = ({
         countryCode: (updated.countryCode || "").toUpperCase(),
       });
       setIsEditing(false);
-      setSnackbar("Profile updated");
+      setSnackbar(t("profile.success.updated"));
     } catch (saveError) {
-      setError(getApiErrorMessage(saveError, "Failed to update profile"));
+      setError(getApiErrorMessage(saveError, t("profile.error.update")));
     } finally {
       setIsSaving(false);
     }
@@ -277,7 +280,7 @@ const UserProfileDialog = ({
       } else {
         updated = await userService.uploadBackground(file);
       }
-      applyUpdatedProfile(updated, "Image updated", kind);
+      applyUpdatedProfile(updated, t("profile.image.updated"), kind);
       if (kind === "avatar" && avatarInputRef.current) {
         avatarInputRef.current.value = "";
       }
@@ -288,7 +291,7 @@ const UserProfileDialog = ({
       setError(
         getProfileImageUploadErrorMessage(
           uploadError,
-          kind === "background" ? "Failed to upload cover photo." : "Failed to upload avatar.",
+          kind === "background" ? t("profile.error.uploadCover") : t("profile.error.uploadAvatar"),
         ),
       );
     } finally {
@@ -306,9 +309,9 @@ const UserProfileDialog = ({
       } else {
         updated = await userService.removeBackground();
       }
-      applyUpdatedProfile(updated, "Image removed");
+      applyUpdatedProfile(updated, t("profile.image.removed"));
     } catch (removeError) {
-      setError(getApiErrorMessage(removeError, "Failed to remove image"));
+      setError(getApiErrorMessage(removeError, t("profile.error.removeImage")));
     } finally {
       setIsSaving(false);
     }
@@ -322,10 +325,10 @@ const UserProfileDialog = ({
       await userBanService.banUser(user.id, currentUserId);
       setIsBanned(true);
       setBanConfirmOpen(false);
-      setSnackbar("User banned. Your private chat is hidden until you unban them.");
+      setSnackbar(t("profile.ban.success"));
       onBanStateChange?.({ userId: user.id, banned: true });
     } catch (banError) {
-      setError(getApiErrorMessage(banError, "Could not ban this user."));
+      setError(getApiErrorMessage(banError, t("profile.error.ban")));
     } finally {
       setBanLoading(false);
     }
@@ -338,10 +341,10 @@ const UserProfileDialog = ({
     try {
       await userBanService.unbanUser(user.id, currentUserId);
       setIsBanned(false);
-      setSnackbar("User unbanned. Your private chat is available again.");
+      setSnackbar(t("profile.unban.success"));
       onBanStateChange?.({ userId: user.id, banned: false });
     } catch (unbanError) {
-      setError(getApiErrorMessage(unbanError, "Could not unban this user."));
+      setError(getApiErrorMessage(unbanError, t("profile.error.unban")));
     } finally {
       setBanLoading(false);
     }
@@ -359,14 +362,14 @@ const UserProfileDialog = ({
       maxWidth="sm"
       slotProps={{ paper: { sx: detailDialogPaperSx } }}
     >
-      <DialogTitle>{editable ? "My profile" : "User profile"}</DialogTitle>
+      <DialogTitle>{editable ? t("profile.title.mine") : t("profile.title.other")}</DialogTitle>
       <DialogContent
         sx={{
           overflowY: "auto",
           ...chatHideScrollbarSx,
         }}
       >
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
+        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={locale === "uk" ? uk : enUS}>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {fetchError ? (
               <Alert severity="warning" onClose={() => setFetchError("")}>
@@ -391,10 +394,10 @@ const UserProfileDialog = ({
                 {editable && isEditing && (
                   <Stack direction="row" spacing={1} sx={{ position: "absolute", top: 8, right: 8, zIndex: 2 }}>
                     <Button size="small" variant="contained" onClick={() => backgroundInputRef.current?.click()}>
-                      Cover photo
+                      {t("profile.coverPhoto")}
                     </Button>
                     <Button size="small" variant="outlined" color="inherit" onClick={() => handleRemoveImage("background")}>
-                      Remove
+                      {t("profile.remove")}
                     </Button>
                   </Stack>
                 )}
@@ -421,10 +424,10 @@ const UserProfileDialog = ({
             {editable && isEditing ? (
               <Stack direction="row" spacing={1} sx={{ px: 0.5 }}>
                 <Button size="small" variant="contained" onClick={() => avatarInputRef.current?.click()}>
-                  Change avatar
+                  {t("profile.changeAvatar")}
                 </Button>
                 <Button size="small" variant="outlined" onClick={() => handleRemoveImage("avatar")}>
-                  Remove avatar
+                  {t("profile.removeAvatar")}
                 </Button>
               </Stack>
             ) : null}
@@ -433,24 +436,24 @@ const UserProfileDialog = ({
               <Typography variant="h6">{displayName}</Typography>
               {fetchLoading ? <CircularProgress color="inherit" size={22} sx={{ ml: 0.5 }} /> : null}
             </Stack>
-            <TextField label="Username" value={`@${profile.username || ""}`} InputProps={{ readOnly: true }} />
+            <TextField label={t("account.username.label")} value={`@${profile.username || ""}`} InputProps={{ readOnly: true }} />
             {editable ? (
-              <TextField label="Email" value={profile.email || ""} InputProps={{ readOnly: true }} />
+              <TextField label={t("account.email.label")} value={profile.email || ""} InputProps={{ readOnly: true }} />
             ) : null}
             <TextField
-              label="First name"
+              label={t("profile.firstName")}
               value={profile.firstName || ""}
               onChange={(event) => handleFieldChange("firstName", event.target.value)}
               InputProps={{ readOnly: !editable || !isEditing }}
             />
             <TextField
-              label="Last name"
+              label={t("profile.lastName")}
               value={profile.lastName || ""}
               onChange={(event) => handleFieldChange("lastName", event.target.value)}
               InputProps={{ readOnly: !editable || !isEditing }}
             />
             <TextField
-              label="Description"
+              label={t("profile.description")}
               multiline
               minRows={3}
               value={profile.description || ""}
@@ -458,7 +461,7 @@ const UserProfileDialog = ({
               InputProps={{ readOnly: !editable || !isEditing }}
             />
             <BirthdayField
-              label="Birthday"
+              label={t("birthday.label")}
               value={profile.birthday}
               onChange={(value) => handleFieldChange("birthday", value)}
               disabled={!editable || !isEditing}
@@ -474,7 +477,7 @@ const UserProfileDialog = ({
                 disabled={isSaving}
               />
             ) : (
-              <TextField label="Phone number" value={profile.phoneNumber || ""} InputProps={{ readOnly: true }} />
+              <TextField label={t("phone.number.label")} value={profile.phoneNumber || ""} InputProps={{ readOnly: true }} />
             )}
             {error ? <Alert severity="error">{error}</Alert> : null}
           </Stack>
@@ -503,7 +506,7 @@ const UserProfileDialog = ({
               onClick={handleUnbanUser}
               disabled={banLoading}
             >
-              Unban user
+              {t("profile.unban.user")}
             </Button>
           ) : (
             <Button
@@ -512,22 +515,22 @@ const UserProfileDialog = ({
               onClick={() => setBanConfirmOpen(true)}
               disabled={banLoading}
             >
-              Ban user
+              {t("profile.ban.user")}
             </Button>
           )
         ) : null}
-        {editable && !isEditing ? <Button onClick={() => setIsEditing(true)}>Edit</Button> : null}
+        {editable && !isEditing ? <Button onClick={() => setIsEditing(true)}>{t("common.edit")}</Button> : null}
         {editable && isEditing ? (
           <>
             <Button onClick={() => setIsEditing(false)} disabled={isSaving}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={handleSave} disabled={isSaving} variant="contained">
-              Save changes
+              {t("profile.save")}
             </Button>
           </>
         ) : null}
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onClose}>{t("common.close")}</Button>
       </DialogActions>
       <Snackbar
         open={Boolean(snackbar)}
@@ -536,19 +539,18 @@ const UserProfileDialog = ({
         message={snackbar}
       />
       <Dialog open={banConfirmOpen} onClose={() => !banLoading && setBanConfirmOpen(false)}>
-        <DialogTitle>Ban this user?</DialogTitle>
+        <DialogTitle>{t("profile.ban.confirm.title")}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            Your private chat with {displayName} will be hidden and frozen until you unban them.
-            You will still see their messages in groups and channels you share.
+            {t("profile.ban.confirm.body", { name: displayName })}
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setBanConfirmOpen(false)} disabled={banLoading}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button color="error" variant="contained" onClick={handleBanUser} disabled={banLoading}>
-            Ban user
+            {t("profile.ban.confirm.submit")}
           </Button>
         </DialogActions>
       </Dialog>

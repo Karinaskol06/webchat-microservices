@@ -5,10 +5,13 @@ import chatService from "../services/chatService";
 import useChatStore from "../store/useChatStore";
 import RoomBanDialog from "../components/chat/RoomBanDialog";
 import { parseRoomBanError } from "../utils/roomBanError";
+import { joinInviteErrorMessage } from "../utils/inviteLink";
+import useTranslation from "../hooks/useTranslation";
 
 const JoinInvitePage = () => {
   const { token } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("");
   const [banDialog, setBanDialog] = useState(null);
@@ -19,7 +22,7 @@ const JoinInvitePage = () => {
 
     if (!raw) {
       setStatus("error");
-      setMessage("Invalid invite link.");
+      setMessage("");
       return undefined;
     }
 
@@ -39,12 +42,7 @@ const JoinInvitePage = () => {
           return;
         }
         setStatus("error");
-        const body = typeof e === "object" && e !== null ? e : {};
-        setMessage(
-          body.message ||
-            (typeof e === "string" ? e : null) ||
-            "Could not join with this invite."
-        );
+        setMessage(joinInviteErrorMessage(e));
       }
     })();
 
@@ -68,10 +66,10 @@ const JoinInvitePage = () => {
           }}
         >
           <Typography color="text.secondary" textAlign="center">
-            This invite cannot be used.
+            {t("invite.join.banned.message")}
           </Typography>
           <Button variant="contained" onClick={() => navigate("/chat", { replace: true })}>
-            Back to chats
+            {t("nav.backToChats")}
           </Button>
         </Box>
         <RoomBanDialog
@@ -99,10 +97,10 @@ const JoinInvitePage = () => {
         }}
       >
         <Typography color="error" textAlign="center">
-          {message}
+          {message || t("invite.join.error.invalidLink")}
         </Typography>
         <Button variant="contained" onClick={() => navigate("/chat", { replace: true })}>
-          Back to chats
+          {t("nav.backToChats")}
         </Button>
       </Box>
     );
@@ -121,7 +119,7 @@ const JoinInvitePage = () => {
       }}
     >
       <CircularProgress />
-      <Typography color="text.secondary">Joining room…</Typography>
+      <Typography color="text.secondary">{t("invite.join.loading")}</Typography>
     </Box>
   );
 };

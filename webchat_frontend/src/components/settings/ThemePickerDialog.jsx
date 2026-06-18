@@ -11,26 +11,35 @@ import CloseIcon from '@mui/icons-material/Close';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import useAppearanceStore from '../../store/useAppearanceStore';
 import { chatThemeList } from '../../theme/chatThemePresets';
-import { chatColors, chatRadii } from '../../theme/chatDesignTokens';
+import { chatColors, chatRadii, chatHideScrollbarSx } from '../../theme/chatDesignTokens';
+import useTranslation from '../../hooks/useTranslation';
 
 const ThemePickerDialog = ({ open, onClose }) => {
   const themeId = useAppearanceStore((s) => s.themeId);
   const setThemeId = useAppearanceStore((s) => s.setThemeId);
+  const { t } = useTranslation();
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: 1 }}>
         <Typography component="span" variant="h6" sx={{ flex: 1 }}>
-          Themes
+          {t('themes.title')}
         </Typography>
-        <IconButton aria-label="Close themes" onClick={onClose} size="small">
+        <IconButton aria-label={t('themes.close')} onClick={onClose} size="small">
           <CloseIcon />
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers sx={{ pt: 2 }}>
+      <DialogContent
+        dividers
+        sx={{
+          pt: 2,
+          ...chatHideScrollbarSx,
+          overflowX: 'hidden',
+        }}
+      >
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Pick a look for your chat workspace. Changes apply instantly.
+          {t('themes.intro')}
         </Typography>
 
         <Box
@@ -48,7 +57,7 @@ const ThemePickerDialog = ({ open, onClose }) => {
                 component="button"
                 type="button"
                 aria-pressed={selected}
-                aria-label={`${preset.name} theme${selected ? ', selected' : ''}`}
+                aria-label={`${preset.name} theme${selected ? t('themes.presetSelected') : ''}`}
                 onClick={() => setThemeId(preset.id)}
                 sx={{
                   position: 'relative',
