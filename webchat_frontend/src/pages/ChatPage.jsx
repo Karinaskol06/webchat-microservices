@@ -151,6 +151,24 @@ const ChatPage = () => {
     );
   }, [currentChat?.otherUser, messages, messagesLoading, user?.id]);
 
+  const latestIncomingMessageKey = useMemo(() => {
+    if (!otherUser?.id) return null;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      const senderId = message?.sender?.id ?? message?.senderId;
+      if (Number(senderId) === Number(otherUser.id)) {
+        return String(message?.id ?? message?._id ?? i);
+      }
+    }
+    return null;
+  }, [messages, otherUser?.id]);
+
+  const contactPromptName = useMemo(() => {
+    if (!otherUser) return t('common.user');
+    const fullName = [otherUser.firstName, otherUser.lastName].filter(Boolean).join(' ').trim();
+    return fullName || otherUser.username || t('common.user');
+  }, [otherUser, t]);
+
   const chatTypeUpper = String(currentChat?.type || '').toUpperCase();
   const isPersonalSpace = chatTypeUpper === 'PERSONAL_SPACE';
   const isPrivateChat = chatTypeUpper === 'PRIVATE';
@@ -899,7 +917,7 @@ const ChatPage = () => {
     };
 
     loadContactStatus();
-  }, [currentChat?.id, currentChat?.type, otherUser?.id, user?.id]);
+  }, [currentChat?.id, currentChat?.type, otherUser?.id, user?.id, latestIncomingMessageKey]);
 
   useEffect(() => {
     setProfileDialogOpen(false);
@@ -1266,7 +1284,7 @@ const ChatPage = () => {
             </>
           }
         >
-          {t('chat.contact.prompt')}
+          {t('chat.contact.prompt', { name: contactPromptName })}
         </Alert>
       )}
 

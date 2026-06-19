@@ -43,18 +43,8 @@ public class WebSocketEventListener {
             try {
                 Long userId = Long.parseLong(principal.getName());
                 log.info("User {} disconnected via WebSocket", userId);
-
-                //user disconnected - mark offline after 5s
-                new Thread(() -> {
-                    try {
-                        Thread.sleep(5000);
-                        if (!redisService.isUserOnline(userId)) {
-                            redisService.markUserOffline(userId);
-                        }
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
-                }).start();
+                // Clear presence immediately so push is not suppressed while Redis TTL expires.
+                redisService.markUserOffline(userId);
             } catch (NumberFormatException e) {
                 log.warn("Invalid user ID format: {}", principal.getName());
             }

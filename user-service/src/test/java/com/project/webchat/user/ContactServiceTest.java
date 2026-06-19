@@ -97,6 +97,16 @@ class ContactServiceTest {
     }
 
     @Test
+    void removeContactDeletesOnlyCurrentUserSide() {
+        when(userContactRepository.existsByUserIdAndContactUserId(2L, 1L)).thenReturn(true);
+
+        contactService.removeContact(2L, 1L);
+
+        verify(userContactRepository).deleteByUserIdAndContactUserId(2L, 1L);
+        verify(userContactRepository, never()).deleteByUserIdAndContactUserId(1L, 2L);
+    }
+
+    @Test
     void getContactStatusReturnsPendingPromptForIncomingRequest() {
         when(userContactRepository.existsByUserIdAndContactUserId(2L, 1L)).thenReturn(false);
         FriendRequest pending = FriendRequest.builder()

@@ -2,7 +2,6 @@ package com.project.webchat.notification.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.project.webchat.notification.config.VapidProperties;
 import com.project.webchat.notification.entity.PushSubscription;
 import com.project.webchat.notification.repository.PushSubscriptionRepository;
 import com.project.webchat.shared.events.v1.MessageCreatedEventV1;
@@ -10,23 +9,20 @@ import com.project.webchat.shared.events.v1.MessageReactionEventV1;
 import com.project.webchat.shared.events.v1.RoomMemberInvitedEventV1;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import nl.martijndwars.webpush.Encoding;
 import nl.martijndwars.webpush.Notification;
 import nl.martijndwars.webpush.PushService;
-import nl.martijndwars.webpush.Utils;
-import nl.martijndwars.webpush.Encoding;
 import org.apache.http.HttpResponse;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.security.GeneralSecurityException;
-import java.security.PublicKey;
-import java.security.Security;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -35,19 +31,18 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class WebPushService {
 
+    private static final int PUSH_TIMEOUT_SECONDS = 5;
+    private static final int PUSH_MAX_ATTEMPTS = 2;
+
     private final PushSubscriptionRepository pushSubscriptionRepository;
     private final PushSubscriptionMaintenanceService pushSubscriptionMaintenanceService;
-    private final VapidProperties vapidProperties;
+    private final PushService pushService;
+    private final ExecutorService webPushExecutor;
     private final ObjectMapper objectMapper;
 
-    /**
-     * Send a web-push notification to every active subscription owned by the
-     * given recipient. Every subscription is attempted INDEPENDENTLY so a
-     * failure on one (timeout, FCM/WNS hiccup, malformed row, ...) never
-     * prevents the others — the active one in particular — from being tried.
-     *
-     * @return number of subscriptions that the push provider acknowledged with 2xx
-     */
+    @Value("${app.webpush.delete-on-client-error:true}")
+    private boolean deleteOnClientError;
+
     public int sendMessageCreated(Long recipientUserId, MessageCreatedEventV1 event) {
         return sendPayload(recipientUserId, event.getEventId(), buildMessageCreatedPayload(event));
     }
@@ -68,16 +63,27 @@ public class WebPushService {
             return 0;
         }
 
-        PushService pushService = createPushService();
+        List<CompletableFuture<DeliveryOutcome>> futures = subscriptions.stream()
+                .map(subscription -> CompletableFuture.supplyAsync(
+                        () -> deliverToSingleSubscription(subscription, payload, eventId, recipientUserId),
+                        webPushExecutor))
+                .toList();
 
         int delivered = 0;
         boolean retryableFailureSeen = false;
 
-        for (PushSubscription subscription : subscriptions) {
-            DeliveryOutcome outcome = deliverToSingleSubscription(pushService, subscription, payload, eventId, recipientUserId);
-            if (outcome == DeliveryOutcome.DELIVERED) {
-                delivered++;
-            } else if (outcome == DeliveryOutcome.RETRYABLE_FAILURE) {
+        for (CompletableFuture<DeliveryOutcome> future : futures) {
+            try {
+                DeliveryOutcome outcome = future.get(PUSH_TIMEOUT_SECONDS + 2L, TimeUnit.SECONDS);
+                if (outcome == DeliveryOutcome.DELIVERED) {
+                    delivered++;
+                } else if (outcome == DeliveryOutcome.RETRYABLE_FAILURE) {
+                    retryableFailureSeen = true;
+                }
+            } catch (TimeoutException ex) {
+                future.cancel(true);
+                retryableFailureSeen = true;
+            } catch (Exception ex) {
                 retryableFailureSeen = true;
             }
         }
@@ -89,15 +95,10 @@ public class WebPushService {
         return delivered;
     }
 
-    private DeliveryOutcome deliverToSingleSubscription(PushService pushService,
-                                                         PushSubscription subscription,
+    private DeliveryOutcome deliverToSingleSubscription(PushSubscription subscription,
                                                          String payload,
                                                          UUID eventId,
                                                          Long recipientUserId) {
-        String endpointHost = subscription.getEndpoint() == null
-                ? "null"
-                : subscription.getEndpoint().replaceAll("https?://([^/]+).*", "$1");
-
         try {
             Notification notification = new Notification(
                     subscription.getEndpoint(),
@@ -106,19 +107,8 @@ public class WebPushService {
                     payload
             );
 
-            HttpResponse response = sendWithTimeout(pushService, notification, Encoding.AES128GCM);
+            HttpResponse response = sendWithRetry(notification);
             int status = response.getStatusLine().getStatusCode();
-
-            // Some FCM endpoints still require the legacy AESGCM encoding and
-            // return 403 for AES128GCM payloads — fall back once before giving up.
-            if (status == 403 && "fcm.googleapis.com".equals(endpointHost)) {
-                log.warn("WebPush FCM retry with AESGCM eventId={} recipientUserId={} subscriptionId={}",
-                        eventId, recipientUserId, subscription.getId());
-                response = sendWithTimeout(pushService, notification, Encoding.AESGCM);
-                status = response.getStatusLine().getStatusCode();
-                log.info("WebPush FCM retry response eventId={} recipientUserId={} subscriptionId={} status={}",
-                        eventId, recipientUserId, subscription.getId(), status);
-            }
 
             log.info("WebPush response eventId={} recipientUserId={} subscriptionId={} status={}",
                     eventId, recipientUserId, subscription.getId(), status);
@@ -132,7 +122,7 @@ public class WebPushService {
                 return DeliveryOutcome.PERMANENTLY_FAILED;
             }
             if (status >= 400 && status < 500) {
-                if (status == 400 || status == 401 || status == 403) {
+                if (deleteOnClientError && (status == 400 || status == 401 || status == 403)) {
                     pushSubscriptionMaintenanceService.deleteSubscriptionInNewTransaction(
                             subscription.getId(), "rejected_status_" + status);
                 }
@@ -167,7 +157,40 @@ public class WebPushService {
         }
     }
 
-    private HttpResponse sendWithTimeout(PushService pushService, Notification notification, Encoding encoding)
+    private HttpResponse sendWithRetry(Notification notification)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        RuntimeException lastFailure = null;
+        for (int attempt = 1; attempt <= PUSH_MAX_ATTEMPTS; attempt++) {
+            try {
+                HttpResponse response = sendWithTimeout(notification, Encoding.AES128GCM);
+                int status = response.getStatusLine().getStatusCode();
+                if (status == 403) {
+                    log.warn("WebPush AES128GCM returned 403, retrying with AESGCM attempt={}", attempt);
+                    response = sendWithTimeout(notification, Encoding.AESGCM);
+                }
+                return response;
+            } catch (TimeoutException | ExecutionException ex) {
+                lastFailure = new RuntimeException(ex);
+                if (attempt < PUSH_MAX_ATTEMPTS) {
+                    log.warn("WebPush attempt {} failed, retrying immediately", attempt);
+                }
+            }
+        }
+        if (lastFailure != null) {
+            if (lastFailure.getCause() instanceof TimeoutException timeout) {
+                throw timeout;
+            }
+            if (lastFailure.getCause() instanceof ExecutionException execution) {
+                throw execution;
+            }
+            if (lastFailure.getCause() instanceof InterruptedException interrupted) {
+                throw interrupted;
+            }
+        }
+        throw new TimeoutException("WebPush delivery timed out");
+    }
+
+    private HttpResponse sendWithTimeout(Notification notification, Encoding encoding)
             throws InterruptedException, ExecutionException, TimeoutException {
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -175,22 +198,7 @@ public class WebPushService {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-        }).get(15, TimeUnit.SECONDS);
-    }
-
-    private PushService createPushService() {
-        try {
-            if (Security.getProvider("BC") == null) {
-                Security.addProvider(new BouncyCastleProvider());
-            }
-            PublicKey publicKey = Utils.loadPublicKey(vapidProperties.getPublicKey());
-            return new PushService()
-                    .setSubject(vapidProperties.getSubject())
-                    .setPublicKey(publicKey)
-                    .setPrivateKey(Utils.loadPrivateKey(vapidProperties.getPrivateKey()));
-        } catch (GeneralSecurityException e) {
-            throw new PermanentNotificationException("Invalid VAPID key configuration", e);
-        }
+        }, webPushExecutor).get(PUSH_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     private String buildMessageCreatedPayload(MessageCreatedEventV1 event) {
@@ -212,7 +220,6 @@ public class WebPushService {
         if (senderAvatarUrl != null && !senderAvatarUrl.isEmpty()) {
             data.put("senderAvatarUrl", senderAvatarUrl);
         }
-        data.put("autoCloseMs", 10_000);
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("title", senderDisplayName);
@@ -249,7 +256,6 @@ public class WebPushService {
         if (reactorAvatarUrl != null && !reactorAvatarUrl.isEmpty()) {
             data.put("reactorAvatarUrl", reactorAvatarUrl);
         }
-        data.put("autoCloseMs", 10_000);
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("title", "New reaction");
@@ -282,7 +288,6 @@ public class WebPushService {
         if (inviterAvatarUrl != null && !inviterAvatarUrl.isEmpty()) {
             data.put("inviterAvatarUrl", inviterAvatarUrl);
         }
-        data.put("autoCloseMs", 10_000);
 
         Map<String, Object> payload = new HashMap<>();
         payload.put("title", "Chat invite");

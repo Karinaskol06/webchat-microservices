@@ -29,7 +29,7 @@ export default {
   'chat.empty.welcomeTitle': 'Вітаємо у Waypoint',
   'chat.empty.welcomeBody': 'Оберіть розмову зі списку або знайдіть користувачів і групи, щоб почати спілкуватись.',
   'chat.channel.readOnlyHint': 'Лише власник каналу, модератори або учасники з дозволом можуть надсилати повідомлення тут.',
-  'chat.contact.prompt': 'Додати до контактів?',
+  'chat.contact.prompt': 'Додати {{name}} до контактів?',
   'chat.leaveDialog.title': 'Покинути {{roomType}}?',
   'chat.leaveDialog.body': 'Ви більше не бачитимете повідомлення з {{roomName}}. Можете повернутися, якщо кімната публічна або отримаєте нове запрошення.',
   'chat.sidebar.spaceInfo': 'Інфо про простір',

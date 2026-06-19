@@ -201,6 +201,14 @@ public class UserServiceController {
         return ResponseEntity.ok(contactService.getContacts(currentUserId));
     }
 
+    @DeleteMapping("/contacts/{contactUserId}")
+    public ResponseEntity<Void> removeContact(
+            @PathVariable Long contactUserId,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        contactService.removeContact(currentUserId, contactUserId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/contacts/requests/incoming")
     public ResponseEntity<java.util.List<IncomingContactRequestDTO>> getIncomingRequests(
             @RequestHeader("X-User-Id") Long currentUserId) {

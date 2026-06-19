@@ -3,8 +3,7 @@ import useChatStore from '../store/useChatStore';
 import useChatFolderStore from '../store/useChatFolderStore';
 import chatService from '../services/chatService';
 import {
-  connectWebSocket,
-  disconnectWebSocket,
+  acquireWebSocketConnection,
   subscribeToChat,
   subscribeToUserChatEvents,
 } from '../utils/websocket';
@@ -16,6 +15,11 @@ import {
   WEBCHAT_MESSAGES_MARKED_READ,
 } from '../constants/chatEvents';
 import { getMessagePreviewText } from '../utils/personalSpace';
+import {
+  shouldNotifyForIncomingMessage,
+  showChatMessageNotification,
+} from '../utils/inAppNotifications';
+import { claimIncomingMessage } from '../utils/notificationDedup';
 
 const normalizeWsMessagePayload = (event) =>
   event?.type === 'MESSAGE_SENT' && event.message != null ? event.message : event;
@@ -31,6 +35,11 @@ const applyRemoteChatDeleted = (chatId) => {
 const applyRemoteChatUpsert = (chat) => {
   if (!chat?.id) return;
   useChatStore.getState().upsertChat(chat);
+};
+
+const notifyRemoteChatCreated = (chat) => {
+  if (!chat?.id) return;
+  applyRemoteChatUpsert(chat);
   window.dispatchEvent(new CustomEvent(WEBCHAT_CHAT_CREATED, { detail: { chat } }));
 };
 
@@ -44,16 +53,23 @@ const getLastMessagePreview = (message) => {
 
 const processIncomingMessage = (message, topicChatIdFallback, routingRef, markReadTimeoutRef) => {
   if (!message || typeof message !== 'object') return;
+  if (!claimIncomingMessage(message)) return;
 
   const store = useChatStore.getState();
   const routing = routingRef.current;
   const sid = routing.userId;
-  const openId = store.currentChat?.id;
+  const openId = routing.chatId ?? store.currentChat?.id;
 
   const senderId = message.senderId || message.sender?.id;
   const isIncoming = Boolean(senderId && Number(senderId) !== Number(sid));
   const lastMessageText = getLastMessagePreview(message);
   const topicChatId = String(message.chatId ?? topicChatIdFallback ?? '');
+
+  const enrichedMessage = {
+    ...message,
+    chatId: message.chatId ?? topicChatIdFallback ?? topicChatId,
+    senderId: message.senderId ?? message.sender?.id,
+  };
 
   store.updateChatLastMessage(topicChatId, {
     content: lastMessageText,
@@ -76,18 +92,18 @@ const processIncomingMessage = (message, topicChatIdFallback, routingRef, markRe
   if (isOwnForward && !isFocused) {
     window.dispatchEvent(
       new CustomEvent(WEBCHAT_ACTIVATE_CHAT, {
-        detail: { chatId: topicChatId, message },
+        detail: { chatId: topicChatId, message: enrichedMessage },
       }),
     );
     return;
   }
 
   if (isFocused) {
-    store.addMessage(message);
+    store.addMessage(enrichedMessage);
     if (isIncoming) {
       window.dispatchEvent(
         new CustomEvent(WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT, {
-          detail: { chatId: topicChatId, message },
+          detail: { chatId: topicChatId, message: enrichedMessage },
         }),
       );
       if (markReadTimeoutRef.current) {
@@ -109,6 +125,13 @@ const processIncomingMessage = (message, topicChatIdFallback, routingRef, markRe
     }
   } else if (isIncoming) {
     store.incrementUnreadCount(topicChatId);
+    if (shouldNotifyForIncomingMessage({ isIncoming, isFocused })) {
+      void showChatMessageNotification({
+        message: enrichedMessage,
+        chatId: topicChatId,
+        chatTitle: store.chats.find((c) => String(c.id) === topicChatId)?.groupName,
+      });
+    }
   }
 };
 
@@ -148,27 +171,20 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
   };
 
   useEffect(() => {
-    if (user) {
-      connectWebSocket();
-      return () => {
-        disconnectWebSocket();
-      };
-    }
-  }, [user]);
+    if (!user?.id) return undefined;
+    return acquireWebSocketConnection();
+  }, [user?.id]);
 
-  /** Every chat: message stream + presence (updates list preview, unread, avatars). */
+  /** Sidebar chats: preview + unread — resubscribe only when chat list membership changes. */
   useEffect(() => {
     if (!user) return undefined;
 
     const ids = [
       ...new Set(
-        [chatIdsKey, currentChatId]
-          .flatMap((value) =>
-            String(value || '')
-              .split(',')
-              .map((id) => id.trim())
-              .filter(Boolean),
-          ),
+        chatIdsKey
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean),
       ),
     ];
     if (ids.length === 0) return undefined;
@@ -176,12 +192,15 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
     const unsubs = ids.map((id) =>
       subscribeToChat(id, {
         onChatCreated: (payload) => {
-          applyRemoteChatUpsert(resolveChatPayload(payload));
+          notifyRemoteChatCreated(resolveChatPayload(payload));
         },
         onChatDeleted: (event) => {
           applyRemoteChatDeleted(event?.chatId ?? event?.id ?? id);
         },
         onMessage: (rawPayload) => {
+          if (String(id) === String(routingRef.current.chatId)) {
+            return;
+          }
           const message = normalizeWsMessagePayload(rawPayload);
           processIncomingMessage(message, id, routingRef, markReadTimeoutRef);
         },
@@ -204,13 +223,17 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
         markReadTimeoutRef.current = null;
       }
     };
-  }, [user, chatIdsKey, currentChatId]);
+  }, [user, chatIdsKey]);
 
-  /** Focused chat: typing / read receipts / deletes / edits / attachments — not messages (handled above). */
+  /** Focused chat: messages + typing / read receipts / deletes / edits / attachments. */
   useEffect(() => {
     if (!user || !currentChatId) return;
 
     const unsubscribe = subscribeToChat(currentChatId, {
+      onMessage: (rawPayload) => {
+        const message = normalizeWsMessagePayload(rawPayload);
+        processIncomingMessage(message, currentChatId, routingRef, markReadTimeoutRef);
+      },
       onTyping: (event) => {
         const isTyping = event.typing ?? event.isTyping ?? false;
         useChatStore.getState().setTyping(event.userId, isTyping);
@@ -263,7 +286,7 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
     const unsubscribe = subscribeToUserChatEvents({
       userId: user?.id,
       onChatCreated: (payload) => {
-        applyRemoteChatUpsert(resolveChatPayload(payload));
+        notifyRemoteChatCreated(resolveChatPayload(payload));
       },
       onChatUpdated: (chat) => {
         applyRemoteChatUpsert(chat);
@@ -277,12 +300,24 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
         if (chat?.id) {
           applyRemoteChatUpsert(chat);
         }
-        processIncomingMessage(message, chat?.id, routingRef, markReadTimeoutRef);
+        if (!message) return;
+
+        const chatKey = String(chat?.id ?? message.chatId ?? '');
+        const subscribedIds = new Set(
+          chatIdsKey
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean),
+        );
+        if (subscribedIds.has(chatKey)) {
+          return;
+        }
+        processIncomingMessage(message, chatKey, routingRef, markReadTimeoutRef);
       },
       onRoomMemberInvite,
     });
     return () => unsubscribe();
-  }, [user, onRoomMemberInvite]);
+  }, [user, onRoomMemberInvite, chatIdsKey]);
 
   return null;
 };

@@ -6,13 +6,97 @@ import { resolveApiBaseUrl } from './apiBaseUrl';
 const WS_BASE_URL = resolveApiBaseUrl();
 
 let stompClient = null;
+let connectionRefCount = 0;
 let pendingChatSubscriptions = [];
 let userEventSubscriptions = [];
 let pendingUserEventHandlers = [];
-/** JWT string last used for an active STOMP session — prevents session fixation if token changes while client is still active */
+/** JWT string last used for an active STOMP session */
 let lastBoundToken = null;
+const connectionListeners = new Set();
 
-const isStompConnected = () => Boolean(stompClient && stompClient.connected);
+export const isWebSocketConnected = () => Boolean(stompClient && stompClient.connected);
+
+const isStompConnected = isWebSocketConnected;
+
+const notifyConnectionChange = (connected = isStompConnected()) => {
+  connectionListeners.forEach((listener) => {
+    try {
+      listener(connected);
+    } catch (error) {
+      console.debug('WebSocket connection listener error:', error);
+    }
+  });
+};
+
+const createSockJsSocket = () =>
+  new SockJS(`${WS_BASE_URL}/ws/chat`, null, {
+    transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
+    withCredentials: true,
+  });
+
+const buildStompClient = (token) =>
+  new Client({
+    // Must return a NEW socket on each call so STOMP reconnect works after drops.
+    webSocketFactory: () => createSockJsSocket(),
+    connectHeaders: {
+      Authorization: `Bearer ${token}`,
+    },
+    debug: import.meta.env.DEV
+      ? (str) => {
+          if (!str.includes('heart-beat')) {
+            console.log('STOMP: ' + str);
+          }
+        }
+      : () => {},
+    reconnectDelay: 2000,
+    heartbeatIncoming: 10000,
+    heartbeatOutgoing: 10000,
+    connectionTimeout: 15000,
+    onConnect: () => {
+      console.log('WebSocket connected');
+      lastBoundToken = token;
+      pendingChatSubscriptions.forEach((sub) => {
+        attachChatSubscriptions(sub);
+      });
+      userEventSubscriptions = [];
+      pendingUserEventHandlers.forEach((handlers) => {
+        const subs = attachUserEventSubscriptions(handlers);
+        userEventSubscriptions.push(...subs);
+      });
+      notifyConnectionChange(true);
+    },
+    onDisconnect: () => {
+      console.log('WebSocket disconnected');
+      notifyConnectionChange(false);
+    },
+    onWebSocketClose: () => {
+      notifyConnectionChange(false);
+    },
+    onStompError: (frame) => {
+      console.error('STOMP error:', frame);
+      notifyConnectionChange(false);
+    },
+  });
+
+const hardDeactivateClient = () => {
+  if (!stompClient) return;
+  try {
+    stompClient.deactivate();
+  } catch (error) {
+    console.debug('STOMP deactivate error:', error);
+  }
+  stompClient = null;
+  lastBoundToken = null;
+  notifyConnectionChange(false);
+};
+
+export const subscribeToConnectionChange = (listener) => {
+  connectionListeners.add(listener);
+  listener(isStompConnected());
+  return () => {
+    connectionListeners.delete(listener);
+  };
+};
 
 export const connectWebSocket = () => {
   const token = localStorage.getItem('token');
@@ -25,49 +109,48 @@ export const connectWebSocket = () => {
     if (lastBoundToken === token) {
       return stompClient;
     }
-    disconnectWebSocket();
+    hardDeactivateClient();
   }
 
-  // Same host as REST API (api-gateway routes /ws/** to chat-service)
-  const socket = new SockJS(`${WS_BASE_URL}/ws/chat`, null, {
-    transports: ['websocket', 'xhr-streaming', 'xhr-polling'],
-    withCredentials: true
-  });
-  
-  stompClient = new Client({
-    webSocketFactory: () => socket,
-    connectHeaders: {
-      Authorization: `Bearer ${token}`
-    },
-    debug: (str) => {
-      console.log('STOMP: ' + str);
-    },
-    reconnectDelay: 5000,
-    heartbeatIncoming: 4000,
-    heartbeatOutgoing: 4000,
-    onConnect: () => {
-      console.log('WebSocket connected');
-      lastBoundToken = token;
-
-      // attach any subscriptions that were requested before connection
-      pendingChatSubscriptions.forEach((sub) => {
-        attachChatSubscriptions(sub);
-      });
-      pendingUserEventHandlers.forEach((handlers) => {
-        const subs = attachUserEventSubscriptions(handlers);
-        userEventSubscriptions.push(...subs);
-      });
-    },
-    onDisconnect: () => {
-      console.log('WebSocket disconnected');
-    },
-    onStompError: (frame) => {
-      console.error('STOMP error:', frame);
-    }
-  });
-  
+  stompClient = buildStompClient(token);
   stompClient.activate();
   return stompClient;
+};
+
+/**
+ * Reference-counted acquire for React StrictMode / nested mounts.
+ * Returns a release function; connection closes only when all holders release.
+ */
+export const acquireWebSocketConnection = () => {
+  connectionRefCount += 1;
+  connectWebSocket();
+  return () => {
+    connectionRefCount = Math.max(0, connectionRefCount - 1);
+    if (connectionRefCount === 0) {
+      disconnectWebSocket();
+    }
+  };
+};
+
+export const waitForWebSocketConnection = (timeoutMs = 15000) => {
+  connectWebSocket();
+  if (isStompConnected()) {
+    return Promise.resolve(true);
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      unsubscribe();
+      reject(new Error('WebSocket is not connected'));
+    }, timeoutMs);
+
+    const unsubscribe = subscribeToConnectionChange((connected) => {
+      if (!connected) return;
+      window.clearTimeout(timeoutId);
+      unsubscribe();
+      resolve(true);
+    });
+  });
 };
 
 const attachChatSubscriptions = (subscription) => {
@@ -90,13 +173,11 @@ const attachChatSubscriptions = (subscription) => {
   const { chatId, handlers } = subscription;
   const subs = [];
 
-  // subscription to messages
   if (handlers.onMessage) {
     subs.push(
       stompClient.subscribe(`/topic/chat/${chatId}/messages`, (frame) => {
         try {
           const event = JSON.parse(frame.body);
-          console.log('Message received:', event);
           if (event.type === 'CHAT_CREATED') {
             handlers.onChatCreated?.(event.chat ?? event);
             return;
@@ -113,7 +194,6 @@ const attachChatSubscriptions = (subscription) => {
             handlers.onMessageEdited?.(event);
             return;
           }
-          // Text: MessageSentEvent { type, timestamp, message: ChatMessageDTO }
           const payload =
             event.type === 'MESSAGE_SENT' && event.message != null
               ? event.message
@@ -122,87 +202,67 @@ const attachChatSubscriptions = (subscription) => {
         } catch (error) {
           console.error('Failed to parse message:', error);
         }
-      })
+      }),
     );
   }
 
-  // subscription to typing
   if (handlers.onTyping) {
     subs.push(
       stompClient.subscribe(`/topic/chat/${chatId}/typing`, (frame) => {
         try {
-          const event = JSON.parse(frame.body);
-          console.log('Typing event:', event);
-          // event format: { userId: 123, typing: true }
-          handlers.onTyping(event);
+          handlers.onTyping(JSON.parse(frame.body));
         } catch (error) {
           console.error('Failed to parse typing event:', error);
         }
-      })
+      }),
     );
   }
 
-  // subscription to reading messages
   if (handlers.onRead) {
     subs.push(
       stompClient.subscribe(`/topic/chat/${chatId}/read`, (frame) => {
         try {
-          const event = JSON.parse(frame.body);
-          console.log('Read receipt:', event);
-          // event format: { userId: 123, messageIds: ['id1', 'id2'] }
-          handlers.onRead(event);
+          handlers.onRead(JSON.parse(frame.body));
         } catch (error) {
           console.error('Failed to parse read receipt:', error);
         }
-      })
+      }),
     );
   }
 
-  // subscription to statuses
   if (handlers.onPresence) {
     subs.push(
       stompClient.subscribe(`/topic/chat/${chatId}/presence`, (frame) => {
         try {
-          const event = JSON.parse(frame.body);
-          console.log('Presence event:', event);
-          // event format: { userId: 123, type: 'USER_JOINED' or 'USER_LEFT' }
-          handlers.onPresence(event);
+          handlers.onPresence(JSON.parse(frame.body));
         } catch (error) {
           console.error('Failed to parse presence event:', error);
         }
-      })
+      }),
     );
   }
 
-  // subscription to message deletion
   if (handlers.onMessageDeleted) {
     subs.push(
       stompClient.subscribe(`/topic/chat/${chatId}/deleted`, (frame) => {
         try {
-          const event = JSON.parse(frame.body);
-          console.log('Message deleted:', event);
-          // event format: { messageId: '123', chatId: 'chat123', deletedByUserId: 456 }
-          handlers.onMessageDeleted(event);
+          handlers.onMessageDeleted(JSON.parse(frame.body));
         } catch (error) {
           console.error('Failed to parse delete event:', error);
         }
-      })
+      }),
     );
   }
 
-  // subscription to message editing
   if (handlers.onMessageEdited) {
     subs.push(
       stompClient.subscribe(`/topic/chat/${chatId}/edited`, (frame) => {
         try {
-          const event = JSON.parse(frame.body);
-          console.log('Message edited:', event);
-          // event format: { messageId: '123', chatId: 'chat123', newContent: 'new text', editedByUserId: 456 }
-          handlers.onMessageEdited(event);
+          handlers.onMessageEdited(JSON.parse(frame.body));
         } catch (error) {
           console.error('Failed to parse edit event:', error);
         }
-      })
+      }),
     );
   }
 
@@ -210,8 +270,7 @@ const attachChatSubscriptions = (subscription) => {
     subs.push(
       stompClient.subscribe(`/topic/chat/${chatId}/reactions`, (frame) => {
         try {
-          const event = JSON.parse(frame.body);
-          handlers.onMessageReactionUpdated(event);
+          handlers.onMessageReactionUpdated(JSON.parse(frame.body));
         } catch (error) {
           console.error('Failed to parse reaction event:', error);
         }
@@ -219,19 +278,15 @@ const attachChatSubscriptions = (subscription) => {
     );
   }
 
-  // subscription to attachments
   if (handlers.onAttachment) {
     subs.push(
       stompClient.subscribe(`/topic/chat/${chatId}/attachment`, (frame) => {
         try {
-          const event = JSON.parse(frame.body);
-          console.log('Attachment event:', event);
-          // event format: { messageId: '123', attachment: {...}, type: 'ADDED' or 'DELETED' }
-          handlers.onAttachment(event);
+          handlers.onAttachment(JSON.parse(frame.body));
         } catch (error) {
           console.error('Failed to parse attachment event:', error);
         }
-      })
+      }),
     );
   }
 
@@ -239,8 +294,6 @@ const attachChatSubscriptions = (subscription) => {
 };
 
 export const subscribeToChat = (chatId, handlers) => {
-  console.debug(`Subscribing to chat ${chatId} with handlers:`, Object.keys(handlers));
-  
   const subscription = { chatId, handlers, _subscriptions: [] };
   pendingChatSubscriptions.push(subscription);
 
@@ -248,12 +301,8 @@ export const subscribeToChat = (chatId, handlers) => {
     attachChatSubscriptions(subscription);
   }
 
-  // Return unsubscribe function
   return () => {
-    console.debug(`Unsubscribing from chat ${chatId}`);
-    pendingChatSubscriptions = pendingChatSubscriptions.filter(
-      (sub) => sub !== subscription
-    );
+    pendingChatSubscriptions = pendingChatSubscriptions.filter((sub) => sub !== subscription);
 
     if (subscription._subscriptions) {
       subscription._subscriptions.forEach((sub) => {
@@ -270,32 +319,31 @@ export const subscribeToChat = (chatId, handlers) => {
 
 export const disconnectWebSocket = () => {
   console.log('Disconnecting WebSocket...');
-  if (stompClient) {
-    // Unsubscribe from all pending subscriptions
-    pendingChatSubscriptions.forEach((sub) => {
-      if (sub._subscriptions) {
-        sub._subscriptions.forEach((s) => {
-          try {
-            s.unsubscribe();
-            // eslint-disable-next-line no-empty,no-unused-vars
-          } catch (e) {}
-        });
-      }
-    });
-    userEventSubscriptions.forEach((sub) => {
-      try {
-        sub.unsubscribe();
-      } catch (error) {
-        console.debug("Error unsubscribing user event stream:", error);
-      }
-    });
-    userEventSubscriptions = [];
-    pendingUserEventHandlers = [];
-    stompClient.deactivate();
-    stompClient = null;
-    pendingChatSubscriptions = [];
-    lastBoundToken = null;
-  }
+  connectionRefCount = 0;
+
+  pendingChatSubscriptions.forEach((sub) => {
+    if (sub._subscriptions) {
+      sub._subscriptions.forEach((s) => {
+        try {
+          s.unsubscribe();
+        } catch (e) {
+          console.debug('Unsubscribe during disconnect:', e);
+        }
+      });
+    }
+  });
+  userEventSubscriptions.forEach((sub) => {
+    try {
+      sub.unsubscribe();
+    } catch (error) {
+      console.debug('Error unsubscribing user event stream:', error);
+    }
+  });
+
+  hardDeactivateClient();
+  userEventSubscriptions = [];
+  pendingUserEventHandlers = [];
+  pendingChatSubscriptions = [];
 };
 
 const routeUserInboxEvent = (event, handlers = {}) => {
@@ -351,9 +399,9 @@ const attachUserEventSubscriptions = ({
         try {
           onChatCreated(JSON.parse(frame.body));
         } catch (error) {
-          console.error("Failed to parse chat created event:", error);
+          console.error('Failed to parse chat created event:', error);
         }
-      })
+      }),
     );
   }
   if (onChatUpdated) {
@@ -362,9 +410,9 @@ const attachUserEventSubscriptions = ({
         try {
           onChatUpdated(JSON.parse(frame.body));
         } catch (error) {
-          console.error("Failed to parse chat updated event:", error);
+          console.error('Failed to parse chat updated event:', error);
         }
-      })
+      }),
     );
   }
   if (onChatDeleted) {
@@ -395,9 +443,9 @@ const attachUserEventSubscriptions = ({
         try {
           onRoomMemberInvite(JSON.parse(frame.body));
         } catch (error) {
-          console.error("Failed to parse room member invite event:", error);
+          console.error('Failed to parse room member invite event:', error);
         }
-      })
+      }),
     );
   }
   const inboxSub = attachUserInboxSubscription(userId, handlers);
@@ -432,56 +480,57 @@ export const subscribeToUserChatEvents = ({
       try {
         sub.unsubscribe();
       } catch (error) {
-        console.debug("Error unsubscribing user event handler:", error);
+        console.debug('Error unsubscribing user event handler:', error);
       }
     });
-    userEventSubscriptions = userEventSubscriptions.filter(
-      (sub) => !subscriptions.includes(sub)
-    );
+    userEventSubscriptions = userEventSubscriptions.filter((sub) => !subscriptions.includes(sub));
     pendingUserEventHandlers = pendingUserEventHandlers.filter((item) => item !== handlers);
   };
 };
 
 export const sendMessage = (destination, payload) => {
   if (isStompConnected()) {
-    console.log(`Sending message to /app/${destination}:`, payload);
     stompClient.publish({
       destination: `/app/${destination}`,
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
     });
     return true;
   }
-  console.warn('WebSocket not connected, message not sent');
   return false;
 };
 
 export const sendChatMessage = (payload) => {
   if (!isStompConnected()) {
-    console.error('WebSocket not connected, message not sent');
     return false;
   }
 
   const message = {
     chatId: payload.chatId,
-    content: payload.content || null,  // can be null only for messages with attachments
+    content: payload.content || null,
     attachmentIds: payload.attachmentIds || [],
     type: payload.type || 'TEXT',
-    replyToMessageId: payload.replyToMessageId || null
+    replyToMessageId: payload.replyToMessageId || null,
   };
-  console.log('Sending message via WebSocket:', message);
 
   stompClient.publish({
     destination: '/app/chat.send',
-    body: JSON.stringify(message)
+    body: JSON.stringify(message),
   });
 
   return true;
 };
 
-/** Server copies content and attachments; client cannot edit the forwarded payload. */
+export const ensureSendChatMessage = async (payload) => {
+  await waitForWebSocketConnection();
+  const sent = sendChatMessage(payload);
+  if (!sent) {
+    throw new Error('WebSocket is not connected');
+  }
+  return true;
+};
+
 export const sendForwardMessage = ({ chatId, forwardSourceMessageId }) => {
   if (!isStompConnected()) {
-    console.warn('WebSocket not connected, forward not sent');
     return false;
   }
   const cid = chatId != null ? String(chatId) : '';
@@ -495,30 +544,47 @@ export const sendForwardMessage = ({ chatId, forwardSourceMessageId }) => {
     content: null,
     attachmentIds: [],
     type: 'TEXT',
-    replyToMessageId: null
+    replyToMessageId: null,
   };
   stompClient.publish({
     destination: '/app/chat.send',
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
   return true;
 };
 
+export const ensureSendForwardMessage = async (payload) => {
+  await waitForWebSocketConnection();
+  const sent = sendForwardMessage(payload);
+  if (!sent) {
+    throw new Error('WebSocket is not connected');
+  }
+  return true;
+};
+
 export const sendTypingEvent = (payload) => {
-  const event = {
+  if (!isStompConnected()) {
+    return false;
+  }
+  return sendMessage('chat.typing', {
     chatId: payload.chatId,
-    typing: payload.typing
-  };
-  return sendMessage('chat.typing', event);
+    typing: payload.typing,
+  });
 };
 
 export default {
   connectWebSocket,
+  acquireWebSocketConnection,
   disconnectWebSocket,
+  waitForWebSocketConnection,
+  subscribeToConnectionChange,
+  isWebSocketConnected,
   sendMessage,
   sendChatMessage,
+  ensureSendChatMessage,
   sendForwardMessage,
+  ensureSendForwardMessage,
   sendTypingEvent,
   subscribeToChat,
-  subscribeToUserChatEvents
+  subscribeToUserChatEvents,
 };

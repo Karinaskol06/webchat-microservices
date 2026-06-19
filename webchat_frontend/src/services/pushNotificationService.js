@@ -22,10 +22,19 @@ const buffersEqual = (a, b) => {
   return true;
 };
 
-// Single in-flight promise so concurrent callers (e.g. several useEffects
-// firing on the same render) collapse onto one negotiation instead of
-// racing with each other.
+// Single in-flight promise so concurrent callers collapse onto one negotiation.
 let inFlight = null;
+let maintenanceStarted = false;
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+const refreshSubscriptionIfGranted = () => {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+    return Promise.resolve();
+  }
+  return ensureSubscriptionImpl().catch((error) => {
+    console.warn('[push] subscription refresh failed:', error);
+  });
+};
 
 const ensureSubscriptionImpl = async () => {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -153,6 +162,35 @@ const pushNotificationService = {
       inFlight = null;
     });
     return inFlight;
+  },
+
+  startMaintenance() {
+    if (maintenanceStarted || typeof window === 'undefined') {
+      return () => {};
+    }
+    maintenanceStarted = true;
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshSubscriptionIfGranted();
+      }
+    };
+    const onFocus = () => {
+      void refreshSubscriptionIfGranted();
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    const intervalId = window.setInterval(() => {
+      void refreshSubscriptionIfGranted();
+    }, REFRESH_INTERVAL_MS);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+      window.clearInterval(intervalId);
+      maintenanceStarted = false;
+    };
   },
 };
 

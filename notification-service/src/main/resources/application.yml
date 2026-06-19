@@ -53,6 +53,8 @@ app:
     public-key: ${VAPID_PUBLIC_KEY:}
     private-key: ${VAPID_PRIVATE_KEY:}
     subject: ${VAPID_SUBJECT:mailto:admin@webchat.local}
+  webpush:
+    delete-on-client-error: true
 
 eureka:
   client:

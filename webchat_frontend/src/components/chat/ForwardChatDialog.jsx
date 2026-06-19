@@ -14,7 +14,7 @@ import {
 import { alpha } from '@mui/material/styles';
 import useChatStore from '../../store/useChatStore';
 import chatService from '../../services/chatService';
-import { sendForwardMessage } from '../../utils/websocket';
+import { ensureSendForwardMessage } from '../../utils/websocket';
 import { parseQuotedSnippetFromMessage } from '../../utils/quotedMessagePreview';
 import {
   getChatDisplayLabel,
@@ -85,7 +85,7 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
     message?.sender?.username ||
     t('common.user');
 
-  const handleSelectChat = (chat) => {
+  const handleSelectChat = async (chat) => {
     if (!message?.id || !chat?.id) return;
     setError('');
     const targetChatId = String(chat.id);
@@ -93,15 +93,15 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
 
     onActivateChat?.(chat);
 
-    const ok = sendForwardMessage({
-      chatId: targetChatId,
-      forwardSourceMessageId: sourceMessageId,
-    });
-    if (!ok) {
+    try {
+      await ensureSendForwardMessage({
+        chatId: targetChatId,
+        forwardSourceMessageId: sourceMessageId,
+      });
+      onClose?.();
+    } catch {
       setError(t('forward.error.notConnected'));
-      return;
     }
-    onClose?.();
   };
 
   return (

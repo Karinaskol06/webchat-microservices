@@ -87,6 +87,7 @@ const ChatSettingsDialog = ({
   const [contacts, setContacts] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [requestBusyId, setRequestBusyId] = useState(null);
+  const [removeContactLoadingId, setRemoveContactLoadingId] = useState(null);
   const [themesOpen, setThemesOpen] = useState(false);
   const [banDialog, setBanDialog] = useState(null);
   const [bannedUsers, setBannedUsers] = useState([]);
@@ -158,6 +159,7 @@ const ChatSettingsDialog = ({
       setContactsError('');
       setContactsBusy(false);
       setRequestBusyId(null);
+      setRemoveContactLoadingId(null);
       setThemesOpen(false);
       setBannedUsers([]);
       setBannedListError(false);
@@ -318,6 +320,20 @@ const ChatSettingsDialog = ({
       setContactsError(getApiErrorMessage(error, t('settings.error.declineRequest')));
     } finally {
       setRequestBusyId(null);
+    }
+  };
+
+  const handleRemoveContact = async (contact) => {
+    if (!contact?.id || !currentUserId) return;
+    setRemoveContactLoadingId(contact.id);
+    setContactsError('');
+    try {
+      await contactsService.removeContact(contact.id, currentUserId);
+      setContacts((prev) => prev.filter((item) => Number(item.id) !== Number(contact.id)));
+    } catch (error) {
+      setContactsError(getApiErrorMessage(error, t('settings.error.removeContact')));
+    } finally {
+      setRemoveContactLoadingId(null);
     }
   };
 
@@ -505,22 +521,43 @@ const ChatSettingsDialog = ({
                     </Typography>
                   ) : (
                     <List disablePadding sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                      {contacts.map((contact, index) => (
-                        <React.Fragment key={contact.id}>
-                          <ListItem disablePadding>
-                            <ListItemButton onClick={() => handleOpenContact(contact)}>
-                              <ListItemIcon sx={{ minWidth: 52 }}>
-                                <UserAvatar user={contact} />
-                              </ListItemIcon>
-                              <ListItemText
-                                primary={displayName(contact)}
-                                secondary={contact.username ? `@${contact.username}` : null}
-                              />
-                            </ListItemButton>
-                          </ListItem>
-                          {index < contacts.length - 1 ? <Divider component="li" /> : null}
-                        </React.Fragment>
-                      ))}
+                      {contacts.map((contact, index) => {
+                        const busy = Number(removeContactLoadingId) === Number(contact.id);
+                        return (
+                          <React.Fragment key={contact.id}>
+                            <ListItem
+                              disablePadding
+                              sx={{
+                                gap: 1,
+                                py: 0.5,
+                                pr: 1,
+                                alignItems: 'center',
+                              }}
+                            >
+                              <ListItemButton onClick={() => handleOpenContact(contact)} sx={{ flex: 1 }}>
+                                <ListItemIcon sx={{ minWidth: 52 }}>
+                                  <UserAvatar user={contact} />
+                                </ListItemIcon>
+                                <ListItemText
+                                  primary={displayName(contact)}
+                                  secondary={contact.username ? `@${contact.username}` : null}
+                                />
+                              </ListItemButton>
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                color="inherit"
+                                disabled={busy}
+                                onClick={() => void handleRemoveContact(contact)}
+                                sx={{ flexShrink: 0, minWidth: 72, fontWeight: 600 }}
+                              >
+                                {busy ? t('common.saving') : t('settings.contacts.remove')}
+                              </Button>
+                            </ListItem>
+                            {index < contacts.length - 1 ? <Divider component="li" /> : null}
+                          </React.Fragment>
+                        );
+                      })}
                     </List>
                   )}
                 </Box>

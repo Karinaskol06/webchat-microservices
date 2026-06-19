@@ -10,6 +10,7 @@ import PollMessage from '../chat/PollMessage';
 const RichMessageContent = ({
   message,
   editable = false,
+  canToggleTasks = false,
   onUpdate,
   onDelete,
   floatingSticky = false,
@@ -36,7 +37,7 @@ const RichMessageContent = ({
         justifyContent: 'flex-start',
       }}
     >
-      {isTodo && <TodoListMessage {...common} />}
+      {isTodo && <TodoListMessage {...common} canToggleTasks={canToggleTasks} />}
       {type === 'STICKY_NOTE' && (
         <StickyNoteMessage
           {...common}

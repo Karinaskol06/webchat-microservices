@@ -39,6 +39,12 @@ const contactsService = {
     );
     return response.data;
   },
+
+  removeContact: async (contactUserId, currentUserId) => {
+    await api.delete(`/api/users/contacts/${contactUserId}`, {
+      headers: currentUserId ? { "X-User-Id": currentUserId } : undefined,
+    });
+  },
 };
 
 export default contactsService;

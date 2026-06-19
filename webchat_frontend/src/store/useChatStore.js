@@ -5,6 +5,10 @@ import {
 } from '../utils/sharedMedia';
 import { appendCacheBust, bustRoomPhotoUrl, stripMediaCacheKey } from '../utils/userAvatar';
 import { getMessagePreviewText } from '../utils/personalSpace';
+import {
+  isOptimisticMessageId,
+  removeOneMatchingOptimistic,
+} from '../utils/messageOptimistic';
 
 const messageIdKey = (message) => String(message?.id ?? message?._id ?? '');
 
@@ -318,18 +322,22 @@ const useChatStore = create((set, get) => ({
       const normalize = get().normalizeMessage;
       const normalizedMessage = normalize(withId);
       const nid = String(normalizedMessage.id ?? resolvedId);
-      const messageExists = state.messages.some(
-        (m) => String(m.id ?? m._id) === nid
+      const isOptimistic = isOptimisticMessageId(nid);
+
+      const baseMessages = isOptimistic
+        ? state.messages
+        : removeOneMatchingOptimistic(state.messages, normalizedMessage);
+
+      const messageExists = baseMessages.some(
+        (m) => String(m.id ?? m._id) === nid,
       );
-      if (messageExists) return state;
-      
-      // Add new message and sort by timestamp if needed
-      const newMessages = [...state.messages, normalizedMessage];
-      // Optional: sort by timestamp
-      newMessages.sort((a, b) => 
-        new Date(a.timestamp) - new Date(b.timestamp)
-      );
-      
+      if (messageExists) {
+        return { messages: baseMessages };
+      }
+
+      const newMessages = [...baseMessages, normalizedMessage];
+      newMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
       return { messages: newMessages };
     });
   },

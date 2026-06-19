@@ -122,8 +122,8 @@ public class WebSocketService {
 
     private void deliverIncomingChatMessage(Long recipientUserId, ChatRoomDTO chatRoom, ChatMessageDTO message) {
         IncomingChatMessageEvent event = new IncomingChatMessageEvent(chatRoom, message);
+        // User queue only — inbox duplicate caused double client handling per message.
         sendToUserQueue(recipientUserId, QUEUE_MESSAGES_INCOMING, event);
-        sendToUserInbox(recipientUserId, event);
         log.debug("Incoming message {} delivered to user {} for chat {}", message.getId(), recipientUserId,
                 chatRoom.getId());
     }

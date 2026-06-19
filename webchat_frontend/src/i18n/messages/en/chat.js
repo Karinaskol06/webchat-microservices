@@ -29,7 +29,7 @@ export default {
   'chat.empty.welcomeTitle': 'Welcome to Waypoint',
   'chat.empty.welcomeBody': 'Choose a conversation from the list or find users and groups to start chatting.',
   'chat.channel.readOnlyHint': 'Only the channel owner, moderators, or members granted posting can send messages here.',
-  'chat.contact.prompt': 'Add to contacts?',
+  'chat.contact.prompt': 'Add {{name}} to your contacts?',
   'chat.leaveDialog.title': 'Leave {{roomType}}?',
   'chat.leaveDialog.body': 'You will no longer see messages from {{roomName}}. You can rejoin if the room is public or you receive a new invite.',
   'chat.sidebar.spaceInfo': 'Space info',

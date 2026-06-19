@@ -47,6 +47,48 @@ public class PersonalSpacePayloadValidator {
                 || type == MessageType.POLL;
     }
 
+    /**
+     * Ensures a todo edit only toggles {@code done} flags — same tasks, ids, and text.
+     */
+    public void assertTodoDoneOnlyChange(String oldContent, String newContent) {
+        JsonNode oldRoot = readObject(oldContent, "Existing todo content");
+        JsonNode newRoot = readObject(newContent, "Updated todo content");
+        validateTodo(newRoot);
+
+        JsonNode oldTasks = oldRoot.get("tasks");
+        JsonNode newTasks = newRoot.get("tasks");
+        if (oldTasks.size() != newTasks.size()) {
+            throw new IllegalArgumentException("You can only mark tasks complete or incomplete.");
+        }
+        for (int i = 0; i < oldTasks.size(); i++) {
+            JsonNode oldTask = oldTasks.get(i);
+            JsonNode newTask = newTasks.get(i);
+            if (!oldTask.get("id").asText().equals(newTask.get("id").asText())) {
+                throw new IllegalArgumentException("You can only mark tasks complete or incomplete.");
+            }
+            if (!oldTask.get("text").asText().equals(newTask.get("text").asText())) {
+                throw new IllegalArgumentException("You can only mark tasks complete or incomplete.");
+            }
+        }
+    }
+
+    private JsonNode readObject(String content, String label) {
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException(label + " is required.");
+        }
+        try {
+            JsonNode root = MAPPER.readTree(content);
+            if (!root.isObject()) {
+                throw new IllegalArgumentException(label + " must be a JSON object.");
+            }
+            return root;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException(label + " must be valid JSON.");
+        }
+    }
+
     private void validateTodo(JsonNode root) {
         JsonNode tasks = root.get("tasks");
         if (tasks == null || !tasks.isArray()) {

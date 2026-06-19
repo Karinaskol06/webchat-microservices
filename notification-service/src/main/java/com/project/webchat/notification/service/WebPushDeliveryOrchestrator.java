@@ -49,13 +49,25 @@ public class WebPushDeliveryOrchestrator {
                 continue;
             }
 
+            if (delivery.getStatus() == DeliveryStatus.FAILED) {
+                log.info("Retrying previously failed delivery eventId={} recipientUserId={} channel={} reason={}",
+                        eventId, recipientUserId, DeliveryChannel.WEB_PUSH, delivery.getFailureReason());
+            }
+
             int deliveredCount = pushSender.applyAsInt(recipientUserId);
-            delivery.setStatus(DeliveryStatus.SENT);
-            delivery.setFailureReason(deliveredCount == 0 ? "no_active_subscriptions" : null);
+            if (deliveredCount > 0) {
+                delivery.setStatus(DeliveryStatus.SENT);
+                delivery.setFailureReason(null);
+            } else {
+                // Do not mark SENT when nothing was delivered — a later Kafka redelivery
+                // (or a new subscription) must be allowed to retry this event.
+                delivery.setStatus(DeliveryStatus.FAILED);
+                delivery.setFailureReason("no_push_deliveries");
+            }
             notificationDeliveryRepository.save(delivery);
 
-            log.info("Processed {} eventId={} recipientUserId={} deliveries={}",
-                    eventKind, eventId, recipientUserId, deliveredCount);
+            log.info("Processed {} eventId={} recipientUserId={} deliveries={} status={}",
+                    eventKind, eventId, recipientUserId, deliveredCount, delivery.getStatus());
         }
     }
 }

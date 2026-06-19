@@ -15,4 +15,8 @@ public interface UserContactRepository extends JpaRepository<UserContact, Long> 
     @Modifying
     @Query("DELETE FROM UserContact c WHERE c.userId = :userId OR c.contactUserId = :userId")
     void deleteByUserIdOrContactUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("DELETE FROM UserContact c WHERE c.userId = :userId AND c.contactUserId = :contactUserId")
+    void deleteByUserIdAndContactUserId(@Param("userId") Long userId, @Param("contactUserId") Long contactUserId);
 }

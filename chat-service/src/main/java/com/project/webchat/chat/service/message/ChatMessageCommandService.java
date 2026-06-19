@@ -27,6 +27,7 @@ import com.project.webchat.chat.service.support.PollPayloadHelper;
 import com.project.webchat.chat.service.support.SharedPollService;
 import com.project.webchat.chat.service.support.UserBanGuardService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
+import com.project.webchat.chat.service.user.PrivateChatContactRequestService;
 import com.project.webchat.shared.dto.UserInfoDTO;
 import com.project.webchat.shared.events.v1.MessageCreatedEventV1;
 import lombok.RequiredArgsConstructor;
@@ -69,6 +70,7 @@ public class ChatMessageCommandService {
     private final PollPayloadHelper pollPayloadHelper;
     private final SharedPollService sharedPollService;
     private final UserBanGuardService userBanGuardService;
+    private final PrivateChatContactRequestService privateChatContactRequestService;
 
     @Transactional
     public ChatMessageDTO sendRichMessage(Long senderId, String chatId, MessageType type,
@@ -370,11 +372,15 @@ public class ChatMessageCommandService {
                 .orElseThrow(() -> new IllegalArgumentException("Message not found"));
 
         ChatRoom room = loadRoom(message.getChatId());
-        if (!roomPermissionService.canEditOrDeleteMessage(room, actorId, message.getSenderId())) {
-            throw new ForbiddenChatOperationException("You cannot edit this message");
-        }
-
         MessageType messageType = message.getMessageType() != null ? message.getMessageType() : MessageType.TEXT;
+        boolean canFullEdit = roomPermissionService.canEditOrDeleteMessage(room, actorId, message.getSenderId());
+        if (!canFullEdit) {
+            boolean canToggleTodoDone = messageType == MessageType.TODO
+                    && isUserChatMember(message.getChatId(), actorId);
+            if (!canToggleTodoDone) {
+                throw new ForbiddenChatOperationException("You cannot edit this message");
+            }
+        }
         if (messageType == MessageType.POLL) {
             throw new IllegalArgumentException("Poll messages cannot be edited directly.");
         }
@@ -393,6 +399,9 @@ public class ChatMessageCommandService {
 
         if (isRich) {
             personalSpacePayloadValidator.validate(messageType, normalizedContent);
+            if (messageType == MessageType.TODO && !canFullEdit) {
+                personalSpacePayloadValidator.assertTodoDoneOnlyChange(message.getContent(), normalizedContent);
+            }
             message.setContent(normalizedContent);
             resultingType = messageType;
         } else if (normalizedContent.isBlank()) {
@@ -557,6 +566,7 @@ public class ChatMessageCommandService {
         roomEnrichmentService.notifyRoomMembersChatUpdated(room);
         webSocketService.sendMessageToChat(room.getId(), messageDTO);
         webSocketService.notifyUserJoinedChat(room.getId(), senderId);
+        privateChatContactRequestService.maybeCreateContactRequestForPrivateMessage(room, senderId);
         if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {
             return;
         }
@@ -604,6 +614,7 @@ public class ChatMessageCommandService {
 
         List<Long> recipientIds = room.getMemberIds().stream()
                 .filter(memberId -> !memberId.equals(savedMessage.getSenderId()))
+                .filter(memberId -> !shouldSkipPushBecauseClientIsViewingChat(memberId, savedMessage.getChatId()))
                 .toList();
 
         if (recipientIds.isEmpty()) {
@@ -632,5 +643,22 @@ public class ChatMessageCommandService {
                 .build();
 
         messageEventPublisher.publishMessageCreated(event);
+    }
+
+    /**
+     * Skip web push only when the recipient is actively viewing this chat (not AFK).
+     * Other chats still get push; the WebSocket path handles in-app toasts when visible.
+     */
+    private boolean shouldSkipPushBecauseClientIsViewingChat(Long userId, String chatId) {
+        if (userId == null || chatId == null || chatId.isBlank()) {
+            return false;
+        }
+        if (!redisService.isUserOnline(userId)) {
+            return false;
+        }
+        if (redisService.isUserAfk(userId)) {
+            return false;
+        }
+        return chatId.equals(redisService.getCurrentChat(userId));
     }
 }

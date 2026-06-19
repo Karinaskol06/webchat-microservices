@@ -11,7 +11,7 @@ import JoinInvitePage from './pages/JoinInvitePage';
 import useAuthStore from './store/useAuthStore';
 import useChatStore from './store/useChatStore';
 import authService from './services/authService';
-import { disconnectWebSocket } from './utils/websocket';
+import { acquireWebSocketConnection, disconnectWebSocket } from './utils/websocket';
 import chatService from './services/chatService';
 import pushNotificationService from './services/pushNotificationService';
 import { Box } from '@mui/material';
@@ -103,11 +103,28 @@ function App() {
   // this effect and corrupt the backend's record of the active endpoint.
   useEffect(() => {
     if (!isAuthenticated || !user?.id) {
-      return;
+      return undefined;
     }
+    const releaseConnection = acquireWebSocketConnection();
     pushNotificationService.ensureSubscription().catch((error) => {
       console.warn('Push subscription setup failed:', error);
     });
+    const stopMaintenance = pushNotificationService.startMaintenance();
+
+    const onVisibilityChange = () => {
+      if (!document.hidden) return;
+      const chatId = useChatStore.getState().currentChat?.id;
+      if (chatId) {
+        chatService.markAfk(chatId).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      stopMaintenance?.();
+      releaseConnection?.();
+    };
   }, [isAuthenticated, user?.id]);
 
   useEffect(() => {

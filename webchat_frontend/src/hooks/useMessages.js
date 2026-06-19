@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import useChatStore from '../store/useChatStore';
 import chatService from '../services/chatService';
 import { useShallow } from 'zustand/react/shallow';
-import { sendChatMessage, sendTypingEvent } from '../utils/websocket';
+import { ensureSendChatMessage, sendTypingEvent } from '../utils/websocket';
 import { getAttachmentUploadErrorMessage } from '../utils/attachmentUploadErrors';
 import { isChatAttachmentUploadUrl, validateAttachmentFiles } from '../utils/attachmentConstraints';
 import { WEBCHAT_CHAT_CREATED, WEBCHAT_MESSAGES_MARKED_READ } from '../constants/chatEvents';
 import { canPostInChannel } from '../utils/channelPermissions';
 import { parsePrivateMessageBlockedError, parseUserBanError } from '../utils/userBanError';
+import { createOptimisticMessageId } from '../utils/messageOptimistic';
+import useAuthStore from '../store/useAuthStore';
 import useTranslation from './useTranslation';
 
 const useMessages = (currentChat, composerRef) => {
@@ -20,6 +22,7 @@ const useMessages = (currentChat, composerRef) => {
   );
   const setCurrentChat = useChatStore((state) => state.setCurrentChat);
   const upsertChat = useChatStore((state) => state.upsertChat);
+  const user = useAuthStore((state) => state.user);
 
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [selectedAttachments, setSelectedAttachments] = useState([]);
@@ -135,7 +138,14 @@ const useMessages = (currentChat, composerRef) => {
   }, [currentChat?.id, setMessages]);
 
   const handleSendMessage = async (messageText) => {
-    if (!currentChat || isSending) return;
+    if (!currentChat) return;
+
+    const trimmedMessage = String(messageText ?? '').trim();
+    const hasText = trimmedMessage.length > 0;
+    const hasAttachments = selectedAttachments.length > 0;
+    if (!hasText && !hasAttachments) return;
+
+    if (isSending && hasAttachments) return;
 
     if (currentChat.messagingBlocked) {
       setComposerError(t('errors.composer.cannotMessageUser'));
@@ -144,10 +154,10 @@ const useMessages = (currentChat, composerRef) => {
 
     if (!canPostInChannel(currentChat)) return;
 
-    const trimmedMessage = String(messageText ?? '').trim();
-    const hasText = trimmedMessage.length > 0;
-    const hasAttachments = selectedAttachments.length > 0;
-    if (!hasText && selectedAttachments.length === 0) return;
+    const previousText = String(messageText ?? '');
+    const previousAttachments = [...selectedAttachments];
+    const previousReply = replyToMessage;
+    const isNewPrivateChat = !currentChat.id && String(currentChat.type || '').toUpperCase() === 'PRIVATE';
 
     if (!currentChat.id && hasAttachments) {
       setComposerError(
@@ -156,17 +166,76 @@ const useMessages = (currentChat, composerRef) => {
       return;
     }
 
-    const previousText = String(messageText ?? '');
-    const previousAttachments = [...selectedAttachments];
-    const previousReply = replyToMessage;
-    const isNewPrivateChat = !currentChat.id && String(currentChat.type || '').toUpperCase() === 'PRIVATE';
-
     if (hasAttachments) {
       const validation = validateAttachmentFiles(previousAttachments);
       if (!validation.ok) {
         setComposerError(validation.message);
         return;
       }
+    }
+
+    const reportSendFailure = (error, optimisticId) => {
+      if (optimisticId) {
+        useChatStore.getState().removeMessage(optimisticId);
+      }
+      composerRef?.current?.setDraft(previousText);
+      setSelectedAttachments(previousAttachments);
+      setReplyToMessage(previousReply);
+      const userBan = parseUserBanError(error);
+      const privateMessageBlocked = parsePrivateMessageBlockedError(error, { isNewPrivateChat });
+      const isUploadFailure =
+        previousAttachments.length > 0 &&
+        isChatAttachmentUploadUrl(error?.config?.url);
+      const message = privateMessageBlocked
+        ? t('errors.composer.cannotMessageUser')
+        : userBan?.message
+          ? userBan.message
+          : isUploadFailure
+            ? getAttachmentUploadErrorMessage(error, t('errors.composer.upload'))
+            : error?.message === 'WebSocket is not connected'
+              ? t('errors.composer.notConnected')
+              : t('errors.composer.send');
+      if (!privateMessageBlocked && !userBan) {
+        console.error('Failed to send message:', error);
+      }
+      if (privateMessageBlocked) {
+        setCurrentChat({ ...currentChat, messagingBlocked: true });
+      }
+      setComposerError(message);
+    };
+
+    // Existing chat, text-only: optimistic UI immediately; do not block the composer.
+    if (currentChat.id && hasText && !hasAttachments) {
+      setComposerError('');
+      setReplyToMessage(null);
+      const activeChatId = currentChat.id;
+      const optimisticId = createOptimisticMessageId();
+      useChatStore.getState().addMessage({
+        id: optimisticId,
+        chatId: String(activeChatId),
+        content: trimmedMessage,
+        messageType: 'TEXT',
+        timestamp: new Date().toISOString(),
+        senderId: user?.id,
+        sender: user,
+        attachments: [],
+        replyToMessageId: previousReply?.id || null,
+      });
+
+      void ensureSendChatMessage({
+        chatId: activeChatId,
+        content: trimmedMessage,
+        attachmentIds: [],
+        type: 'TEXT',
+        replyToMessageId: previousReply?.id || null,
+      })
+        .then(() => {
+          sendTypingEvent({ chatId: activeChatId, typing: false });
+        })
+        .catch((error) => {
+          reportSendFailure(error, optimisticId);
+        });
+      return;
     }
 
     setComposerError('');
@@ -181,7 +250,6 @@ const useMessages = (currentChat, composerRef) => {
       if (hasAttachments) {
         const uploaded = await chatService.uploadAttachments(currentChat.id, previousAttachments);
         attachmentIds = uploaded.map((attachment) => attachment.id).filter(Boolean);
-        console.log('Attachments uploaded, IDs:', attachmentIds);
       }
 
       if (!currentChat.id) {
@@ -198,57 +266,28 @@ const useMessages = (currentChat, composerRef) => {
           new CustomEvent(WEBCHAT_CHAT_CREATED, { detail: { chat: createdChat } }),
         );
 
-        const sent = sendChatMessage({
+        await ensureSendChatMessage({
           chatId: activeChatId,
           content: hasText ? trimmedMessage : null,
           attachmentIds,
           type: hasAttachments ? 'MIXED' : 'TEXT',
-          replyToMessageId: replyToMessage?.id || null
+          replyToMessageId: previousReply?.id || null,
         });
-        if (!sent) {
-          throw new Error('WebSocket is not connected');
-        }
       } else {
-        const sent = sendChatMessage({
+        await ensureSendChatMessage({
           chatId: currentChat.id,
           content: hasText ? trimmedMessage : null,
           attachmentIds,
           type: hasAttachments ? 'MIXED' : 'TEXT',
-          replyToMessageId: replyToMessage?.id || null
+          replyToMessageId: previousReply?.id || null,
         });
-        if (!sent) {
-          throw new Error('WebSocket is not connected');
-        }
       }
 
       if (activeChatId) {
         sendTypingEvent({ chatId: activeChatId, typing: false });
       }
     } catch (error) {
-      composerRef?.current?.setDraft(previousText);
-      setSelectedAttachments(previousAttachments);
-      setReplyToMessage(previousReply);
-      const userBan = parseUserBanError(error);
-      const privateMessageBlocked = parsePrivateMessageBlockedError(error, { isNewPrivateChat });
-      const isUploadFailure =
-        previousAttachments.length > 0 &&
-        isChatAttachmentUploadUrl(error?.config?.url);
-      const message = privateMessageBlocked
-        ? t('errors.composer.cannotMessageUser')
-        : userBan?.message
-        ? userBan.message
-        : isUploadFailure
-        ? getAttachmentUploadErrorMessage(error, t('errors.composer.upload'))
-        : error?.message === 'WebSocket is not connected'
-          ? t('errors.composer.notConnected')
-          : t('errors.composer.send');
-      if (!privateMessageBlocked && !userBan) {
-        console.error('Failed to send message:', error);
-      }
-      if (privateMessageBlocked) {
-        setCurrentChat({ ...currentChat, messagingBlocked: true });
-      }
-      setComposerError(message);
+      reportSendFailure(error, null);
     } finally {
       setIsSending(false);
     }

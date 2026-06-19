@@ -829,6 +829,7 @@ const MessageItem = ({
                         <RichMessageContent
                             message={message}
                             editable={canEditThis}
+                            canToggleTasks={isTodoList}
                             onUpdate={handleRichUpdate}
                             onDelete={canDeleteThis ? () => handleDeleteMessage().catch(() => {}) : undefined}
                             currentUserId={currentUserId}

@@ -65,6 +65,14 @@ public class ContactService {
         return friendRequestRepository.findByToUserIdAndStateOrderByCreatedAtDesc(userId, ContactRequestState.PENDING);
     }
 
+    public void removeContact(Long userId, Long contactUserId) {
+        validatePair(userId, contactUserId);
+        if (!userContactRepository.existsByUserIdAndContactUserId(userId, contactUserId)) {
+            throw new IllegalArgumentException("Contact not found");
+        }
+        userContactRepository.deleteByUserIdAndContactUserId(userId, contactUserId);
+    }
+
     @Transactional(readOnly = true)
     public List<UserDTO> getContacts(Long userId) {
         return userContactRepository.findByUserIdOrderByIdDesc(userId).stream()

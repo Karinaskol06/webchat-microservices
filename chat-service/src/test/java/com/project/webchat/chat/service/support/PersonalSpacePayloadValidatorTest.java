@@ -45,6 +45,43 @@ class PersonalSpacePayloadValidatorTest {
     }
 
     @Test
+    void assertTodoDoneOnlyChange_allowsDoneToggle() {
+        String before = """
+                {"tasks":[{"id":"t1","text":"Buy milk","done":false}]}
+                """;
+        String after = """
+                {"tasks":[{"id":"t1","text":"Buy milk","done":true}]}
+                """;
+        validator.assertTodoDoneOnlyChange(before, after);
+    }
+
+    @Test
+    void assertTodoDoneOnlyChange_rejectsTextChange() {
+        String before = """
+                {"tasks":[{"id":"t1","text":"Buy milk","done":false}]}
+                """;
+        String after = """
+                {"tasks":[{"id":"t1","text":"Buy bread","done":false}]}
+                """;
+        assertThatThrownBy(() -> validator.assertTodoDoneOnlyChange(before, after))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("complete or incomplete");
+    }
+
+    @Test
+    void assertTodoDoneOnlyChange_rejectsAddedTask() {
+        String before = """
+                {"tasks":[{"id":"t1","text":"Buy milk","done":false}]}
+                """;
+        String after = """
+                {"tasks":[{"id":"t1","text":"Buy milk","done":false},{"id":"t2","text":"Eggs","done":false}]}
+                """;
+        assertThatThrownBy(() -> validator.assertTodoDoneOnlyChange(before, after))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("complete or incomplete");
+    }
+
+    @Test
     void isRichMessageType_identifiesRichTypes() {
         assertThat(PersonalSpacePayloadValidator.isRichMessageType(MessageType.TODO)).isTrue();
         assertThat(PersonalSpacePayloadValidator.isRichMessageType(MessageType.POLL)).isTrue();

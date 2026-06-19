@@ -116,7 +116,7 @@ public class KafkaConsumerConfig {
                 kafkaTemplate,
                 (record, ex) -> new org.apache.kafka.common.TopicPartition(dlqTopic, record.partition())
         );
-        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(2000L, 3L));
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(400L, 6L));
         errorHandler.addNotRetryableExceptions(PermanentNotificationException.class, IllegalArgumentException.class);
         return errorHandler;
     }
@@ -128,6 +128,7 @@ public class KafkaConsumerConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
         factory.setCommonErrorHandler(errorHandler);
+        factory.setConcurrency(2);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
         return factory;
     }

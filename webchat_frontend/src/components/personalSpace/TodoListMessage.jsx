@@ -13,7 +13,14 @@ import { chatColors, chatRadii, themePrimaryAlpha } from '../../theme/chatDesign
 import { serializePayload } from '../../utils/personalSpace';
 import { useTodoTaskDrafts } from '../../hooks/useTodoTaskDrafts';
 
-const TodoListMessage = ({ payload, editable, onUpdate, onDelete, messageId }) => {
+const TodoListMessage = ({
+  payload,
+  editable,
+  canToggleTasks = false,
+  onUpdate,
+  onDelete,
+  messageId,
+}) => {
   const tasks = Array.isArray(payload?.tasks) ? payload.tasks : [];
   const [newTaskText, setNewTaskText] = useState('');
   const { draftById, setDraft, onFocus, onBlur, mergeDrafts } = useTodoTaskDrafts(
@@ -53,6 +60,8 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete, messageId }) =
     persist([...mergeDrafts(), { id: crypto.randomUUID(), text, done: false }]);
     setNewTaskText('');
   };
+
+  const canCheckTasks = editable || (canToggleTasks && Boolean(onUpdate));
 
   const taskTextSx = {
     wordBreak: 'break-word',
@@ -101,7 +110,7 @@ const TodoListMessage = ({ payload, editable, onUpdate, onDelete, messageId }) =
           <Checkbox
             size="small"
             checked={Boolean(task.done)}
-            disabled={!editable}
+            disabled={!canCheckTasks}
             onChange={(e) => updateTask(task.id, { done: e.target.checked })}
             sx={{ p: 0.25, mt: 0.25 }}
           />

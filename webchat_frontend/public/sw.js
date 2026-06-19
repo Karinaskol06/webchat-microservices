@@ -1,23 +1,108 @@
-/* global clients */
+/* global clients, indexedDB */
 
 // Force a freshly-installed service worker to skip the "waiting" phase.
-// Without this, a NEW sw.js sits idle until every tab/window for the
-// origin is closed — meaning the OLD service worker (which may not have
-// a push handler at all) keeps receiving push events and silently
-// dropping them. This is what causes "notifications work in incognito
-// but not in the regular profile" type asymmetries.
 self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-// As soon as the new service worker activates, take control of every
-// existing client (open tab/window) so the next push event is handled
-// by THIS sw.js, not by the previous version still cached in the page.
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
 const FALLBACK_AVATAR_ICON_PATH = '/avatar-stub.svg';
+const IDB_NAME = 'webchat-notification-idempotency';
+const IDB_STORE = 'keys';
+const IDB_VERSION = 1;
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+
+const openIdempotencyDb = () =>
+  new Promise((resolve, reject) => {
+    const request = indexedDB.open(IDB_NAME, IDB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: 'key' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+
+const pruneIdempotencyStore = (store, now) => {
+  const expireBefore = now - IDEMPOTENCY_TTL_MS;
+  const cursor = store.openCursor();
+  return new Promise((resolve) => {
+    const step = () => {
+      cursor.onsuccess = (event) => {
+        const c = event.target.result;
+        if (!c) {
+          resolve();
+          return;
+        }
+        if ((c.value?.at ?? 0) < expireBefore) {
+          c.delete();
+        }
+        c.continue();
+      };
+      cursor.onerror = () => resolve();
+    };
+    step();
+  });
+};
+
+/** Returns true when this key is newly claimed and the notification may be shown. */
+const claimNotificationIdempotencyKey = async (key) => {
+  if (!key) return true;
+  const db = await openIdempotencyDb();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    const getReq = store.get(key);
+    let shouldClaim = true;
+
+    getReq.onsuccess = () => {
+      const existing = getReq.result;
+      if (existing && now - existing.at < IDEMPOTENCY_TTL_MS) {
+        shouldClaim = false;
+        return;
+      }
+      store.put({ key, at: now });
+    };
+    getReq.onerror = () => reject(getReq.error);
+
+    tx.oncomplete = async () => {
+      if (shouldClaim) {
+        try {
+          const pruneTx = db.transaction(IDB_STORE, 'readwrite');
+          await pruneIdempotencyStore(pruneTx.objectStore(IDB_STORE), now);
+        } catch {
+          /* best-effort */
+        }
+      }
+      resolve(shouldClaim);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
+const buildIdempotencyKey = (notificationType, notificationData) => {
+  const messageId = notificationData.messageId;
+  if (messageId != null && String(messageId).length > 0) {
+    return `notification:${notificationType}:${messageId}`;
+  }
+  if (notificationData.idempotencyKey) {
+    return String(notificationData.idempotencyKey);
+  }
+  if (notificationType === 'room-member-invited') {
+    return `notification:room-member-invited:${notificationData.inviteId || notificationData.roomId || 'pending'}`;
+  }
+  if (notificationData.chatId) {
+    return `notification:chat:${notificationData.chatId}`;
+  }
+  return 'notification:message';
+};
 
 const resolveAbsoluteNotificationIcon = (candidate) => {
   if (!candidate || typeof candidate !== 'string') return null;
@@ -31,6 +116,53 @@ const resolveAbsoluteNotificationIcon = (candidate) => {
     return null;
   }
 };
+
+const hasVisibleWindowClient = async () => {
+  const windowClients = await clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+  return windowClients.some((client) => client.visibilityState === 'visible');
+};
+
+const showNotificationIdempotent = async (idempotencyKey, title, options, { allowWhenVisible = false } = {}) => {
+  if (!allowWhenVisible && (await hasVisibleWindowClient())) {
+    return false;
+  }
+
+  const claimed = await claimNotificationIdempotencyKey(idempotencyKey);
+  if (!claimed) {
+    return false;
+  }
+
+  const tag = options?.tag || idempotencyKey;
+  const existing = await self.registration.getNotifications({ tag });
+  if (existing.length > 0) {
+    return false;
+  }
+
+  await self.registration.showNotification(title, {
+    ...options,
+    tag,
+    renotify: false,
+  });
+  return true;
+};
+
+self.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type !== 'SHOW_MESSAGE_NOTIFICATION') {
+    return;
+  }
+
+  const idempotencyKey = data.idempotencyKey || data.options?.data?.idempotencyKey;
+  const title = data.title || 'New message';
+  const options = data.options || {};
+
+  event.waitUntil(
+    showNotificationIdempotent(idempotencyKey, title, options, { allowWhenVisible: true }),
+  );
+});
 
 self.addEventListener('push', (event) => {
   if (!event.data) {
@@ -63,39 +195,25 @@ self.addEventListener('push', (event) => {
   const avatarIcon =
     resolveAbsoluteNotificationIcon(avatarRaw) ||
     new URL(FALLBACK_AVATAR_ICON_PATH, self.location.origin).toString();
-  const autoCloseMs = Number(notificationData.autoCloseMs) || 10000;
-  const notificationTag =
-    notificationType === 'room-member-invited'
-      ? `invite-${notificationData.inviteId || notificationData.roomId || 'pending'}`
-      : notificationData.chatId || 'chat-message';
+  const idempotencyKey = buildIdempotencyKey(notificationType, notificationData);
   const options = {
     body: payload.body || 'You have a new message',
     icon: avatarIcon,
     badge: avatarIcon,
-    data: notificationData,
+    data: { ...notificationData, idempotencyKey },
     actions: payload.actions || [],
-    tag: notificationTag,
-    renotify: true,
+    tag: idempotencyKey,
+    renotify: false,
     requireInteraction: false,
   };
 
   event.waitUntil(
-    self.registration
-      .showNotification(payload.title || 'New message', options)
-      .then(
-        () =>
-          new Promise((resolve) => {
-            setTimeout(() => {
-              self.registration
-                .getNotifications({ tag: notificationTag })
-                .then((notifications) => {
-                  notifications.forEach((notification) => notification.close());
-                  resolve();
-                })
-                .catch(() => resolve());
-            }, autoCloseMs);
-          })
-      )
+    showNotificationIdempotent(
+      idempotencyKey,
+      payload.title || senderDisplayName,
+      options,
+      { allowWhenVisible: true },
+    ),
   );
 });
 
@@ -143,6 +261,6 @@ self.addEventListener('notificationclick', (event) => {
         return client.focus();
       }
       return clients.openWindow(targetUrl.toString());
-    })
+    }),
   );
 });
