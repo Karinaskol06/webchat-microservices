@@ -1,10 +1,39 @@
 import React, { useMemo } from 'react';
-import { Box } from '@mui/material';
+import { Box, Link } from '@mui/material';
 import { chatColors, themePrimaryAlpha } from '../../theme/chatDesignTokens';
+import { parseLinkSegments } from '../../utils/linkifyMessageText';
+import { messageLinkSx } from './LinkifiedMessageText';
 
 /**
  * Renders text with optional substring highlights (case-insensitive match positions).
  */
+const renderLinkifiedChunk = (chunk, keyPrefix) => {
+  const segments = parseLinkSegments(chunk);
+  if (segments.length === 1 && segments[0].type === 'text') {
+    return chunk;
+  }
+
+  return segments.map((segment, index) => {
+    if (segment.type === 'link') {
+      return (
+        <Link
+          key={`${keyPrefix}-link-${index}`}
+          href={segment.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          underline="hover"
+          sx={messageLinkSx}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {segment.value}
+        </Link>
+      );
+    }
+
+    return <span key={`${keyPrefix}-text-${index}`}>{segment.value}</span>;
+  });
+};
+
 const HighlightedMessageText = ({
   text = '',
   ranges = [],
@@ -13,13 +42,13 @@ const HighlightedMessageText = ({
 }) => {
   const nodes = useMemo(() => {
     const value = String(text ?? '');
-    if (!ranges.length) return value;
+    if (!ranges.length) return renderLinkifiedChunk(value, 'full');
 
     const sorted = [...ranges]
       .filter((r) => r && r.end > r.start && r.start >= 0 && r.end <= value.length)
       .sort((a, b) => a.start - b.start);
 
-    if (!sorted.length) return value;
+    if (!sorted.length) return renderLinkifiedChunk(value, 'full');
 
     const parts = [];
     let cursor = 0;
@@ -35,7 +64,9 @@ const HighlightedMessageText = ({
       if (end <= start) continue;
 
       if (start > cursor) {
-        parts.push(<span key={`t-${cursor}`}>{value.slice(cursor, start)}</span>);
+        parts.push(
+          <span key={`t-${cursor}`}>{renderLinkifiedChunk(value.slice(cursor, start), `t-${cursor}`)}</span>,
+        );
       }
 
       const active = isActive(range);
@@ -59,7 +90,9 @@ const HighlightedMessageText = ({
     }
 
     if (cursor < value.length) {
-      parts.push(<span key={`t-${cursor}-end`}>{value.slice(cursor)}</span>);
+      parts.push(
+        <span key={`t-${cursor}-end`}>{renderLinkifiedChunk(value.slice(cursor), `t-${cursor}-end`)}</span>,
+      );
     }
 
     return parts;

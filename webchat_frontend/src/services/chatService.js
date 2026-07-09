@@ -177,12 +177,13 @@ const chatService = {
     }
   },
 
-  updateRoomProfile: async (roomId, { groupName, description, groupPhoto } = {}) => {
+  updateRoomProfile: async (roomId, { groupName, description, groupPhoto, visibility } = {}) => {
     try {
       const body = {};
       if (groupName !== undefined) body.groupName = groupName;
       if (description !== undefined) body.description = description;
       if (groupPhoto !== undefined) body.groupPhoto = groupPhoto;
+      if (visibility !== undefined) body.visibility = visibility;
       const response = await api.patch(
         `/api/chat/rooms/${encodeURIComponent(roomId)}`,
         body,
@@ -416,7 +417,11 @@ const chatService = {
   // delete a message
   deleteMessage: async (messageId) => {
     try {
-      await api.delete(`/api/chat/messages/${messageId}`);
+      const mid = messageId != null ? String(messageId).trim() : '';
+      if (!mid || mid === 'undefined' || mid === 'null') {
+        throw new Error('Message id is required');
+      }
+      await api.delete(`/api/chat/messages/${encodeURIComponent(mid)}`);
     } catch (error) {
       throw error.response?.data || error.message;
     }
@@ -424,7 +429,11 @@ const chatService = {
 
   editMessage: async (messageId, content) => {
     try {
-      const response = await api.put(`/api/chat/messages/${messageId}`, { content });
+      const mid = messageId != null ? String(messageId).trim() : '';
+      if (!mid || mid === 'undefined' || mid === 'null') {
+        throw new Error('Message id is required');
+      }
+      const response = await api.put(`/api/chat/messages/${encodeURIComponent(mid)}`, { content });
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;

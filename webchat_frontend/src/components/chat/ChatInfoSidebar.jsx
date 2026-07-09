@@ -32,6 +32,7 @@ import { useRoomSharedMedia } from '../../hooks/useRoomSharedMedia';
 import { useRoomMembersPresence } from '../../hooks/useRoomMembersPresence';
 import {
   chatColors,
+  chatDestructiveMenuItemSx,
   chatGlassListSx,
   chatHideScrollbarSx,
   chatLayout,
@@ -265,6 +266,10 @@ const ChatInfoSidebar = ({
   showMembersPanel = true,
   groupInfoOpen = true,
   membersOpen = true,
+  groupInfoFolded = false,
+  membersFolded = false,
+  onToggleGroupInfoFold,
+  onToggleMembersFold,
   onCloseGroupInfo,
   onCloseMembers,
 }) => {
@@ -281,8 +286,6 @@ const ChatInfoSidebar = ({
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [roomAccessVerified, setRoomAccessVerified] = useState(false);
-  const [mediaFolded, setMediaFolded] = useState(false);
-  const [membersFolded, setMembersFolded] = useState(false);
   const [expandedSections, setExpandedSections] = useState(['photos']);
   const [memberMenuAnchor, setMemberMenuAnchor] = useState(null);
   const [memberMenuTarget, setMemberMenuTarget] = useState(null);
@@ -315,7 +318,7 @@ const ChatInfoSidebar = ({
   });
   const membersPanelVisible = showMembersPanel && membersOpen;
   const bothPanelsOpen = groupInfoOpen && membersPanelVisible;
-  const groupInfoExpanded = groupInfoOpen && !mediaFolded;
+  const groupInfoExpanded = groupInfoOpen && !groupInfoFolded;
   const membersExpanded = membersPanelVisible && !membersFolded;
   const anyPanelExpanded = groupInfoExpanded || membersExpanded;
 
@@ -357,8 +360,6 @@ const ChatInfoSidebar = ({
   };
 
   useEffect(() => {
-    setMediaFolded(false);
-    setMembersFolded(false);
     setExpandedSections(['photos']);
   }, [roomId]);
 
@@ -533,8 +534,8 @@ const ChatInfoSidebar = ({
       {groupInfoOpen ? (
         <SidePanel
           title={infoPanelTitle}
-          folded={mediaFolded}
-          onToggleFold={() => setMediaFolded((v) => !v)}
+          folded={groupInfoFolded}
+          onToggleFold={onToggleGroupInfoFold}
           onClose={closeMediaPanel}
           ariaLabel={infoPanelTitle}
           flex={groupInfoFlex}
@@ -649,7 +650,7 @@ const ChatInfoSidebar = ({
             count: data?.memberCount ?? members.length,
           })}
           folded={membersFolded}
-          onToggleFold={() => setMembersFolded((v) => !v)}
+          onToggleFold={onToggleMembersFold}
           onClose={closeMembersPanel}
           ariaLabel={t('sidebar.members.ariaLabel')}
           flex={membersFlex}
@@ -804,7 +805,7 @@ const ChatInfoSidebar = ({
           onClick={() => {
             requestBanMember();
           }}
-          sx={{ color: 'error.main' }}
+          sx={chatDestructiveMenuItemSx}
         >
           Ban from {chatType === 'CHANNEL' ? 'channel' : 'group'}
         </MenuItem>

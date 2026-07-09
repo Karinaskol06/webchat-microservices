@@ -28,22 +28,18 @@ const ResetPassword = () => {
     confirmPassword: '',
   });
   const [error, setError] = useState('');
-  const [errorShake, setErrorShake] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const showError = (message) => {
     setSuccessMessage('');
     setError(message);
-    setErrorShake(true);
-    window.setTimeout(() => setErrorShake(false), 450);
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError('');
-    setErrorShake(false);
   };
 
   const handleSubmit = async (e) => {
@@ -112,7 +108,6 @@ const ResetPassword = () => {
   return (
     <AuthPageLayout
       title={t('auth.reset.title')}
-      shake={errorShake}
       footer={
         successMessage ? (
           <Button
@@ -134,7 +129,7 @@ const ResetPassword = () => {
         )
       }
     >
-      <AuthErrorAlert message={error} shake={errorShake} />
+      <AuthErrorAlert message={error} />
 
       {successMessage ? (
         <AuthAnimatedItem index={0}>

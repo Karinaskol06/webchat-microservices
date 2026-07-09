@@ -3,6 +3,7 @@ import {
   createOptimisticMessageId,
   isOptimisticMessageId,
   removeOneMatchingOptimistic,
+  resolveMessageId,
 } from './messageOptimistic';
 
 describe('messageOptimistic', () => {
@@ -12,6 +13,14 @@ describe('messageOptimistic', () => {
     expect(isOptimisticMessageId(a)).toBe(true);
     expect(isOptimisticMessageId(b)).toBe(true);
     expect(a).not.toBe(b);
+  });
+
+  it('resolveMessageId prefers id then _id then messageId', () => {
+    expect(resolveMessageId({ id: 'a' })).toBe('a');
+    expect(resolveMessageId({ _id: 'b' })).toBe('b');
+    expect(resolveMessageId({ messageId: 'c' })).toBe('c');
+    expect(resolveMessageId({ id: 'optimistic-1' })).toBe('optimistic-1');
+    expect(resolveMessageId({})).toBeNull();
   });
 
   it('removeOneMatchingOptimistic drops only the first fifo match', () => {

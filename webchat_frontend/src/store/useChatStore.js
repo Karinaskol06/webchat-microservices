@@ -10,7 +10,7 @@ import {
   removeOneMatchingOptimistic,
 } from '../utils/messageOptimistic';
 
-const messageIdKey = (message) => String(message?.id ?? message?._id ?? '');
+const messageIdKey = (message) => String(message?.id ?? message?._id ?? message?.messageId ?? '');
 
 const chatLastPreviewTimeMs = (chat) => {
   const raw = chat?.lastMessageTime ?? chat?.lastActivity ?? null;
@@ -108,6 +108,12 @@ const useChatStore = create((set, get) => ({
   normalizeMessage: (m) => {
     if (!m || typeof m !== 'object') return m;
     const next = { ...m };
+    if ((m.id == null || m.id === '') && m._id != null && m._id !== '') {
+      next.id = m._id;
+    }
+    if ((next.id == null || next.id === '') && m.messageId != null && m.messageId !== '') {
+      next.id = m.messageId;
+    }
     if (typeof m.read === 'boolean' && typeof m.isRead !== 'boolean') {
       next.isRead = m.read;
     }
@@ -346,11 +352,11 @@ const useChatStore = create((set, get) => ({
   markMessagesRead: (messageIds) => {
     const ids = Array.isArray(messageIds) ? messageIds : [messageIds];
     if (ids.length === 0) return;
-    const idSet = new Set(ids.filter(Boolean));
+    const idSet = new Set(ids.filter(Boolean).map((id) => String(id)));
     if (idSet.size === 0) return;
     set((state) => ({
       messages: state.messages.map((m) =>
-        idSet.has(m.id)
+        idSet.has(messageIdKey(m))
           ? { ...m, isRead: true, read: true, readAt: m.readAt || new Date().toISOString() }
           : m
       ),
@@ -480,7 +486,7 @@ const useChatStore = create((set, get) => ({
     const key = String(messageId);
     set((state) => ({
       messages: state.messages.map(msg =>
-          String(msg.id ?? msg._id) === key
+          messageIdKey(msg) === key
               ? {
                   ...msg,
                   content: newContent ?? '',
@@ -516,7 +522,7 @@ const useChatStore = create((set, get) => ({
     recordSharedMediaAttachmentDeleted(currentChat?.id, messageId, attachmentId);
     set((state) => ({
       messages: state.messages.map(msg =>
-          msg.id === messageId
+          messageIdKey(msg) === String(messageId)
               ? {
                 ...msg,
                 attachments: msg.attachments?.filter(a => a.id !== attachmentId) || []
@@ -530,7 +536,7 @@ const useChatStore = create((set, get) => ({
   addAttachment: (messageId, attachment) => {
     set((state) => ({
       messages: state.messages.map(msg =>
-          msg.id === messageId
+          messageIdKey(msg) === String(messageId)
               ? {
                 ...msg,
                 attachments: [...(msg.attachments || []), attachment]
@@ -543,7 +549,7 @@ const useChatStore = create((set, get) => ({
   updateMessageReactions: (messageId, reactions) => {
     set((state) => ({
       messages: state.messages.map((msg) =>
-        String(msg.id) === String(messageId) ? { ...msg, reactions: reactions ?? [] } : msg,
+        messageIdKey(msg) === String(messageId) ? { ...msg, reactions: reactions ?? [] } : msg,
       ),
     }));
   },

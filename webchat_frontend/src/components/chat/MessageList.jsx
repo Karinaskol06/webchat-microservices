@@ -9,8 +9,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Box } from '@mui/material';
-import { chatColors, chatHideScrollbarSx } from '../../theme/chatDesignTokens';
+import { Box, Typography } from '@mui/material';
+import { chatColors, chatHideScrollbarSx, chatRadii } from '../../theme/chatDesignTokens';
+import { CHAT_MESSAGE_ENTER_MS } from '../../theme/chatAnimations';
 import MessageItem from './MessageItem';
 import MessageUnreadSeparator from './MessageUnreadSeparator';
 import PersonalSpaceStickyLayer from '../personalSpace/PersonalSpaceStickyLayer';
@@ -19,6 +20,13 @@ import { collectChatImageAttachments } from '../../utils/imageAttachments';
 import { openImageLightbox } from '../../utils/openImageLightbox';
 import { parseRichPayload } from '../../utils/personalSpace';
 import { STICKY_NOTE_SIZE } from '../../utils/stickyNoteLayout';
+import {
+  isOptimisticMessageId,
+  messageSendSignature,
+} from '../../utils/messageOptimistic';
+import { formatMessageDayLabel } from '../../utils/messageDate';
+import { buildMessageDayMeta, useMessageScrollDateTag } from '../../hooks/useMessageScrollDateTag';
+import useTranslation from '../../hooks/useTranslation';
 
 const HIGHLIGHT_MS = 2200;
 
@@ -44,9 +52,11 @@ const MessageList = forwardRef(function MessageList(
     activeInChatSearchMatch = null,
     onOpenEmojiSidebarForReaction,
     isPersonalSpace = false,
+    messagesLoading = false,
   },
   ref,
 ) {
+  const { t } = useTranslation();
   const safeMessages = Array.isArray(messages) ? messages : [];
   const chatImages = useMemo(
     () => collectChatImageAttachments(safeMessages),
@@ -62,6 +72,83 @@ const MessageList = forwardRef(function MessageList(
   const scrolledToUnreadRef = useRef(false);
   const scrollVisitKeyRef = useRef('');
   const tailSignatureRef = useRef({ count: 0, lastId: null });
+  const seenMessageIdsRef = useRef(new Set());
+  const hydratedRef = useRef(false);
+  const prevMessagesRef = useRef([]);
+  const [enteringMessageIds, setEnteringMessageIds] = useState(() => new Set());
+  const formatDayLabel = useCallback(
+    (timestamp) => formatMessageDayLabel(timestamp, t),
+    [t],
+  );
+  const messagesWithDayMeta = useMemo(
+    () => buildMessageDayMeta(safeMessages, formatDayLabel),
+    [safeMessages, formatDayLabel],
+  );
+  const { scrollDateLabel, showScrollDate } =
+    useMessageScrollDateTag(viewportRef, !isPersonalSpace);
+
+  useEffect(() => {
+    seenMessageIdsRef.current = new Set();
+    hydratedRef.current = false;
+    prevMessagesRef.current = [];
+    setEnteringMessageIds(new Set());
+  }, [chatId]);
+
+  useLayoutEffect(() => {
+    if (messagesLoading || hydratedRef.current) return;
+
+    safeMessages.forEach((message) => {
+      const id = messageRowId(message);
+      if (id) seenMessageIdsRef.current.add(id);
+    });
+    hydratedRef.current = true;
+    prevMessagesRef.current = safeMessages;
+  }, [messagesLoading, safeMessages]);
+
+  useLayoutEffect(() => {
+    if (!hydratedRef.current || messagesLoading) return;
+
+    const prevOptimisticSignatures = new Set(
+      prevMessagesRef.current
+        .filter((message) => isOptimisticMessageId(message.id ?? message._id))
+        .map((message) => messageSendSignature(message))
+        .filter(Boolean),
+    );
+
+    const newEnteringIds = [];
+    safeMessages.forEach((message) => {
+      const id = messageRowId(message);
+      if (!id || seenMessageIdsRef.current.has(id)) return;
+
+      const signature = messageSendSignature(message);
+      if (
+        !isOptimisticMessageId(id) &&
+        signature &&
+        prevOptimisticSignatures.has(signature)
+      ) {
+        seenMessageIdsRef.current.add(id);
+        return;
+      }
+
+      newEnteringIds.push(id);
+      seenMessageIdsRef.current.add(id);
+    });
+
+    prevMessagesRef.current = safeMessages;
+
+    if (newEnteringIds.length === 0) return undefined;
+
+    setEnteringMessageIds((current) => new Set([...current, ...newEnteringIds]));
+    const timer = window.setTimeout(() => {
+      setEnteringMessageIds((current) => {
+        const next = new Set(current);
+        newEnteringIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, CHAT_MESSAGE_ENTER_MS + 40);
+
+    return () => window.clearTimeout(timer);
+  }, [messagesLoading, safeMessages]);
 
   const isNearBottom = useCallback((threshold = 96) => {
     const vp = viewportRef.current;
@@ -181,6 +268,7 @@ const MessageList = forwardRef(function MessageList(
     <Box
       ref={viewportRef}
       sx={{
+        position: 'relative',
         flex: 1,
         minHeight: 0,
         overflowY: 'auto',
@@ -189,6 +277,47 @@ const MessageList = forwardRef(function MessageList(
         ...chatHideScrollbarSx,
       }}
     >
+      {!isPersonalSpace && scrollDateLabel ? (
+        <Box
+          aria-live="polite"
+          aria-atomic="true"
+          sx={{
+            position: 'absolute',
+            top: 10,
+            left: 0,
+            right: 0,
+            zIndex: 4,
+            display: 'flex',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            opacity: showScrollDate ? 1 : 0,
+            transform: showScrollDate ? 'translateY(0)' : 'translateY(-6px)',
+            transition: 'opacity 0.22s ease, transform 0.22s ease',
+            '@media (prefers-reduced-motion: reduce)': {
+              transition: 'none',
+              transform: 'none',
+            },
+          }}
+        >
+          <Typography
+            variant="caption"
+            component="span"
+            sx={{
+              px: 1.5,
+              py: 0.4,
+              borderRadius: chatRadii.pill,
+              bgcolor: 'rgba(255, 255, 255, 0.08)',
+              backdropFilter: 'blur(8px)',
+              color: chatColors.textSecondary,
+              fontWeight: 600,
+              letterSpacing: 0.02,
+              boxShadow: '0 2px 10px rgba(0, 0, 0, 0.18)',
+            }}
+          >
+            {scrollDateLabel}
+          </Typography>
+        </Box>
+      ) : null}
       <ChatAreaMetricsProvider viewportRef={viewportRef}>
         <div
           ref={contentRef}
@@ -202,7 +331,7 @@ const MessageList = forwardRef(function MessageList(
             contentRef={contentRef}
           />
         ) : null}
-        {safeMessages.map((message, index) => {
+        {messagesWithDayMeta.map(({ message, showDaySeparator, dayKey, dayLabel, separatorLabel }, index) => {
           const mid = messageRowId(message);
           const showOpen = openSeparatorIndex === index;
           const showLive =
@@ -212,13 +341,25 @@ const MessageList = forwardRef(function MessageList(
           const combined = showOpen && showLive;
           return (
             <Fragment key={mid || `idx-${index}`}>
-              {combined && <MessageUnreadSeparator label="New messages" />}
-              {!combined && showOpen && <MessageUnreadSeparator label="Unread messages" />}
-              {!combined && showLive && <MessageUnreadSeparator label="New messages" />}
-              <MessageItem
+              {showDaySeparator ? (
+                <MessageUnreadSeparator
+                  variant="date"
+                  label={separatorLabel}
+                  dayKey={dayKey}
+                />
+              ) : null}
+              {combined && <MessageUnreadSeparator label={t('message.unreadSeparator.new')} />}
+              {!combined && showOpen && <MessageUnreadSeparator label={t('message.unreadSeparator')} />}
+              {!combined && showLive && <MessageUnreadSeparator label={t('message.unreadSeparator.new')} />}
+              <Box
+                data-message-day-key={dayKey ?? undefined}
+                data-message-day-label={dayLabel ?? undefined}
+              >
+                <MessageItem
                 message={message}
                 currentUserId={currentUserId}
                 room={room}
+                isEntering={enteringMessageIds.has(mid)}
                 onReply={onReply}
                 onOpenForward={onOpenForward}
                 onOpenForwardedProfile={onOpenForwardedProfile}
@@ -238,6 +379,7 @@ const MessageList = forwardRef(function MessageList(
                 isPersonalSpace={isPersonalSpace}
                 onOpenImage={handleOpenImage}
               />
+              </Box>
             </Fragment>
           );
         })}

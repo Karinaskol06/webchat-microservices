@@ -16,6 +16,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import BinaryChoiceField from './BinaryChoiceField';
 import PollStepperField from './PollStepperField';
 import { createPollPayload, serializePayload } from '../../utils/personalSpace';
+import { chatHideScrollbarSx } from '../../theme/chatDesignTokens';
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 12;
@@ -120,7 +121,16 @@ const PollCreationDialog = ({ open, onClose, onSubmit, submitting = false }) => 
   return (
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
       <DialogTitle>Create poll</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.25, pt: 1 }}>
+      <DialogContent
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2.25,
+          pt: 1,
+          overflowX: 'hidden',
+          ...chatHideScrollbarSx,
+        }}
+      >
         <TextField
           label="Question"
           value={question}

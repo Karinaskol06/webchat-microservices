@@ -11,7 +11,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -40,25 +43,127 @@ public class WebSocketService {
     private static final String QUEUE_ROOM_MEMBER_INVITES_NEW = "/queue/rooms/member-invites/new";
     private static final String QUEUE_MESSAGES_INCOMING = "/queue/messages/incoming";
 
-    // Messaging events
+    // Messaging events — broadcast after commit so subscribers never race the DB write.
     public void sendMessageToChat(String chatId, ChatMessageDTO message) {
-        MessageSentEvent event = new MessageSentEvent(message);
-        sendToChatTopic(TOPIC_CHAT_MESSAGES, chatId, event);
-        log.info("Message {} sent to chat {}", message.getId(), chatId);
+        if (chatId == null || chatId.isBlank() || message == null) {
+            return;
+        }
+        runAfterCommit(() -> deliverMessageToChatTopic(chatId, message));
     }
 
-    public void notifyMessageDeleted(String messageId, String chatId, Long deletedByUserId) {
-        MessageDeletedEvent event = new MessageDeletedEvent(messageId, chatId, deletedByUserId);
-        sendToChatTopic(TOPIC_CHAT_DELETED, chatId, event);
-        log.info("Message {} deleted from chat {} by user {}", messageId, chatId, deletedByUserId);
+    private void deliverMessageToChatTopic(String chatId, ChatMessageDTO message) {
+        try {
+            MessageSentEvent event = new MessageSentEvent(message);
+            sendToChatTopic(TOPIC_CHAT_MESSAGES, chatId, event);
+            log.info("Message {} sent to chat {}", message.getId(), chatId);
+        } catch (Exception ex) {
+            log.error("Failed to broadcast MESSAGE_SENT for {} in chat {}", message.getId(), chatId, ex);
+            try {
+                sendToChatTopic(TOPIC_CHAT_MESSAGES, chatId, message);
+            } catch (Exception fallbackEx) {
+                log.error("Fallback chat message broadcast failed for {}", message.getId(), fallbackEx);
+            }
+        }
+    }
+
+    public void notifyMessageDeleted(String messageId, String chatId, Long deletedByUserId,
+                                     Collection<Long> memberIds) {
+        runAfterCommit(() -> deliverMessageDeleted(messageId, chatId, deletedByUserId, memberIds));
+    }
+
+    public void notifyMessageEdited(String messageId, String chatId, String newContent, Long editedByUserId,
+                                    LocalDateTime editedAt, MessageType newMessageType,
+                                    Collection<Long> memberIds) {
+        runAfterCommit(() -> deliverMessageEdited(
+                messageId, chatId, newContent, editedByUserId, editedAt, newMessageType, memberIds));
     }
 
     public void notifyMessageEdited(String messageId, String chatId, String newContent, Long editedByUserId,
                                     LocalDateTime editedAt, MessageType newMessageType) {
+        notifyMessageEdited(messageId, chatId, newContent, editedByUserId, editedAt, newMessageType, null);
+    }
+
+    private void deliverMessageDeleted(String messageId, String chatId, Long deletedByUserId,
+                                       Collection<Long> memberIds) {
+        MessageDeletedEvent event = new MessageDeletedEvent(messageId, chatId, deletedByUserId);
+        try {
+            sendToChatTopic(TOPIC_CHAT_DELETED, chatId, event);
+            sendToChatTopic(TOPIC_CHAT_MESSAGES, chatId, buildDeletedCompatPayload(
+                    messageId, chatId, deletedByUserId));
+        } catch (Exception ex) {
+            log.error("Failed to broadcast MESSAGE_DELETED to chat topics for message {} in chat {}",
+                    messageId, chatId, ex);
+        }
+        deliverMutationEventToMembers(memberIds, event);
+        log.info("Message {} deleted from chat {} by user {}", messageId, chatId, deletedByUserId);
+    }
+
+    private void deliverMessageEdited(String messageId, String chatId, String newContent, Long editedByUserId,
+                                      LocalDateTime editedAt, MessageType newMessageType,
+                                      Collection<Long> memberIds) {
         MessageEditedEvent event = new MessageEditedEvent(
                 messageId, chatId, newContent, editedByUserId, editedAt, newMessageType);
-        sendToChatTopic(TOPIC_CHAT_EDITED, chatId, event);
+        try {
+            sendToChatTopic(TOPIC_CHAT_EDITED, chatId, event);
+            sendToChatTopic(TOPIC_CHAT_MESSAGES, chatId, buildEditedCompatPayload(
+                    messageId, chatId, newContent, editedByUserId, editedAt, newMessageType));
+        } catch (Exception ex) {
+            log.error("Failed to broadcast MESSAGE_EDITED to chat topics for message {} in chat {}",
+                    messageId, chatId, ex);
+        }
+        deliverMutationEventToMembers(memberIds, event);
         log.info("Message {} edited in chat {} by user {}", messageId, chatId, editedByUserId);
+    }
+
+    private Map<String, Object> buildDeletedCompatPayload(String messageId, String chatId, Long deletedByUserId) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("type", "MESSAGE_DELETED");
+        payload.put("messageId", messageId);
+        payload.put("chatId", chatId);
+        if (deletedByUserId != null) {
+            payload.put("deletedByUserId", deletedByUserId);
+        }
+        return payload;
+    }
+
+    private Map<String, Object> buildEditedCompatPayload(
+            String messageId,
+            String chatId,
+            String newContent,
+            Long editedByUserId,
+            LocalDateTime editedAt,
+            MessageType newMessageType) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("type", "MESSAGE_EDITED");
+        payload.put("messageId", messageId);
+        payload.put("chatId", chatId);
+        payload.put("newContent", newContent);
+        if (editedByUserId != null) {
+            payload.put("editedByUserId", editedByUserId);
+        }
+        if (editedAt != null) {
+            payload.put("editedAt", editedAt);
+        }
+        if (newMessageType != null) {
+            payload.put("messageType", newMessageType.name());
+        }
+        return payload;
+    }
+
+    private void deliverMutationEventToMembers(Collection<Long> memberIds, Object event) {
+        if (memberIds == null || memberIds.isEmpty()) {
+            return;
+        }
+        for (Long memberId : memberIds) {
+            if (memberId == null) {
+                continue;
+            }
+            try {
+                sendToUserInbox(memberId, event);
+            } catch (Exception ex) {
+                log.error("Failed to deliver mutation event to user {} inbox", memberId, ex);
+            }
+        }
     }
 
     public void notifyMessageReactionUpdated(String messageId, String chatId, List<MessageReactionDTO> reactions) {
@@ -116,16 +221,15 @@ public class WebSocketService {
             sendToUserQueue(memberId, QUEUE_CHATS_DELETED, event);
             sendToUserInbox(memberId, event);
         }
-        sendToChatTopic(TOPIC_CHAT_MESSAGES, chatId, event);
         log.info("Chat {} deleted, notified {} members", chatId, memberIds.size());
     }
 
     private void deliverIncomingChatMessage(Long recipientUserId, ChatRoomDTO chatRoom, ChatMessageDTO message) {
         IncomingChatMessageEvent event = new IncomingChatMessageEvent(chatRoom, message);
-        // User queue only — inbox duplicate caused double client handling per message.
         sendToUserQueue(recipientUserId, QUEUE_MESSAGES_INCOMING, event);
+        sendToUserInbox(recipientUserId, event);
         log.debug("Incoming message {} delivered to user {} for chat {}", message.getId(), recipientUserId,
-                chatRoom.getId());
+                chatRoom != null ? chatRoom.getId() : null);
     }
 
     public void notifyUserLeftChatForAll(String chatId, Long userId, Set<Long> otherMembers) {
@@ -185,7 +289,9 @@ public class WebSocketService {
     }
 
     private void runAfterCommit(Runnable task) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+        boolean hasRealTx = TransactionSynchronizationManager.isSynchronizationActive()
+                && TransactionSynchronizationManager.isActualTransactionActive();
+        if (hasRealTx) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
@@ -193,6 +299,8 @@ public class WebSocketService {
                 }
             });
         } else {
+            // Mongo setups without real transactional commits must publish immediately,
+            // otherwise callbacks may never run and WS events are dropped.
             task.run();
         }
     }
@@ -203,24 +311,5 @@ public class WebSocketService {
     public static class UserLeftChatEvent {
         private String chatId;
         private Long userId;
-    }
-
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    public static class MessageEditedEvent {
-        private String messageId;
-        private String chatId;
-        private String newContent;
-        private Long editedByUserId;
-        private LocalDateTime editedAt;
-        private MessageType messageType;
-    }
-
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    public static class MessageDeletedEvent {
-        private String messageId;
-        private String chatId;
-        private Long deletedByUserId;
     }
 }

@@ -30,11 +30,16 @@
   --chat-primary-focus-ring: rgba(123, 97, 255, 0.18);
   --chat-unread-badge: #7b61ff;
   --chat-backdrop-bg: rgba(12, 8, 24, 0.55);
+  --chat-font-scale: 1;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  font-size: calc(16px * var(--chat-font-scale, 1));
 }
 
 html,

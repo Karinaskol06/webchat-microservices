@@ -66,6 +66,30 @@ class ChatRoomPermissionServiceTest {
     }
 
     @Test
+    void assertCanChangeRoomVisibility_allowsOwner() {
+        ChatRoom room = ChatRoom.builder()
+                .type(ChatType.GROUP)
+                .memberIds(Set.of(1L, 2L))
+                .createdBy(1L)
+                .build();
+
+        permissionService.assertCanChangeRoomVisibility(room, 1L);
+    }
+
+    @Test
+    void assertCanChangeRoomVisibility_deniesNonOwnerAdmin() {
+        ChatRoom room = ChatRoom.builder()
+                .type(ChatType.GROUP)
+                .memberIds(Set.of(5L, 10L))
+                .createdBy(5L)
+                .adminIds(Set.of(10L))
+                .build();
+
+        assertThatThrownBy(() -> permissionService.assertCanChangeRoomVisibility(room, 10L))
+                .isInstanceOf(ForbiddenChatOperationException.class);
+    }
+
+    @Test
     void assertCanManageRoomProfile_allowsGroupAdmin() {
         ChatRoom room = ChatRoom.builder()
                 .type(ChatType.GROUP)

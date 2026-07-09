@@ -4,7 +4,6 @@ import {
   authBgLayerSx,
   authCardEnterSx,
   authFooterEnterSx,
-  authShakeSx,
   authTitleEnterSx,
 } from './authAnimations';
 import {
@@ -15,7 +14,7 @@ import {
   AUTH_BG_IMAGE,
 } from './authPageTheme';
 
-const AuthPageLayout = ({ title, children, footer, maxWidth = 420, shake = false }) => {
+const AuthPageLayout = ({ title, children, footer, maxWidth = 420 }) => {
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -44,12 +43,12 @@ const AuthPageLayout = ({ title, children, footer, maxWidth = 420, shake = false
           backgroundImage: `url(${AUTH_BG_IMAGE})`,
         }}
       />
+      <Box aria-hidden sx={{ gridRow: 1, minHeight: 0 }} />
       <Box
         sx={{
           ...authGlassCardSx,
           maxWidth,
           ...authCardEnterSx,
-          ...authShakeSx(shake),
         }}
         role="region"
         aria-label={title}
@@ -62,6 +61,7 @@ const AuthPageLayout = ({ title, children, footer, maxWidth = 420, shake = false
           <Box sx={{ ...authFooterSx, ...authFooterEnterSx }}>{footer}</Box>
         ) : null}
       </Box>
+      <Box aria-hidden sx={{ gridRow: 3, minHeight: 0 }} />
     </Box>
   );
 };

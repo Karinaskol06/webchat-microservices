@@ -6,6 +6,7 @@ import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.RoomOwnerSuccessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class UserAccountDeletionService {
     private final RedisService redisService;
     private final ChatRoomEnrichmentService roomEnrichmentService;
     private final ChatRoomManagementService chatRoomManagementService;
+    private final RoomOwnerSuccessionService roomOwnerSuccessionService;
 
     @Transactional
     public void handleAccountDeleted(Long userId) {
@@ -74,16 +76,12 @@ public class UserAccountDeletionService {
 
         if (type == ChatType.GROUP || type == ChatType.CHANNEL) {
             if (userId.equals(room.getCreatedBy())) {
-                Long successor = pickOwnerSuccessor(room, userId);
+                Long successor = roomOwnerSuccessionService.pickOwnerSuccessor(room, userId);
                 if (successor == null) {
                     chatRoomManagementService.purgeRoom(room);
                     return;
                 }
-                room.setCreatedBy(successor);
-                if (room.getAdminIds() == null) {
-                    room.setAdminIds(new HashSet<>());
-                }
-                room.getAdminIds().add(successor);
+                roomOwnerSuccessionService.transferOwnership(room, successor);
             }
 
             removeDepartingMember(room, userId);
@@ -96,27 +94,6 @@ public class UserAccountDeletionService {
             redisService.evictChatParticipants(saved.getId());
             roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
         }
-    }
-
-    private Long pickOwnerSuccessor(ChatRoom room, Long departingOwnerId) {
-        if (room.getAdminIds() != null) {
-            for (Long adminId : room.getAdminIds()) {
-                if (adminId != null
-                        && adminId.longValue() != departingOwnerId.longValue()
-                        && room.isMember(adminId)) {
-                    return adminId;
-                }
-            }
-        }
-        if (room.getMemberIds() == null) {
-            return null;
-        }
-        for (Long memberId : room.getMemberIds()) {
-            if (memberId != null && memberId.longValue() != departingOwnerId.longValue()) {
-                return memberId;
-            }
-        }
-        return null;
     }
 
     private void removeDepartingMember(ChatRoom room, Long userId) {

@@ -33,7 +33,12 @@ import { parseRoomBanError } from '../utils/roomBanError';
 import useChatFolderStore from '../store/useChatFolderStore';
 import { findInChatMessageMatches } from '../utils/chatMessageSearch';
 import useWebSocket from '../hooks/useWebSocket';
-import { WEBCHAT_ACTIVATE_CHAT, WEBCHAT_CHAT_CREATED, WEBCHAT_CHAT_DELETED } from '../constants/chatEvents';
+import {
+  WEBCHAT_ACTIVATE_CHAT,
+  WEBCHAT_CHAT_CREATED,
+  WEBCHAT_CHAT_DELETED,
+  WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT,
+} from '../constants/chatEvents';
 import useMessages from '../hooks/useMessages';
 import { useUnreadMessageSeparator } from '../hooks/useUnreadMessageSeparator';
 import useTyping from '../hooks/useTyping'; 
@@ -45,6 +50,7 @@ import {
   canDeleteChat,
   canDeleteRoom,
   canLeaveRoom,
+  canViewRoomMembers,
   channelPostingRestricted,
   isGroupOrChannelType,
   roomTypeLabel,
@@ -62,6 +68,28 @@ import {
   serializePayload,
 } from '../utils/personalSpace';
 import useTranslation from '../hooks/useTranslation';
+import useRoomSidebarPanels from '../hooks/useRoomSidebarPanels';
+import {
+  drainPendingNotificationNavigation,
+  subscribeNotificationNavigation,
+} from '../utils/notificationNavigation';
+
+const isDraftPrivateChat = (chat) =>
+  Boolean(
+    chat &&
+      (chat.id == null || chat.id === '') &&
+      String(chat.type || '').toUpperCase() === 'PRIVATE',
+  );
+
+const isIncomingContactPrompt = (status, otherUserId) => {
+  if (!status || otherUserId == null) return false;
+  const state = String(status.state ?? '').toUpperCase();
+  return (
+    state === 'PENDING' &&
+    status.prompt?.requestId &&
+    Number(status.prompt.fromUserId) === Number(otherUserId)
+  );
+};
 
 const ChatPage = () => {
   const { t } = useTranslation();
@@ -73,6 +101,18 @@ const ChatPage = () => {
   );
 
   const { user } = useAuthStore();
+  const {
+    groupInfoPanelOpen,
+    membersPanelOpen,
+    groupInfoFolded,
+    membersFolded,
+    toggleGroupInfoPanel,
+    toggleMembersPanel,
+    closeGroupInfoPanel,
+    closeMembersPanel,
+    toggleGroupInfoFold,
+    toggleMembersFold,
+  } = useRoomSidebarPanels(currentChat);
   const chats = useChatStore((state) => state.chats);
   const setCurrentChat = useChatStore((state) => state.setCurrentChat);
   const resetUnreadCount = useChatStore((state) => state.resetUnreadCount);
@@ -94,12 +134,11 @@ const ChatPage = () => {
   const [emojiSidebarOpen, setEmojiSidebarOpen] = useState(false);
   const [reactionTargetMessageId, setReactionTargetMessageId] = useState(null);
   const [inChatSearchOpen, setInChatSearchOpen] = useState(false);
-  const [groupInfoPanelOpen, setGroupInfoPanelOpen] = useState(true);
-  const [membersPanelOpen, setMembersPanelOpen] = useState(true);
   const [inChatSearchQuery, setInChatSearchQuery] = useState('');
   const [inChatSearchMatchIndex, setInChatSearchMatchIndex] = useState(-1);
   const [contactStatus, setContactStatus] = useState(null);
   const [contactActionLoading, setContactActionLoading] = useState(false);
+  const [contactStatusRefreshNonce, setContactStatusRefreshNonce] = useState(0);
   const [roomMemberInvites, setRoomMemberInvites] = useState([]);
   const [roomInviteActionLoading, setRoomInviteActionLoading] = useState(false);
   const [roomBanDialog, setRoomBanDialog] = useState(null);
@@ -128,6 +167,9 @@ const ChatPage = () => {
   const messageListRef = useRef(null);
   /** Latest chat id chosen in the UI; URL sync can lag behind rapid list clicks. */
   const userSelectedChatIdRef = useRef(null);
+  const pendingNotificationRef = useRef(null);
+  const resolvingNotificationChatIdRef = useRef(null);
+  const [notificationScrollMessageId, setNotificationScrollMessageId] = useState(null);
 
   const {
     composerError,
@@ -145,11 +187,14 @@ const ChatPage = () => {
 
   const otherUser = useMemo(() => {
     if (currentChat?.otherUser) return currentChat.otherUser;
+    // Only private chats use a message-sender fallback while partner metadata loads.
+    const type = String(currentChat?.type || '').toUpperCase();
+    if (type !== 'PRIVATE') return null;
     if (messagesLoading) return null;
     return (
       messages.find((m) => m.sender && m.sender.id !== user?.id)?.sender ?? null
     );
-  }, [currentChat?.otherUser, messages, messagesLoading, user?.id]);
+  }, [currentChat?.otherUser, currentChat?.type, messages, messagesLoading, user?.id]);
 
   const latestIncomingMessageKey = useMemo(() => {
     if (!otherUser?.id) return null;
@@ -192,14 +237,10 @@ const ChatPage = () => {
     return `${kind} · ${visLabel}${countPart}`;
   }, [isGroupOrChannel, isPersonalSpace, chatTypeUpper, currentChat?.visibility, currentChat?.memberCount]);
 
-  useEffect(() => {
-    setGroupInfoPanelOpen(!isPrivateChat);
-    setMembersPanelOpen(isGroupOrChannel && !isPersonalSpace);
-  }, [currentChat?.id, isGroupOrChannel, isPersonalSpace, isPrivateChat]);
-
   const showSharedMediaPanel =
     (isGroupOrChannel || isPrivateChat || isPersonalSpace) && Boolean(currentChat?.id);
-  const showMembersSidePanel = isGroupOrChannel && !isPersonalSpace && Boolean(currentChat?.id);
+  const showMembersSidePanel =
+    isGroupOrChannel && !isPersonalSpace && Boolean(currentChat?.id) && canViewRoomMembers(currentChat);
   const roomSidePanelsVisible =
     showSharedMediaPanel && (groupInfoPanelOpen || (showMembersSidePanel && membersPanelOpen));
   const sharedMediaToggleLabel = useMemo(() => {
@@ -255,7 +296,7 @@ const ChatPage = () => {
 
   /** Open a chat in the store and keep the URL in sync so deep-link logic does not override selection. */
   const activateChat = useCallback(
-    (chat) => {
+    (chat, { external = false } = {}) => {
       if (!chat) {
         userSelectedChatIdRef.current = null;
         setCurrentChat(null);
@@ -270,11 +311,24 @@ const ChatPage = () => {
         setWorkspaceMode('chats');
         setPersonalSpaceActive(false);
       }
-      userSelectedChatIdRef.current = String(chat.id);
+      userSelectedChatIdRef.current =
+        chat.id != null && chat.id !== ''
+          ? String(chat.id)
+          : external
+            ? null
+            : 'draft';
+      if (!external) {
+        pendingNotificationRef.current = null;
+      }
+      setNotificationScrollMessageId(null);
       setCurrentChat(chat);
-      if (chat.id) {
+      if (chat.id != null && chat.id !== '') {
         resetUnreadCount(chat.id);
-        syncChatIdInUrl(chat.id);
+        if (!external) {
+          syncChatIdInUrl(chat.id);
+        }
+      } else if (!external) {
+        syncChatIdInUrl(null);
       }
     },
     [setCurrentChat, resetUnreadCount, syncChatIdInUrl],
@@ -901,23 +955,73 @@ const ChatPage = () => {
   }, [currentChat?.id, currentChat?.type, otherUser?.id]);
 
   useEffect(() => {
+    const onContactRefresh = () => {
+      setContactStatusRefreshNonce((nonce) => nonce + 1);
+    };
+    window.addEventListener(WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT, onContactRefresh);
+    window.addEventListener(WEBCHAT_CHAT_CREATED, onContactRefresh);
+    return () => {
+      window.removeEventListener(WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT, onContactRefresh);
+      window.removeEventListener(WEBCHAT_CHAT_CREATED, onContactRefresh);
+    };
+  }, []);
+
+  useEffect(() => {
     const isPrivate = String(currentChat?.type || '').toUpperCase() === 'PRIVATE';
-    const loadContactStatus = async () => {
-      if (!currentChat?.id || !otherUser?.id || !isPrivate) {
-        setContactStatus(null);
-        return;
-      }
+    const otherUserId = otherUser?.id;
+    const canLoad =
+      isPrivate &&
+      otherUserId &&
+      (currentChat?.id || isDraftPrivateChat(currentChat));
+
+    if (!canLoad) {
+      setContactStatus(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let retryTimer = null;
+
+    const fetchStatus = async () => {
       try {
-        const status = await contactsService.getStatus(otherUser.id, user?.id);
-        setContactStatus(status);
+        const status = await contactsService.getStatus(otherUserId, user?.id);
+        if (!cancelled) {
+          setContactStatus(status);
+          return status;
+        }
       } catch (error) {
         console.error('Failed to fetch contact status:', error);
-        setContactStatus(null);
+        if (!cancelled) {
+          setContactStatus(null);
+        }
       }
+      return null;
     };
 
-    loadContactStatus();
-  }, [currentChat?.id, currentChat?.type, otherUser?.id, user?.id, latestIncomingMessageKey]);
+    void fetchStatus().then((status) => {
+      if (cancelled || !latestIncomingMessageKey) return;
+      if (isIncomingContactPrompt(status, otherUserId)) return;
+      retryTimer = window.setTimeout(() => {
+        if (!cancelled) {
+          void fetchStatus();
+        }
+      }, 900);
+    });
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
+    };
+  }, [
+    currentChat?.id,
+    currentChat?.type,
+    otherUser?.id,
+    user?.id,
+    latestIncomingMessageKey,
+    contactStatusRefreshNonce,
+  ]);
 
   useEffect(() => {
     setProfileDialogOpen(false);
@@ -941,9 +1045,11 @@ const ChatPage = () => {
       .getState()
       .chats.find((chat) => Number(chat.otherUser?.id) === Number(selectedUser.id));
     if (existingChat) {
+      setUserSearchOpen(false);
       activateChat(existingChat);
       return;
     }
+    setUserSearchOpen(false);
     activateChat({
       id: null,
       type: 'PRIVATE',
@@ -960,13 +1066,143 @@ const ChatPage = () => {
   };
 
   const urlChatId = searchParams.get('chatId');
+  const urlMessageId = searchParams.get('messageId');
+  const fromNotification = searchParams.get('notify') === '1';
+  const urlFocusComposer = searchParams.get('focus') === '1';
+
+  const clearNotificationUrlParams = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('notify');
+        next.delete('messageId');
+        next.delete('focus');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
+  const fulfillNotificationNavigation = useCallback(() => {
+    const pending = pendingNotificationRef.current;
+    if (!pending?.chatId) return;
+
+    const openId = useChatStore.getState().currentChat?.id;
+    if (openId == null || String(openId) !== String(pending.chatId)) {
+      return;
+    }
+
+    if (pending.messageId) {
+      setNotificationScrollMessageId(String(pending.messageId));
+    }
+    if (pending.focusComposer) {
+      const chat = useChatStore.getState().currentChat;
+      if (!channelPostingRestricted(chat)) {
+        window.setTimeout(() => {
+          composerRef.current?.focus?.();
+        }, 0);
+      }
+    }
+    if (pending.markRead) {
+      chatService.markAsRead(pending.chatId).catch(() => {});
+    }
+
+    pendingNotificationRef.current = null;
+    clearNotificationUrlParams();
+  }, [clearNotificationUrlParams]);
+
+  const resolveChatById = useCallback(async (chatId) => {
+    const key = chatId != null ? String(chatId) : '';
+    if (!key) return null;
+
+    const local = useChatStore
+      .getState()
+      .chats.find((item) => String(item.id) === key);
+    if (local) return local;
+
+    try {
+      const dto = await chatService.getRoom(key);
+      if (dto?.id) {
+        useChatStore.getState().upsertChat(dto);
+        return dto;
+      }
+    } catch {
+      /* chat may not exist or user lost access */
+    }
+    return null;
+  }, []);
+
+  const openChatFromNotification = useCallback(
+    (detail) => {
+      const chatId = detail?.chatId;
+      if (chatId == null || chatId === '') return;
+
+      pendingNotificationRef.current = {
+        chatId: String(chatId),
+        messageId: detail?.messageId ? String(detail.messageId) : null,
+        focusComposer: Boolean(detail?.focusComposer),
+        markRead: Boolean(detail?.markRead),
+      };
+
+      const finishOpen = (chat) => {
+        if (!chat?.id) return;
+        if (pendingNotificationRef.current?.chatId !== String(chatId)) return;
+        activateChat(chat, { external: true });
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('chatId', String(chat.id));
+            next.delete('notify');
+            next.delete('messageId');
+            next.delete('focus');
+            next.delete('markRead');
+            return next;
+          },
+          { replace: true },
+        );
+      };
+
+      const chat = useChatStore
+        .getState()
+        .chats.find((item) => String(item.id) === String(chatId));
+      if (chat) {
+        finishOpen(chat);
+        return;
+      }
+
+      void resolveChatById(chatId).then((resolved) => {
+        finishOpen(resolved);
+      });
+    },
+    [activateChat, resolveChatById, setSearchParams],
+  );
 
   /** Apply chat from URL for deep links/notifications; never revert a newer in-app selection. */
   useEffect(() => {
+    const openChat = useChatStore.getState().currentChat;
+    if (isDraftPrivateChat(openChat)) {
+      return;
+    }
+
+    if (fromNotification && urlChatId) {
+      pendingNotificationRef.current = {
+        chatId: String(urlChatId),
+        messageId: urlMessageId ? String(urlMessageId) : null,
+        focusComposer: urlFocusComposer,
+        markRead: searchParams.get('markRead') === '1',
+      };
+    }
+
     const openId = useChatStore.getState().currentChat?.id;
     const userSelectedId = userSelectedChatIdRef.current;
 
-    if (userSelectedId && openId != null && String(openId) === userSelectedId) {
+    if (
+      !fromNotification &&
+      userSelectedId &&
+      userSelectedId !== 'draft' &&
+      openId != null &&
+      String(openId) === userSelectedId
+    ) {
       if (urlChatId && String(urlChatId) !== userSelectedId) {
         syncChatIdInUrl(userSelectedId);
         return;
@@ -976,18 +1212,87 @@ const ChatPage = () => {
       }
     }
 
-    if (!urlChatId || !Array.isArray(chats) || chats.length === 0) {
+    if (!urlChatId || !Array.isArray(chats)) {
       return;
     }
     const targetChat = chats.find((chat) => String(chat.id) === urlChatId);
     if (!targetChat) {
+      if (fromNotification && resolvingNotificationChatIdRef.current !== urlChatId) {
+        resolvingNotificationChatIdRef.current = urlChatId;
+        void resolveChatById(urlChatId).then((resolved) => {
+          resolvingNotificationChatIdRef.current = null;
+          if (!resolved) return;
+          const openNow = useChatStore.getState().currentChat?.id;
+          if (openNow != null && String(openNow) === String(resolved.id)) {
+            if (fromNotification) {
+              fulfillNotificationNavigation();
+            }
+            return;
+          }
+          activateChat(resolved, { external: fromNotification });
+        });
+      }
       return;
     }
     if (openId != null && String(openId) === urlChatId) {
+      if (fromNotification) {
+        fulfillNotificationNavigation();
+      }
       return;
     }
-    setCurrentChat(targetChat);
-  }, [urlChatId, chats, setCurrentChat, syncChatIdInUrl]);
+    if (openId != null && String(openId) !== urlChatId && !fromNotification) {
+      return;
+    }
+    activateChat(targetChat, { external: fromNotification });
+  }, [
+    urlChatId,
+    urlMessageId,
+    urlFocusComposer,
+    fromNotification,
+    chats,
+    activateChat,
+    syncChatIdInUrl,
+    searchParams,
+    resolveChatById,
+    fulfillNotificationNavigation,
+  ]);
+
+  useEffect(() => {
+    if (!pendingNotificationRef.current?.chatId) return;
+    if (messagesLoading || !currentChat?.id) return;
+    fulfillNotificationNavigation();
+  }, [
+    currentChat?.id,
+    messagesLoading,
+    fulfillNotificationNavigation,
+  ]);
+
+  const openChatFromNotificationRef = useRef(openChatFromNotification);
+  openChatFromNotificationRef.current = openChatFromNotification;
+
+  useEffect(() => {
+    const handleOpen = (detail) => {
+      openChatFromNotificationRef.current(detail);
+    };
+    const unsubscribe = subscribeNotificationNavigation(handleOpen);
+
+    const drain = () => {
+      void drainPendingNotificationNavigation();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        drain();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    drain();
+
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   useEffect(() => {
     const markRead = searchParams.get('markRead');
@@ -1245,10 +1550,10 @@ const ChatPage = () => {
           onToggleInChatSearch={toggleInChatSearch}
           showGroupInfoToggle={showSharedMediaPanel}
           groupInfoPanelOpen={groupInfoPanelOpen}
-          onToggleGroupInfoPanel={() => setGroupInfoPanelOpen((open) => !open)}
+          onToggleGroupInfoPanel={toggleGroupInfoPanel}
           showMembersPanelToggle={showMembersSidePanel}
           membersPanelOpen={membersPanelOpen}
-          onToggleMembersPanel={() => setMembersPanelOpen((open) => !open)}
+          onToggleMembersPanel={toggleMembersPanel}
           groupInfoToggleLabel={sharedMediaToggleLabel}
         />
       </Box>
@@ -1267,9 +1572,7 @@ const ChatPage = () => {
         onClose={closeInChatSearch}
       />
 
-      {contactStatus?.state === 'PENDING' &&
-        !isGroupOrChannel &&
-        Number(contactStatus?.prompt?.fromUserId) === Number(otherUser?.id) && (
+      {isPrivateChat && isIncomingContactPrompt(contactStatus, otherUser?.id) && (
         <Alert
           severity="info"
           sx={{ mx: 2, mt: 1, borderRadius: 3 }}
@@ -1311,13 +1614,14 @@ const ChatPage = () => {
           onOpenForwardedRoom={openForwardedRoom}
           openSeparatorIndex={openSeparatorIndex}
           liveBeforeMessageId={liveBeforeMessageId}
-          scrollToMessageId={scrollToMessageId}
+          scrollToMessageId={notificationScrollMessageId ?? scrollToMessageId}
           hideChannelReplyActions={channelComposerLocked}
           inChatSearchQuery={inChatSearchQuery}
           inChatSearchMatches={inChatSearchMatches}
           activeInChatSearchMatch={activeInChatSearchMatch}
           onOpenEmojiSidebarForReaction={handleOpenEmojiSidebarForReaction}
           isPersonalSpace={isPersonalSpace}
+          messagesLoading={messagesLoading}
         />
       </Box>
 
@@ -1470,8 +1774,12 @@ const ChatPage = () => {
               showMembersPanel={showMembersSidePanel}
               groupInfoOpen={groupInfoPanelOpen}
               membersOpen={membersPanelOpen}
-              onCloseGroupInfo={() => setGroupInfoPanelOpen(false)}
-              onCloseMembers={() => setMembersPanelOpen(false)}
+              groupInfoFolded={groupInfoFolded}
+              membersFolded={membersFolded}
+              onToggleGroupInfoFold={toggleGroupInfoFold}
+              onToggleMembersFold={toggleMembersFold}
+              onCloseGroupInfo={closeGroupInfoPanel}
+              onCloseMembers={closeMembersPanel}
             />
           ) : null
         }

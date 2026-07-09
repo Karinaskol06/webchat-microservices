@@ -28,10 +28,12 @@ import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import TranslateOutlinedIcon from '@mui/icons-material/TranslateOutlined';
+import FormatSizeOutlinedIcon from '@mui/icons-material/FormatSizeOutlined';
 import AccountCredentialsPanel from '../settings/AccountCredentialsPanel';
 import DeleteAccountPanel from '../settings/DeleteAccountPanel';
 import ThemePickerDialog from '../settings/ThemePickerDialog';
 import LanguageSettingsPanel from '../settings/LanguageSettingsPanel';
+import FontSizeSettingsPanel from '../settings/FontSizeSettingsPanel';
 import chatService from '../../services/chatService';
 import contactsService from '../../services/contactsService';
 import userBanService from '../../services/userBanService';
@@ -52,6 +54,7 @@ const VIEW_ACCOUNT = 'account';
 const VIEW_THEMES = 'themes';
 const VIEW_BANNED = 'banned';
 const VIEW_LANGUAGE = 'language';
+const VIEW_FONT_SIZE = 'fontSize';
 const VIEW_DELETE = 'delete';
 
 const displayName = (user) => {
@@ -127,6 +130,12 @@ const ChatSettingsDialog = ({
         icon: TranslateOutlinedIcon,
         primary: t('settings.menu.language.title'),
         secondary: t('settings.menu.language.subtitle'),
+      },
+      {
+        key: VIEW_FONT_SIZE,
+        icon: FormatSizeOutlinedIcon,
+        primary: t('settings.menu.fontSize.title'),
+        secondary: t('settings.menu.fontSize.subtitle'),
       },
       {
         key: VIEW_BANNED,
@@ -343,7 +352,7 @@ const ChatSettingsDialog = ({
       open={open}
       onClose={handleClose}
       fullWidth
-      maxWidth={view === VIEW_CONTACTS || view === VIEW_ACCOUNT || view === VIEW_BANNED || view === VIEW_LANGUAGE || view === VIEW_DELETE ? 'sm' : 'xs'}
+      maxWidth={view === VIEW_CONTACTS || view === VIEW_ACCOUNT || view === VIEW_BANNED || view === VIEW_LANGUAGE || view === VIEW_FONT_SIZE || view === VIEW_DELETE ? 'sm' : 'xs'}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, pr: 1 }}>
         {view !== VIEW_MENU ? (
@@ -367,6 +376,8 @@ const ChatSettingsDialog = ({
                   ? t('settings.menu.banned.title')
                   : view === VIEW_LANGUAGE
                     ? t('settings.menu.language.title')
+                    : view === VIEW_FONT_SIZE
+                      ? t('settings.menu.fontSize.title')
                     : view === VIEW_DELETE
                       ? t('settings.menu.delete.title')
                       : t('settings.title')}
@@ -415,6 +426,8 @@ const ChatSettingsDialog = ({
           <DeleteAccountPanel currentUser={currentUser} onClose={handleClose} />
         ) : view === VIEW_LANGUAGE ? (
           <LanguageSettingsPanel />
+        ) : view === VIEW_FONT_SIZE ? (
+          <FontSizeSettingsPanel />
         ) : view === VIEW_BANNED ? (
           <Stack spacing={2}>
             <Typography variant="body2" color="text.secondary">

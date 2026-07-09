@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canChangeRoomVisibility,
   canEditRoomProfile,
   canModerateOthersMessages,
   canPostInChannel,
+  canViewRoomMembers,
   channelPostingRestricted,
   isChannelType,
 } from './channelPermissions';
@@ -88,5 +90,57 @@ describe('channelPermissions', () => {
     expect(canModerateOthersMessages({ type: 'GROUP', isCurrentUserAdmin: false }, 1)).toBe(
       false,
     );
+  });
+
+  it('canChangeRoomVisibility allows only the room owner', () => {
+    expect(
+      canChangeRoomVisibility(
+        { type: 'GROUP', createdBy: 5, isCurrentUserAdmin: true },
+        5,
+      ),
+    ).toBe(true);
+    expect(
+      canChangeRoomVisibility(
+        { type: 'GROUP', createdBy: 5, isCurrentUserAdmin: true },
+        9,
+      ),
+    ).toBe(false);
+    expect(
+      canChangeRoomVisibility(
+        { type: 'CHANNEL', createdBy: 7, isCurrentUserChannelAdmin: true },
+        7,
+      ),
+    ).toBe(true);
+    expect(
+      canChangeRoomVisibility(
+        { type: 'CHANNEL', createdBy: 7, isCurrentUserChannelAdmin: true },
+        8,
+      ),
+    ).toBe(false);
+    expect(canChangeRoomVisibility({ type: 'PRIVATE' }, 1)).toBe(false);
+  });
+
+  it('canViewRoomMembers allows all group members but only channel owner/moderators', () => {
+    expect(canViewRoomMembers({ type: 'GROUP' })).toBe(true);
+    expect(
+      canViewRoomMembers({
+        type: 'CHANNEL',
+        isCurrentUserChannelCreator: true,
+      }),
+    ).toBe(true);
+    expect(
+      canViewRoomMembers({
+        type: 'CHANNEL',
+        isCurrentUserChannelAdmin: true,
+      }),
+    ).toBe(true);
+    expect(
+      canViewRoomMembers({
+        type: 'CHANNEL',
+        isCurrentUserChannelCreator: false,
+        isCurrentUserChannelAdmin: false,
+        isCurrentUserChannelPoster: true,
+      }),
+    ).toBe(false);
   });
 });

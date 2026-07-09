@@ -36,11 +36,15 @@ const senderLabel = (message) => {
 
 const postNotificationToServiceWorker = async (payload) => {
   if (!('serviceWorker' in navigator)) return false;
-  const registration = await navigator.serviceWorker.ready;
-  const worker = registration.active ?? navigator.serviceWorker.controller;
-  if (!worker) return false;
-  worker.postMessage(payload);
-  return true;
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const worker = registration.active ?? navigator.serviceWorker.controller;
+    if (!worker) return false;
+    worker.postMessage(payload);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 /**

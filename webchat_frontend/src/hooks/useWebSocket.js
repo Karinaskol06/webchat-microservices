@@ -20,9 +20,45 @@ import {
   showChatMessageNotification,
 } from '../utils/inAppNotifications';
 import { claimIncomingMessage } from '../utils/notificationDedup';
+import { extractWsChatMessagePayload } from '../utils/wsChatMessagePayload';
 
-const normalizeWsMessagePayload = (event) =>
-  event?.type === 'MESSAGE_SENT' && event.message != null ? event.message : event;
+const applyIncomingChatMessageEvent = (event, topicChatIdFallback, routingRef, markReadTimeoutRef) => {
+  const message = extractWsChatMessagePayload(event);
+  if (!message) return;
+  processIncomingMessage(message, topicChatIdFallback, routingRef, markReadTimeoutRef);
+};
+
+const resolveMessageEventId = (event) => {
+  const raw = event?.messageId ?? event?.message_id ?? event?.id ?? event?.message?.id;
+  if (raw == null || raw === '') return null;
+  return String(raw);
+};
+
+const isCurrentChat = (chatId, routingRef) => {
+  const current = useChatStore.getState().currentChat?.id ?? routingRef.current.chatId;
+  return current != null && chatId != null && String(current) === String(chatId);
+};
+
+const applyRemoteMessageDeleted = (event, routingRef) => {
+  const messageId = resolveMessageEventId(event);
+  if (!messageId) return;
+  const eventChatId = event?.chatId;
+  if (eventChatId != null && !isCurrentChat(eventChatId, routingRef)) return;
+  useChatStore.getState().removeMessage(messageId);
+};
+
+const applyRemoteMessageEdited = (event, routingRef) => {
+  const messageId = resolveMessageEventId(event);
+  if (!messageId) return;
+  const eventChatId = event?.chatId;
+  if (eventChatId != null && !isCurrentChat(eventChatId, routingRef)) return;
+  useChatStore.getState().updateMessageContent(
+    messageId,
+    event.newContent ?? event.content ?? '',
+    event.editedAt,
+    event.messageType,
+  );
+};
 
 const applyRemoteChatDeleted = (chatId) => {
   const key = chatId != null ? String(chatId) : '';
@@ -58,7 +94,7 @@ const processIncomingMessage = (message, topicChatIdFallback, routingRef, markRe
   const store = useChatStore.getState();
   const routing = routingRef.current;
   const sid = routing.userId;
-  const openId = routing.chatId ?? store.currentChat?.id;
+  const openId = store.currentChat?.id ?? routing.chatId;
 
   const senderId = message.senderId || message.sender?.id;
   const isIncoming = Boolean(senderId && Number(senderId) !== Number(sid));
@@ -194,18 +230,20 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
         onChatCreated: (payload) => {
           notifyRemoteChatCreated(resolveChatPayload(payload));
         },
-        onChatDeleted: (event) => {
-          applyRemoteChatDeleted(event?.chatId ?? event?.id ?? id);
-        },
         onMessage: (rawPayload) => {
-          if (String(id) === String(routingRef.current.chatId)) {
-            return;
-          }
-          const message = normalizeWsMessagePayload(rawPayload);
-          processIncomingMessage(message, id, routingRef, markReadTimeoutRef);
+          applyIncomingChatMessageEvent(rawPayload, id, routingRef, markReadTimeoutRef);
+        },
+        onIncomingChatMessage: (event) => {
+          applyIncomingChatMessageEvent(event, id, routingRef, markReadTimeoutRef);
         },
         onPresence: () => {
           bumpPresenceLater(id);
+        },
+        onMessageDeleted: (event) => {
+          applyRemoteMessageDeleted(event, routingRef);
+        },
+        onMessageEdited: (event) => {
+          applyRemoteMessageEdited(event, routingRef);
         },
       }),
     );
@@ -225,14 +263,16 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
     };
   }, [user, chatIdsKey]);
 
-  /** Focused chat: messages + typing / read receipts / deletes / edits / attachments. */
+  /** Focused chat: typing / read receipts / deletes / edits / attachments (messages via sidebar subs). */
   useEffect(() => {
     if (!user || !currentChatId) return;
 
-    const unsubscribe = subscribeToChat(currentChatId, {
+    const focusedHandlers = {
       onMessage: (rawPayload) => {
-        const message = normalizeWsMessagePayload(rawPayload);
-        processIncomingMessage(message, currentChatId, routingRef, markReadTimeoutRef);
+        applyIncomingChatMessageEvent(rawPayload, currentChatId, routingRef, markReadTimeoutRef);
+      },
+      onIncomingChatMessage: (event) => {
+        applyIncomingChatMessageEvent(event, currentChatId, routingRef, markReadTimeoutRef);
       },
       onTyping: (event) => {
         const isTyping = event.typing ?? event.isTyping ?? false;
@@ -247,18 +287,10 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
         }
       },
       onMessageDeleted: (event) => {
-        if (event.messageId) {
-          useChatStore.getState().removeMessage(event.messageId);
-        }
+        applyRemoteMessageDeleted(event, routingRef);
       },
       onMessageEdited: (event) => {
-        if (event.messageId == null || event.messageId === '') return;
-        useChatStore.getState().updateMessageContent(
-          event.messageId,
-          event.newContent ?? '',
-          event.editedAt,
-          event.messageType,
-        );
+        applyRemoteMessageEdited(event, routingRef);
       },
       onMessageReactionUpdated: (event) => {
         if (event.messageId == null || event.messageId === '') return;
@@ -274,7 +306,9 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
           useChatStore.getState().addAttachment(event.messageId, event.attachment);
         }
       },
-    });
+    };
+
+    const unsubscribe = subscribeToChat(currentChatId, focusedHandlers);
 
     return () => unsubscribe();
   }, [user, currentChatId]);
@@ -296,23 +330,17 @@ const useWebSocket = (user, currentChatId, currentUserId, userEventHandlers = {}
       },
       onIncomingChatMessage: (event) => {
         const chat = event?.chat;
-        const message = event?.message;
         if (chat?.id) {
           applyRemoteChatUpsert(chat);
         }
-        if (!message) return;
-
-        const chatKey = String(chat?.id ?? message.chatId ?? '');
-        const subscribedIds = new Set(
-          chatIdsKey
-            .split(',')
-            .map((entry) => entry.trim())
-            .filter(Boolean),
-        );
-        if (subscribedIds.has(chatKey)) {
-          return;
-        }
-        processIncomingMessage(message, chatKey, routingRef, markReadTimeoutRef);
+        const chatKey = String(chat?.id ?? event?.message?.chatId ?? '');
+        applyIncomingChatMessageEvent(event, chatKey, routingRef, markReadTimeoutRef);
+      },
+      onMessageDeleted: (event) => {
+        applyRemoteMessageDeleted(event, routingRef);
+      },
+      onMessageEdited: (event) => {
+        applyRemoteMessageEdited(event, routingRef);
       },
       onRoomMemberInvite,
     });

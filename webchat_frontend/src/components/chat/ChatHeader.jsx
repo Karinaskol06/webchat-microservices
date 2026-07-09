@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
+  Divider,
   IconButton,
+  ListItemIcon,
+  Menu,
+  MenuItem,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -12,13 +16,15 @@ import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import LogoutIcon from '@mui/icons-material/Logout';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { derivePresenceState } from '../../utils/presence';
 import { isDeletedAccountUser } from '../../utils/chatDisplay';
-import { chatColors } from '../../theme/chatDesignTokens';
+import { chatColors, chatMenuSlotProps } from '../../theme/chatDesignTokens';
 import useTranslation from '../../hooks/useTranslation';
 
 import UserAvatar from '../user/UserAvatar';
 import { getUserAvatarLetter } from '../../utils/userAvatar';
+
 const ChatHeader = ({
   otherUser,
   presenceStatus,
@@ -52,6 +58,7 @@ const ChatHeader = ({
   groupInfoToggleLabel,
 }) => {
   const { t } = useTranslation();
+  const [roomMenuAnchor, setRoomMenuAnchor] = useState(null);
   const panelToggleLabel = groupInfoToggleLabel ?? t('chat.sidebar.groupInfo');
 
   const derivedTitle = isDeletedAccountUser(otherUser)
@@ -89,7 +96,7 @@ const ChatHeader = ({
 
   const avatarEl = (
     <UserAvatar
-      user={otherUser}
+      user={isGroupOrChannel || headerAvatarLetter != null ? null : otherUser}
       src={avatarSrc}
       cacheKey={headerAvatarCacheKey}
       letter={letter}
@@ -109,6 +116,69 @@ const ChatHeader = ({
     flexShrink: 0,
     color: chatColors.textPrimary,
   };
+
+  const closeRoomMenu = () => setRoomMenuAnchor(null);
+
+  const showRoomOverflowMenu =
+    isGroupOrChannel &&
+    (onToggleInChatSearch ||
+      (!emojiSidebarOpen && onShowEmojiSidebar) ||
+      canLeaveRoom ||
+      canDeleteChat);
+
+  const roomMenuItems = [];
+
+  if (onToggleInChatSearch) {
+    roomMenuItems.push({
+      key: 'search',
+      label: inChatSearchOpen ? t('chatHeader.search.close') : t('chatHeader.search.open'),
+      icon: SearchIcon,
+      selected: inChatSearchOpen,
+      onClick: () => {
+        closeRoomMenu();
+        onToggleInChatSearch();
+      },
+    });
+  }
+
+  if (!emojiSidebarOpen && onShowEmojiSidebar) {
+    roomMenuItems.push({
+      key: 'emoji',
+      label: t('chatHeader.emoji.show'),
+      icon: EmojiEmotionsOutlinedIcon,
+      onClick: () => {
+        closeRoomMenu();
+        onShowEmojiSidebar();
+      },
+    });
+  }
+
+  if (canLeaveRoom) {
+    roomMenuItems.push({
+      key: 'leave',
+      label: t('chatHeader.menu.leave'),
+      icon: LogoutIcon,
+      onClick: () => {
+        closeRoomMenu();
+        onRequestLeaveRoom?.();
+      },
+    });
+  }
+
+  const destructiveMenuStartIndex = roomMenuItems.length;
+
+  if (canDeleteChat) {
+    roomMenuItems.push({
+      key: 'delete',
+      label: t('chatHeader.menu.delete'),
+      icon: DeleteOutlineIcon,
+      destructive: true,
+      onClick: () => {
+        closeRoomMenu();
+        onRequestDeleteChat?.();
+      },
+    });
+  }
 
   const headerActions = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
@@ -144,22 +214,6 @@ const ChatHeader = ({
           </IconButton>
         </Tooltip>
       ) : null}
-      {onToggleInChatSearch ? (
-        <Tooltip title={inChatSearchOpen ? t('chatHeader.search.close') : t('chatHeader.search.open')}>
-          <IconButton
-            aria-label={t('chatHeader.search.open')}
-            aria-pressed={inChatSearchOpen}
-            size="small"
-            onClick={onToggleInChatSearch}
-            sx={{
-              ...headerIconButtonSx,
-              color: inChatSearchOpen ? chatColors.primary : chatColors.textPrimary,
-            }}
-          >
-            <SearchIcon />
-          </IconButton>
-        </Tooltip>
-      ) : null}
       {showCopyInvite ? (
         <Tooltip title={t('chatHeader.menu.copyInvite')}>
           <IconButton
@@ -172,61 +226,120 @@ const ChatHeader = ({
           </IconButton>
         </Tooltip>
       ) : null}
-      {canLeaveRoom ? (
-        <Tooltip title={t('chatHeader.leave.tooltip')}>
-          <IconButton
-            aria-label={t('chatHeader.menu.leave')}
-            onClick={onRequestLeaveRoom}
-            size="small"
-            sx={{
-              ...headerIconButtonSx,
-              color: chatColors.textSecondary,
-              '&:hover': {
-                color: '#fff',
-                bgcolor: 'rgba(255, 255, 255, 0.08)',
-              },
-            }}
-          >
-            <LogoutIcon />
-          </IconButton>
-        </Tooltip>
-      ) : null}
-      {canDeleteChat ? (
-        <Tooltip
-          title={
-            isGroupOrChannel
-              ? t('chatHeader.delete.roomTooltip')
-              : t('chatHeader.delete.tooltip')
-          }
-        >
-          <IconButton
-            aria-label={t('chatHeader.menu.deleteChat')}
-            onClick={onRequestDeleteChat}
-            size="small"
-            sx={{
-              ...headerIconButtonSx,
-              color: chatColors.textSecondary,
-              '&:hover': {
-                color: '#fff',
-                bgcolor: 'rgba(255, 255, 255, 0.08)',
-              },
-            }}
-          >
-            <DeleteOutlineIcon />
-          </IconButton>
-        </Tooltip>
-      ) : null}
-      {!emojiSidebarOpen && onShowEmojiSidebar ? (
-        <Tooltip title={t('chatHeader.emoji.show')}>
-          <IconButton
-            size="small"
-            onClick={onShowEmojiSidebar}
-            sx={headerIconButtonSx}
-          >
-            <EmojiEmotionsOutlinedIcon />
-          </IconButton>
-        </Tooltip>
-      ) : null}
+
+      {isGroupOrChannel ? (
+        showRoomOverflowMenu ? (
+          <>
+            <Tooltip title={t('chatHeader.menu.roomOptions')}>
+              <IconButton
+                aria-label={t('chatHeader.menu.roomOptions')}
+                aria-haspopup="menu"
+                aria-expanded={Boolean(roomMenuAnchor)}
+                size="small"
+                onClick={(event) => setRoomMenuAnchor(event.currentTarget)}
+                sx={headerIconButtonSx}
+              >
+                <MoreVertIcon />
+              </IconButton>
+            </Tooltip>
+            <Menu
+              anchorEl={roomMenuAnchor}
+              open={Boolean(roomMenuAnchor)}
+              onClose={closeRoomMenu}
+              slotProps={chatMenuSlotProps}
+              disableAutoFocusItem
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            >
+              {roomMenuItems.flatMap((item, index) => {
+                const Icon = item.icon;
+                const showDivider =
+                  item.destructive && index === destructiveMenuStartIndex && destructiveMenuStartIndex > 0;
+
+                const elements = [];
+                if (showDivider) {
+                  elements.push(
+                    <Divider
+                      key={`${item.key}-divider`}
+                      sx={{ my: 0.5, borderColor: 'rgba(255,255,255,0.12)' }}
+                    />,
+                  );
+                }
+                elements.push(
+                  <MenuItem
+                    key={item.key}
+                    onClick={item.onClick}
+                    selected={item.selected}
+                    sx={
+                      item.destructive
+                        ? {
+                            color: '#ffb4ab',
+                            '& .MuiListItemIcon-root': { color: '#ffb4ab' },
+                          }
+                        : undefined
+                    }
+                  >
+                    <ListItemIcon>
+                      <Icon fontSize="small" />
+                    </ListItemIcon>
+                    {item.label}
+                  </MenuItem>,
+                );
+                return elements;
+              })}
+            </Menu>
+          </>
+        ) : null
+      ) : (
+        <>
+          {onToggleInChatSearch ? (
+            <Tooltip title={inChatSearchOpen ? t('chatHeader.search.close') : t('chatHeader.search.open')}>
+              <IconButton
+                aria-label={t('chatHeader.search.open')}
+                aria-pressed={inChatSearchOpen}
+                size="small"
+                onClick={onToggleInChatSearch}
+                sx={{
+                  ...headerIconButtonSx,
+                  color: inChatSearchOpen ? chatColors.primary : chatColors.textPrimary,
+                }}
+              >
+                <SearchIcon />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+          {canDeleteChat ? (
+            <Tooltip title={t('chatHeader.delete.tooltip')}>
+              <IconButton
+                aria-label={t('chatHeader.menu.deleteChat')}
+                onClick={onRequestDeleteChat}
+                size="small"
+                sx={{
+                  ...headerIconButtonSx,
+                  color: chatColors.textSecondary,
+                  '&:hover': {
+                    color: '#fff',
+                    bgcolor: 'rgba(255, 255, 255, 0.08)',
+                  },
+                }}
+              >
+                <DeleteOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+          {!emojiSidebarOpen && onShowEmojiSidebar ? (
+            <Tooltip title={t('chatHeader.emoji.show')}>
+              <IconButton
+                size="small"
+                onClick={onShowEmojiSidebar}
+                sx={headerIconButtonSx}
+              >
+                <EmojiEmotionsOutlinedIcon />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+        </>
+      )}
     </Box>
   );
 

@@ -9,6 +9,7 @@ import {
 } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { chatColors, chatHideScrollbarSx, muiTransparent } from '../../theme/chatDesignTokens';
+import { chatEmojiSidebarEnterSx } from '../../theme/chatAnimations';
 
 /**
  * Curated emoji list by category — rendered natively so ZWJ / skin tones / flags
@@ -149,8 +150,10 @@ const EmojiSidebar = ({ onClose, onEmojiClick, highlighted = false, reactionMode
         display: 'flex',
         flexDirection: 'column',
         minHeight: 0,
+        flexShrink: 0,
         boxShadow: highlighted ? `-4px 0 0 0 ${chatColors.primary}` : 'none',
         transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+        ...chatEmojiSidebarEnterSx,
       }}
     >
       <Box
@@ -204,7 +207,7 @@ const EmojiSidebar = ({ onClose, onEmojiClick, highlighted = false, reactionMode
           />
         ))}
       </Box>
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 1.25 }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', p: 1.25, ...chatHideScrollbarSx }}>
         {EMOJI_CATEGORIES.filter((c) => c.label === activeLabel).map((cat) => (
           <Box key={cat.label}>
             <Box

@@ -26,6 +26,7 @@ import { QuotedKindIcon } from './QuotedKindIcon';
 import UserAvatar from '../user/UserAvatar';
 import { resolveRoomAvatarSrc } from '../../utils/userAvatar';
 import useTranslation from '../../hooks/useTranslation';
+import { chatHideScrollbarSx } from '../../theme/chatDesignTokens';
 
 const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
   const { t } = useTranslation();
@@ -107,7 +108,7 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>{t('forward.title')}</DialogTitle>
-      <DialogContent sx={{ pt: 0 }}>
+      <DialogContent sx={{ pt: 0, overflowX: 'hidden', ...chatHideScrollbarSx }}>
         {message && (
           <Box
             sx={{
@@ -146,7 +147,11 @@ const ForwardChatDialog = ({ open, message, onClose, onActivateChat }) => {
             {t('forward.empty')}
           </Typography>
         ) : (
-          <List dense disablePadding sx={{ maxHeight: 360, overflow: 'auto' }}>
+          <List
+            dense
+            disablePadding
+            sx={{ maxHeight: 360, overflow: 'auto', overflowX: 'hidden', ...chatHideScrollbarSx }}
+          >
             {selectableChats.map((chat) => {
               const label = getChatDisplayLabel(chat);
               const roomLike = isRoomLikeChat(chat);

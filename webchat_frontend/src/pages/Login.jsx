@@ -39,14 +39,7 @@ const Login = () => {
   });
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
-  const [errorShake, setErrorShake] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  const showError = (message) => {
-    setError(message);
-    setErrorShake(true);
-    window.setTimeout(() => setErrorShake(false), 450);
-  };
 
   useEffect(() => {
     const saved = localStorage.getItem(REMEMBER_KEY);
@@ -60,7 +53,6 @@ const Login = () => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError('');
-    setErrorShake(false);
   };
 
   const handleSubmit = async (e) => {
@@ -91,7 +83,6 @@ const Login = () => {
   return (
     <AuthPageLayout
       title={t('auth.login.title')}
-      shake={errorShake}
       footer={
         <>
           {t('auth.login.footer.noAccount')}{' '}
@@ -124,7 +115,7 @@ const Login = () => {
         </AuthAnimatedItem>
       ) : null}
 
-      <AuthErrorAlert message={error} shake={errorShake} />
+      <AuthErrorAlert message={error} />
 
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <AuthAnimatedItem index={0}>

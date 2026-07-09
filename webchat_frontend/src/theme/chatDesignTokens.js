@@ -48,6 +48,8 @@ export const chatColors = {
   bubbleText: '#FFFFFF',
   accentOrange: '#FF8A4C',
   accentBlue: '#4C8DFF',
+  /** Destructive actions in dark ⋮ menus (ban, delete). */
+  destructiveMenu: '#FF8A8A',
   unreadBadge: 'var(--chat-unread-badge, #7B61FF)',
 };
 
@@ -232,6 +234,15 @@ export const chatMenuPaperSx = {
   '& .MuiListItemIcon-root': {
     color: chatColors.textSecondary,
     minWidth: 36,
+  },
+};
+
+/** Ban / delete rows in dark frosted menus — brighter than default error.main on dark paper. */
+export const chatDestructiveMenuItemSx = {
+  color: chatColors.destructiveMenu,
+  fontWeight: 600,
+  '&:hover': {
+    bgcolor: 'rgba(255, 107, 107, 0.12)',
   },
 };
 

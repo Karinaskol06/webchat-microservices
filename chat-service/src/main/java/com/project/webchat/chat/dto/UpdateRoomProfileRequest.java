@@ -1,5 +1,6 @@
 package com.project.webchat.chat.dto;
 
+import com.project.webchat.chat.entity.RoomVisibility;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -14,4 +15,6 @@ public class UpdateRoomProfileRequest {
 
     @Size(max = 750_000, message = "Room image is too large")
     private String groupPhoto;
+
+    private RoomVisibility visibility;
 }

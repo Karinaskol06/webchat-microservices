@@ -10,6 +10,8 @@ import {
   DialogContentText,
   DialogTitle,
   Divider,
+  FormControl,
+  FormControlLabel,
   IconButton,
   List,
   ListItem,
@@ -20,6 +22,8 @@ import {
   TextField,
   Menu,
   MenuItem,
+  Radio,
+  RadioGroup,
   Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -33,12 +37,17 @@ import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import { alpha, useTheme } from '@mui/material/styles';
 import chatService from '../../services/chatService';
-import { canBanRoomMembers, canEditRoomProfile } from '../../utils/channelPermissions';
+import {
+  canBanRoomMembers,
+  canChangeRoomVisibility,
+  canEditRoomProfile,
+  canViewRoomMembers,
+} from '../../utils/channelPermissions';
 import { getApiErrorMessage } from '../../services/api';
 import useChatStore from '../../store/useChatStore';
 import useAuthStore from '../../store/useAuthStore';
 import { fileToRoomPhotoDataUrl, ROOM_PHOTO_ACCEPT } from '../../utils/roomPhoto';
-import { chatColors, chatHideScrollbarSx } from '../../theme/chatDesignTokens';
+import { chatColors, chatHideScrollbarSx, chatDestructiveMenuItemSx } from '../../theme/chatDesignTokens';
 import useTranslation from '../../hooks/useTranslation';
 import { t as translateStatic } from '../../i18n';
 
@@ -134,6 +143,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
+  const [visibilitySaving, setVisibilitySaving] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -302,6 +312,23 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
     setActionError('');
   };
 
+  const handleVisibilityChange = async (nextVisibility) => {
+    if (!room?.id) return;
+    const next = String(nextVisibility || '').toUpperCase();
+    const current = String(room?.visibility || 'PRIVATE').toUpperCase();
+    if (!next || next === current) return;
+    setVisibilitySaving(true);
+    setActionError('');
+    try {
+      const updatedRoom = await chatService.updateRoomProfile(room.id, { visibility: next });
+      applyRoomUpdate(updatedRoom);
+    } catch (e) {
+      setActionError(getApiErrorMessage(e, t('roomProfile.error.visibility')));
+    } finally {
+      setVisibilitySaving(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     if (!room?.id) return;
     const name = String(editName || '').trim();
@@ -353,6 +380,8 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
   );
   const canBanMembers = Boolean(room && canBanRoomMembers(room, myId));
   const canEditProfileDetails = canModerateRoom;
+  const canEditVisibility = Boolean(room && (isGroup || isChannel) && canChangeRoomVisibility(room, myId));
+  const showFullMemberList = !isChannel || canViewRoomMembers(room);
 
   const title = room?.groupName || (isPersonalSpace
     ? t('roomProfile.fallback.personalSpace')
@@ -361,7 +390,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
       : isGroup
         ? t('roomProfile.fallback.group')
         : t('roomProfile.fallback.room'));
-  const profileBusy = profileSaving || photoUploading || actionBusy;
+  const profileBusy = profileSaving || photoUploading || actionBusy || visibilitySaving;
   const letter = (title?.[0] || '?').toUpperCase();
 
   return (
@@ -623,6 +652,36 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
               )}
             </Box>
 
+            {!isPersonalSpace && canEditVisibility ? (
+              <Box sx={{ px: 3, mt: 2 }}>
+                <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.08 }}>
+                  {t('roomProfile.section.visibility')}
+                </Typography>
+                <FormControl component="fieldset" fullWidth sx={{ mt: 0.75 }}>
+                  <RadioGroup
+                    row
+                    value={isPublic ? 'PUBLIC' : 'PRIVATE'}
+                    onChange={(e) => void handleVisibilityChange(e.target.value)}
+                    name="room-profile-visibility"
+                    aria-label={t('roomProfile.section.visibility')}
+                  >
+                    <FormControlLabel
+                      value="PUBLIC"
+                      control={<Radio size="small" />}
+                      label={t('common.public')}
+                      disabled={profileBusy}
+                    />
+                    <FormControlLabel
+                      value="PRIVATE"
+                      control={<Radio size="small" />}
+                      label={t('common.private')}
+                      disabled={profileBusy}
+                    />
+                  </RadioGroup>
+                </FormControl>
+              </Box>
+            ) : null}
+
             {formatCreated(room.createdAt) ? (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 3, mt: 1.5 }}>
                 {t('roomProfile.created', { date: formatCreated(room.createdAt) })}
@@ -698,7 +757,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                               </Box>
                               <Chip
                                 size="small"
-                                label={isChannel ? t('roomProfile.role.moderator') : t('roomProfile.role.admin')}
+                                label={t('roomProfile.role.admin')}
                                 variant="outlined"
                               />
                             </Stack>
@@ -739,8 +798,9 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                   </Box>
                 ) : null}
 
+                {showFullMemberList ? (
+                <>
                 <Divider sx={{ my: 2.5 }} />
-
                 <Box sx={{ px: 3 }}>
                   <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: 0.08 }}>
                     {t('roomProfile.members.title')}
@@ -757,7 +817,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
 
                       let role = t('roomProfile.role.member');
                       if (isOwner) role = t('roomProfile.role.owner');
-                      else if (isChanMod) role = t('roomProfile.role.moderator');
+                      else if (isChanMod) role = t('roomProfile.role.admin');
                       else if (isGrpAdm) role = t('roomProfile.role.admin');
                       else if (isPoster) role = t('roomProfile.role.canPost');
 
@@ -853,14 +913,14 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                             disabled={actionBusy}
                             onClick={() => void runAdminAction(Number(manageMember.id), 'PROMOTE')}
                           >
-                            Promote to moderator
+                            Make admin
                           </MenuItem>
                         ) : (
                           <MenuItem
                             disabled={actionBusy}
                             onClick={() => void runAdminAction(Number(manageMember.id), 'DEMOTE')}
                           >
-                            Remove moderator
+                            Remove admin
                           </MenuItem>
                         )}
                         {!adminSet.has(Number(manageMember.id)) && !posterSet.has(Number(manageMember.id)) ? (
@@ -885,7 +945,7 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                       <MenuItem
                         disabled={actionBusy || banActionBusy}
                         onClick={requestBanMember}
-                        sx={{ color: 'error.main' }}
+                        sx={chatDestructiveMenuItemSx}
                       >
                         Ban from {isChannel ? 'channel' : 'group'}
                       </MenuItem>
@@ -930,6 +990,8 @@ const RoomProfileDialog = ({ open, roomId, onClose }) => {
                     </DialogActions>
                   </Dialog>
                 </Box>
+                </>
+                ) : null}
               </>
             ) : null}
           </>
