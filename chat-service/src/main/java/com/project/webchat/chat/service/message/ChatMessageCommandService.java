@@ -362,8 +362,13 @@ public class ChatMessageCommandService {
         }
 
         chatMessageRepository.delete(toDelete);
-        refreshChatLastMessageAfterDelete(chatId);
-        webSocketService.notifyMessageDeleted(messageId, chatId, actorId);
+        webSocketService.notifyMessageDeleted(messageId, chatId, actorId, room.getMemberIds());
+        try {
+            refreshChatLastMessageAfterDelete(chatId);
+        } catch (Exception ex) {
+            log.warn("Failed to refresh chat {} sidebar after deleting message {}: {}",
+                    chatId, messageId, ex.getMessage());
+        }
     }
 
     @Transactional
@@ -426,7 +431,8 @@ public class ChatMessageCommandService {
                 updatedMessage.getContent(),
                 actorId,
                 editedAt,
-                updatedMessage.getMessageType()
+                updatedMessage.getMessageType(),
+                room.getMemberIds()
         );
 
         return chatMessageMapper.toMessageDTO(updatedMessage,
@@ -464,13 +470,15 @@ public class ChatMessageCommandService {
         } else {
             message.setContent(updatedContent);
             ChatMessage saved = chatMessageRepository.save(message);
+            ChatRoom room = loadRoom(saved.getChatId());
             webSocketService.notifyMessageEdited(
                     saved.getId(),
                     saved.getChatId(),
                     saved.getContent(),
                     userId,
                     null,
-                    saved.getMessageType());
+                    saved.getMessageType(),
+                    room.getMemberIds());
         }
 
         message.setContent(updatedContent);
@@ -563,10 +571,15 @@ public class ChatMessageCommandService {
             }
             return;
         }
-        roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+        privateChatContactRequestService.maybeCreateContactRequestForPrivateMessage(room, senderId);
         webSocketService.sendMessageToChat(room.getId(), messageDTO);
         webSocketService.notifyUserJoinedChat(room.getId(), senderId);
-        privateChatContactRequestService.maybeCreateContactRequestForPrivateMessage(room, senderId);
+        try {
+            roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+        } catch (Exception ex) {
+            log.warn("Failed to refresh room sidebar for chat {} after message {}: {}",
+                    room.getId(), messageDTO.getId(), ex.getMessage());
+        }
         if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {
             return;
         }

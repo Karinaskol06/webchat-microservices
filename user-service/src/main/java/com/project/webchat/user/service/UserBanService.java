@@ -3,8 +3,10 @@ package com.project.webchat.user.service;
 import com.project.webchat.shared.dto.UserBanStatusDTO;
 import com.project.webchat.shared.dto.UserDTO;
 import com.project.webchat.user.entity.UserBan;
+import com.project.webchat.user.feign.ChatServiceClient;
 import com.project.webchat.user.repository.UserBanRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,10 +16,12 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class UserBanService {
 
     private final UserBanRepository userBanRepository;
     private final UserService userService;
+    private final ChatServiceClient chatServiceClient;
 
     public void banUser(Long userId, Long targetUserId) {
         validatePair(userId, targetUserId);
@@ -28,11 +32,16 @@ public class UserBanService {
                 .userId(userId)
                 .bannedUserId(targetUserId)
                 .build());
+        notifyChatServiceUserBanned(userId, targetUserId);
     }
 
     public void unbanUser(Long userId, Long targetUserId) {
         validatePair(userId, targetUserId);
+        if (!userBanRepository.existsByUserIdAndBannedUserId(userId, targetUserId)) {
+            return;
+        }
         userBanRepository.deleteByUserIdAndBannedUserId(userId, targetUserId);
+        notifyChatServiceUserUnbanned(userId, targetUserId);
     }
 
     @Transactional(readOnly = true)
@@ -100,5 +109,21 @@ public class UserBanService {
             return full;
         }
         return user.getUsername() != null ? user.getUsername() : "";
+    }
+
+    private void notifyChatServiceUserBanned(Long bannerId, Long targetUserId) {
+        try {
+            chatServiceClient.handleUserBanned(bannerId, targetUserId);
+        } catch (Exception e) {
+            log.warn("Failed to notify chat-service of ban {} -> {}: {}", bannerId, targetUserId, e.getMessage());
+        }
+    }
+
+    private void notifyChatServiceUserUnbanned(Long bannerId, Long targetUserId) {
+        try {
+            chatServiceClient.handleUserUnbanned(bannerId, targetUserId);
+        } catch (Exception e) {
+            log.warn("Failed to notify chat-service of unban {} -> {}: {}", bannerId, targetUserId, e.getMessage());
+        }
     }
 }
