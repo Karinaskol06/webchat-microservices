@@ -22,15 +22,12 @@ const ForgotPassword = () => {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
-  const [errorShake, setErrorShake] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const showError = (message) => {
     setSuccessMessage('');
     setError(message);
-    setErrorShake(true);
-    window.setTimeout(() => setErrorShake(false), 450);
   };
 
   const handleSubmit = async (e) => {
@@ -59,7 +56,6 @@ const ForgotPassword = () => {
   return (
     <AuthPageLayout
       title={t('auth.forgot.title')}
-      shake={errorShake}
       footer={
         <>
           {t('auth.forgot.footer.remember')}{' '}
@@ -74,7 +70,7 @@ const ForgotPassword = () => {
         </>
       }
     >
-      <AuthErrorAlert message={error} shake={errorShake} />
+      <AuthErrorAlert message={error} />
 
       {successMessage ? (
         <AuthAnimatedItem index={0}>

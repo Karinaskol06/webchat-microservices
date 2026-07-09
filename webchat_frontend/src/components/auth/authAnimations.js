@@ -32,21 +32,6 @@ export const authKeyframes = {
     from: { transform: 'scale(1.06)' },
     to: { transform: 'scale(1)' },
   },
-  '@keyframes authAlertIn': {
-    from: {
-      opacity: 0,
-      transform: 'translate3d(0, -8px, 0)',
-    },
-    to: {
-      opacity: 1,
-      transform: 'translate3d(0, 0, 0)',
-    },
-  },
-  '@keyframes authShake': {
-    '0%, 100%': { transform: 'translate3d(0, 0, 0)' },
-    '18%, 54%': { transform: 'translate3d(-5px, 0, 0)' },
-    '36%, 72%': { transform: 'translate3d(5px, 0, 0)' },
-  },
 };
 
 /** Merge motion styles; disables animation/transition when user prefers reduced motion. */
@@ -94,13 +79,3 @@ export const authRevealSx = (index = 0) =>
     willChange: 'transform, opacity',
   });
 
-export const authAlertEnterSx = withReducedMotion({
-  animation: `authAlertIn 0.35s ${AUTH_EASE_OUT} both`,
-});
-
-export const authShakeSx = (active) =>
-  active
-    ? withReducedMotion({
-        animation: `authShake 0.42s ${AUTH_EASE} both`,
-      })
-    : {};

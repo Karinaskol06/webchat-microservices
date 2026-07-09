@@ -41,54 +41,45 @@ const Register = () => {
   });
 
   const [error, setError] = useState('');
-  const [errorShake, setErrorShake] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  const showError = (message) => {
-    setError(message);
-    setErrorShake(true);
-    window.setTimeout(() => setErrorShake(false), 450);
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setError('');
-    setErrorShake(false);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!formData.username || !formData.email || !formData.password) {
-      showError(t('auth.register.error.requiredFields'));
+      setError(t('auth.register.error.requiredFields'));
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      showError(t('auth.register.error.passwordMismatch'));
+      setError(t('auth.register.error.passwordMismatch'));
       return;
     }
 
     if (formData.password.length < 6) {
-      showError(t('auth.register.error.passwordTooShort'));
+      setError(t('auth.register.error.passwordTooShort'));
       return;
     }
 
     const phone = (formData.phoneNumber || '').trim();
     if (!phone) {
-      showError(t('auth.register.error.phoneRequired'));
+      setError(t('auth.register.error.phoneRequired'));
       return;
     }
     if (!isValidInternationalPhone(phone)) {
-      showError(t('auth.register.error.phoneInvalid'));
+      setError(t('auth.register.error.phoneInvalid'));
       return;
     }
 
     try {
       setLoading(true);
       setError('');
-      setErrorShake(false);
       const { confirmPassword: _confirmPassword, ...registerData } = formData;
 
       await authService.register(registerData);
@@ -102,7 +93,7 @@ const Register = () => {
       login(userData, loginResponse.token);
       navigate('/chat');
     } catch (err) {
-      showError(err.message || t('auth.register.error.fallback'));
+      setError(err.message || t('auth.register.error.fallback'));
     } finally {
       setLoading(false);
     }
@@ -112,7 +103,6 @@ const Register = () => {
     <AuthPageLayout
       title={t('auth.register.title')}
       maxWidth={440}
-      shake={errorShake}
       footer={
         <>
           {t('auth.register.footer.hasAccount')}{' '}
@@ -127,7 +117,7 @@ const Register = () => {
         </>
       }
     >
-      <AuthErrorAlert message={error} shake={errorShake} />
+      <AuthErrorAlert message={error} />
 
       <Box component="form" onSubmit={handleSubmit} noValidate>
         <AuthAnimatedItem index={0}>
@@ -190,7 +180,6 @@ const Register = () => {
               onChange={({ phoneNumber, countryCode }) => {
                 setFormData((prev) => ({ ...prev, phoneNumber, countryCode }));
                 setError('');
-                setErrorShake(false);
               }}
               disabled={loading}
             />
