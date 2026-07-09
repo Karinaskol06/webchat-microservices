@@ -87,6 +87,22 @@ const claimNotificationIdempotencyKey = async (key) => {
   });
 };
 
+const PENDING_NAV_KEY = 'pending-chat-navigation';
+
+const stashPendingNavigation = async (payload) => {
+  const db = await openIdempotencyDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put({
+      key: PENDING_NAV_KEY,
+      at: Date.now(),
+      payload,
+    });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+};
+
 const buildIdempotencyKey = (notificationType, notificationData) => {
   const messageId = notificationData.messageId;
   if (messageId != null && String(messageId).length > 0) {
@@ -159,8 +175,8 @@ self.addEventListener('message', (event) => {
   const title = data.title || 'New message';
   const options = data.options || {};
 
-  event.waitUntil(
-    showNotificationIdempotent(idempotencyKey, title, options, { allowWhenVisible: true }),
+  void showNotificationIdempotent(idempotencyKey, title, options, { allowWhenVisible: true }).catch(
+    () => {},
   );
 });
 
@@ -226,6 +242,7 @@ self.addEventListener('notificationclick', (event) => {
   const messageId = data.messageId;
   const inviteId = data.inviteId;
   const shouldMarkRead = event.action === 'mark-read';
+  const shouldFocusComposer = event.action === 'answer';
 
   const targetUrl = new URL('/chat', self.location.origin);
   if (notificationType === 'room-member-invited') {
@@ -237,28 +254,57 @@ self.addEventListener('notificationclick', (event) => {
     }
     targetUrl.searchParams.set('view', 'invites');
   } else {
+    targetUrl.searchParams.set('notify', '1');
     if (chatId) {
       targetUrl.searchParams.set('chatId', chatId);
     }
     if (messageId) {
       targetUrl.searchParams.set('messageId', messageId);
     }
+    if (shouldFocusComposer) {
+      targetUrl.searchParams.set('focus', '1');
+    }
     if (shouldMarkRead && chatId) {
       targetUrl.searchParams.set('markRead', '1');
     }
   }
 
+  const openPayload = {
+    type: 'OPEN_CHAT_NOTIFICATION',
+    chatId,
+    messageId,
+    focusComposer: shouldFocusComposer,
+    markRead: shouldMarkRead,
+    url: targetUrl.pathname + targetUrl.search,
+  };
+
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      const matchingClient = windowClients.find((client) => client.url.includes('/chat'));
-      const client = matchingClient || windowClients[0];
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (windowClients) => {
+      const matchingClient = windowClients.find((client) => {
+        try {
+          return new URL(client.url).pathname.includes('/chat');
+        } catch {
+          return false;
+        }
+      });
+      const client = matchingClient;
 
       if (client) {
-        if (shouldMarkRead && chatId) {
-          client.postMessage({ type: 'MARK_CHAT_READ', chatId });
+        try {
+          await stashPendingNavigation(openPayload);
+        } catch {
+          /* best-effort */
         }
-        client.navigate(targetUrl.toString());
-        return client.focus();
+        try {
+          client.postMessage(openPayload);
+        } catch {
+          /* best-effort */
+        }
+        try {
+          return await client.focus();
+        } catch {
+          return undefined;
+        }
       }
       return clients.openWindow(targetUrl.toString());
     }),

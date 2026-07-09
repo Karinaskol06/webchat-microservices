@@ -6,6 +6,12 @@ vi.mock("../utils/websocket.js", () => ({
   disconnectWebSocket: vi.fn(),
 }));
 
+vi.mock("../services/pushNotificationService.js", () => ({
+  default: {
+    teardown: vi.fn(() => Promise.resolve()),
+  },
+}));
+
 import { disconnectWebSocket } from "../utils/websocket.js";
 
 describe("useAuthStore session isolation", () => {
@@ -21,7 +27,12 @@ describe("useAuthStore session isolation", () => {
     vi.clearAllMocks();
   });
 
-  it("logout disconnects WebSocket and clears chat store", () => {
+  it("logout disconnects WebSocket and clears chat store", async () => {
+    const assign = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, pathname: "/chat", assign },
+    });
     useChatStore.setState({
       chats: [{ id: "c1", otherUser: { id: 9 } }],
       currentChat: { id: "c1", otherUser: { id: 9 } },
@@ -31,12 +42,15 @@ describe("useAuthStore session isolation", () => {
 
     useAuthStore.getState().logout();
 
-    expect(disconnectWebSocket).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(disconnectWebSocket).toHaveBeenCalledTimes(1);
+    });
     expect(localStorage.getItem("token")).toBeNull();
     expect(useAuthStore.getState().user).toBeNull();
     expect(useChatStore.getState().currentChat).toBeNull();
     expect(useChatStore.getState().chats).toEqual([]);
     expect(useChatStore.getState().messages).toEqual([]);
+    expect(assign).toHaveBeenCalledWith("/login");
   });
 
   it("login clears prior chat state and then stores new session", () => {

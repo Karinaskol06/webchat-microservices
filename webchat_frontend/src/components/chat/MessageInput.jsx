@@ -87,6 +87,7 @@ const MessageInput = forwardRef(function MessageInput(
   const { t } = useTranslation();
   const fileInputRef = useRef(null);
   const pinButtonRef = useRef(null);
+  const textInputRef = useRef(null);
   const [pinMenuOpen, setPinMenuOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [dropActive, setDropActive] = useState(false);
@@ -108,6 +109,9 @@ const MessageInput = forwardRef(function MessageInput(
         setDraft((prev) => `${prev}${text}`);
       },
       clear: () => setDraft(''),
+      focus: () => {
+        textInputRef.current?.focus?.({ preventScroll: false });
+      },
     }),
     [draft],
   );
@@ -411,7 +415,14 @@ const MessageInput = forwardRef(function MessageInput(
                   'inherit, system-ui, "Segoe UI Emoji", "Segoe UI Symbol", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
               },
             }}
-            inputRef={inputRef}
+            inputRef={(element) => {
+              textInputRef.current = element;
+              if (typeof inputRef === 'function') {
+                inputRef(element);
+              } else if (inputRef) {
+                inputRef.current = element;
+              }
+            }}
           />
 
           <IconButton

@@ -154,6 +154,29 @@ const ensureSubscriptionImpl = async () => {
 };
 
 const pushNotificationService = {
+  async teardown() {
+    if (!('serviceWorker' in navigator)) {
+      return;
+    }
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        return;
+      }
+      try {
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          await subscription.unsubscribe();
+        }
+      } catch {
+        /* best-effort */
+      }
+      await registration.unregister();
+    } catch (error) {
+      console.warn('[push] service worker teardown failed:', error);
+    }
+  },
+
   async ensureSubscription() {
     if (inFlight) {
       return inFlight;

@@ -1,6 +1,7 @@
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 
+import { extractWsChatMessagePayload } from './wsChatMessagePayload';
 import { resolveApiBaseUrl } from './apiBaseUrl';
 
 const WS_BASE_URL = resolveApiBaseUrl();
@@ -182,10 +183,6 @@ const attachChatSubscriptions = (subscription) => {
             handlers.onChatCreated?.(event.chat ?? event);
             return;
           }
-          if (event.type === 'CHAT_DELETED') {
-            handlers.onChatDeleted?.(event);
-            return;
-          }
           if (event.type === 'MESSAGE_DELETED') {
             handlers.onMessageDeleted?.(event);
             return;
@@ -194,11 +191,18 @@ const attachChatSubscriptions = (subscription) => {
             handlers.onMessageEdited?.(event);
             return;
           }
-          const payload =
-            event.type === 'MESSAGE_SENT' && event.message != null
-              ? event.message
-              : event;
-          handlers.onMessage(payload);
+          if (event.type === 'INCOMING_CHAT_MESSAGE') {
+            handlers.onIncomingChatMessage?.(event);
+            const incoming = extractWsChatMessagePayload(event);
+            if (incoming) {
+              handlers.onMessage?.(incoming);
+            }
+            return;
+          }
+          const payload = extractWsChatMessagePayload(event);
+          if (payload) {
+            handlers.onMessage(payload);
+          }
         } catch (error) {
           console.error('Failed to parse message:', error);
         }
@@ -362,6 +366,14 @@ const routeUserInboxEvent = (event, handlers = {}) => {
   }
   if (type === 'INCOMING_CHAT_MESSAGE') {
     handlers.onIncomingChatMessage?.(event);
+    return;
+  }
+  if (type === 'MESSAGE_DELETED') {
+    handlers.onMessageDeleted?.(event);
+    return;
+  }
+  if (type === 'MESSAGE_EDITED') {
+    handlers.onMessageEdited?.(event);
   }
 };
 
@@ -382,6 +394,8 @@ const attachUserEventSubscriptions = ({
   onChatUpdated,
   onChatDeleted,
   onIncomingChatMessage,
+  onMessageDeleted,
+  onMessageEdited,
   onRoomMemberInvite,
 } = {}) => {
   if (!isStompConnected()) return [];
@@ -390,6 +404,8 @@ const attachUserEventSubscriptions = ({
     onChatUpdated,
     onChatDeleted,
     onIncomingChatMessage,
+    onMessageDeleted,
+    onMessageEdited,
     onRoomMemberInvite,
   };
   const subscriptions = [];
@@ -461,6 +477,8 @@ export const subscribeToUserChatEvents = ({
   onChatUpdated,
   onChatDeleted,
   onIncomingChatMessage,
+  onMessageDeleted,
+  onMessageEdited,
   onRoomMemberInvite,
 } = {}) => {
   const handlers = {
@@ -469,6 +487,8 @@ export const subscribeToUserChatEvents = ({
     onChatUpdated,
     onChatDeleted,
     onIncomingChatMessage,
+    onMessageDeleted,
+    onMessageEdited,
     onRoomMemberInvite,
   };
   pendingUserEventHandlers.push(handlers);
@@ -571,6 +591,8 @@ export const sendTypingEvent = (payload) => {
     typing: payload.typing,
   });
 };
+
+export { extractWsChatMessagePayload } from './wsChatMessagePayload';
 
 export default {
   connectWebSocket,

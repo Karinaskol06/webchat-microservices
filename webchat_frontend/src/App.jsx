@@ -78,6 +78,7 @@ function App() {
         disconnectWebSocket();
         useChatStore.getState().clearStore();
         setUser(null);
+        void pushNotificationService.teardown();
         return;
       }
 
@@ -90,6 +91,7 @@ function App() {
         disconnectWebSocket();
         useChatStore.getState().clearStore();
         setUser(null);
+        void pushNotificationService.teardown();
       }
     };
 
@@ -120,28 +122,30 @@ function App() {
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
 
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      stopMaintenance?.();
-      releaseConnection?.();
-    };
-  }, [isAuthenticated, user?.id]);
-
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) {
-      return;
-    }
     const onServiceWorkerMessage = (event) => {
-      const { type, chatId } = event.data || {};
+      const data = event.data || {};
+      const { type, chatId } = data;
+      if (type === 'OPEN_CHAT_NOTIFICATION') {
+        return;
+      }
       if (type === 'MARK_CHAT_READ' && chatId) {
         chatService.markAsRead(chatId).catch(() => {});
       }
     };
-    navigator.serviceWorker.addEventListener('message', onServiceWorkerMessage);
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', onServiceWorkerMessage);
+    }
+
     return () => {
-      navigator.serviceWorker.removeEventListener('message', onServiceWorkerMessage);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      stopMaintenance?.();
+      releaseConnection?.();
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', onServiceWorkerMessage);
+      }
     };
-  }, []);
+  }, [isAuthenticated, user?.id]);
 
   return (
     <BrowserRouter>

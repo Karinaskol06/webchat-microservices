@@ -14,7 +14,6 @@ import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import SpaceDashboardOutlinedIcon from '@mui/icons-material/SpaceDashboardOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
-import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/useAuthStore';
 import useChatStore from '../../store/useChatStore';
 import useChatFolderStore from '../../store/useChatFolderStore';
@@ -67,7 +66,6 @@ const ChatNavRail = ({
   onPersonalSpaceSelect,
 }) => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
 
   const chatFilters = React.useMemo(
@@ -103,7 +101,6 @@ const ChatNavRail = ({
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
   };
 
   return (
