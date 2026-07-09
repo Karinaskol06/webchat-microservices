@@ -31,8 +31,10 @@ import ChatImageAttachment, { ChatImageGridCell } from './ChatImageAttachment';
 import MessageReactionQuickBar from './MessageReactionQuickBar';
 import MessageReactionsRow from './MessageReactionsRow';
 import HighlightedMessageText from './HighlightedMessageText';
+import LinkifiedMessageText from './LinkifiedMessageText';
 import { parseQuotedSnippet } from '../../utils/quotedMessagePreview';
 import { chatColors, chatMenuSlotProps } from '../../theme/chatDesignTokens';
+import { chatMessageEnterSx } from '../../theme/chatAnimations';
 import { QuotedKindIcon } from './QuotedKindIcon';
 import chatService from '../../services/chatService';
 import useChatStore from '../../store/useChatStore';
@@ -46,6 +48,7 @@ import {
   isForwardedFromRoom,
   isForwardedSourceClickable,
 } from '../../utils/forwardedMessage';
+import { isOptimisticMessageId, resolveMessageId } from '../../utils/messageOptimistic';
 import UserAvatar from '../user/UserAvatar';
 import useTranslation from '../../hooks/useTranslation';
 
@@ -85,6 +88,7 @@ const MessageItem = ({
     onOpenEmojiSidebarForReaction,
     isPersonalSpace = false,
     onOpenImage,
+    isEntering = false,
 }) => {
     const { t } = useTranslation();
     const [expanded, setExpanded] = useState(false);
@@ -118,7 +122,10 @@ const MessageItem = ({
     const attachments = Array.isArray(message.attachments) ? message.attachments : [];
     const hasAttachments = attachments.length > 0;
     const hasText = message.content && message.content.trim().length > 0;
-    const messageIdStr = String(message.id ?? message._id ?? '');
+    const resolvedMessageId = resolveMessageId(message);
+    const messageIdStr = resolvedMessageId ?? '';
+    const hasPersistedMessageId =
+      Boolean(resolvedMessageId) && !isOptimisticMessageId(resolvedMessageId);
 
     const renderMessageText = (sx = {}) => {
         if (!hasText) return null;
@@ -153,7 +160,7 @@ const MessageItem = ({
                         activeRange={activeRange}
                     />
                 ) : (
-                    message.content
+                    <LinkifiedMessageText text={message.content} />
                 )}
             </Typography>
         );
@@ -330,12 +337,12 @@ const MessageItem = ({
 
     const handleToggleReaction = async (emoji) => {
         const chatId = resolveChatId();
-        if (!message.id || !chatId || isTogglingReaction) return;
+        if (!hasPersistedMessageId || !chatId || isTogglingReaction) return;
         setReactionError('');
         setIsTogglingReaction(true);
         try {
-            const reactions = await chatService.toggleMessageReaction(chatId, message.id, emoji);
-            useChatStore.getState().updateMessageReactions(message.id, reactions);
+            const reactions = await chatService.toggleMessageReaction(chatId, resolvedMessageId, emoji);
+            useChatStore.getState().updateMessageReactions(resolvedMessageId, reactions);
             closeMenu();
             closeContextMenu();
         } catch (error) {
@@ -352,7 +359,7 @@ const MessageItem = ({
     };
 
     const handleOpenFullReactionPicker = () => {
-        onOpenEmojiSidebarForReaction?.(message.id);
+        onOpenEmojiSidebarForReaction?.(resolvedMessageId);
         closeMenu();
         closeContextMenu();
     };
@@ -406,6 +413,10 @@ const MessageItem = ({
         editedContent.trim() === (message.content || '').trim();
 
     const handleSaveEdit = async () => {
+        if (!hasPersistedMessageId) {
+            setEditError(t('message.edit.error'));
+            return;
+        }
         if (captionUnchanged) {
             setIsEditMode(false);
             return;
@@ -414,9 +425,9 @@ const MessageItem = ({
         setEditError('');
         setIsSavingEdit(true);
         try {
-            const updated = await chatService.editMessage(message.id, normalized);
+            const updated = await chatService.editMessage(resolvedMessageId, normalized);
             useChatStore.getState().updateMessageContent(
-                message.id,
+                resolvedMessageId,
                 updated?.content ?? normalized ?? '',
                 updated?.editedAt,
                 updated?.messageType
@@ -444,11 +455,15 @@ const MessageItem = ({
     };
 
     const handleDeleteMessage = async () => {
+        if (!hasPersistedMessageId) {
+            setDeleteError(t('message.delete.error'));
+            return;
+        }
         setDeleteError('');
         setIsDeleting(true);
         try {
-            await chatService.deleteMessage(message.id);
-            useChatStore.getState().removeMessage(message.id);
+            await chatService.deleteMessage(resolvedMessageId);
+            useChatStore.getState().removeMessage(resolvedMessageId);
             setDeleteDialogOpen(false);
         } catch (error) {
             const responseMessage =
@@ -468,6 +483,27 @@ const MessageItem = ({
     const renderAttachmentMenuRow = () => (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
             <IconButton size="small" onClick={openMenu} aria-label={t('message.actions.aria')}>
+                <MoreVertIcon fontSize="small" />
+            </IconButton>
+        </Box>
+    );
+
+    const renderTextWithActionsMenu = () => (
+        <Box
+            sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 0.5,
+                width: '100%',
+            }}
+        >
+            <Box sx={{ flex: 1, minWidth: 0 }}>{renderMessageText()}</Box>
+            <IconButton
+                size="small"
+                onClick={openMenu}
+                aria-label={t('message.actions.aria')}
+                sx={{ mt: -0.25, mr: -0.5, flexShrink: 0, alignSelf: 'flex-start' }}
+            >
                 <MoreVertIcon fontSize="small" />
             </IconButton>
         </Box>
@@ -737,17 +773,20 @@ const MessageItem = ({
         ? {
               outline: (theme) => `2px solid ${theme.palette.primary.main}`,
               outlineOffset: 2,
-              borderRadius: isActiveSearchMatch ? '4px' : 2,
+              borderRadius: isActiveSearchMatch ? '4px' : '12px',
           }
         : {};
+
+    const rowEnterSx = isEntering ? chatMessageEnterSx(isOwn) : {};
 
     const senderLabel = sender?.firstName || sender?.username || t('common.user');
 
     const handleRichUpdate = async (content) => {
+        if (!hasPersistedMessageId) return;
         try {
-            const updated = await chatService.editMessage(message.id, content);
+            const updated = await chatService.editMessage(resolvedMessageId, content);
             useChatStore.getState().updateMessageContent(
-                message.id,
+                resolvedMessageId,
                 updated.content ?? content,
                 updated.editedAt,
                 updated.messageType,
@@ -767,7 +806,7 @@ const MessageItem = ({
         return (
             <>
                 <Box
-                    id={`webchat-msg-${message.id}`}
+                    id={`webchat-msg-${messageIdStr}`}
                     onContextMenu={handleOpenContextMenu}
                     sx={{
                         display: 'flex',
@@ -775,6 +814,7 @@ const MessageItem = ({
                         alignItems: 'flex-end',
                         mb: 2,
                         width: '100%',
+                        ...rowEnterSx,
                         ...rowHighlightSx,
                     }}
                 >
@@ -883,13 +923,14 @@ const MessageItem = ({
         return (
             <>
                 <Box
-                    id={`webchat-msg-${message.id}`}
+                    id={`webchat-msg-${messageIdStr}`}
                     onContextMenu={handleOpenContextMenu}
                     sx={{
                         display: 'flex',
                         justifyContent: isOwn ? 'flex-end' : 'flex-start',
                         alignItems: 'flex-end',
                         mb: 2,
+                        ...rowEnterSx,
                         ...rowHighlightSx,
                     }}
                 >
@@ -953,12 +994,13 @@ const MessageItem = ({
     return (
         <>
         <Box
-            id={`webchat-msg-${message.id}`}
+            id={`webchat-msg-${messageIdStr}`}
             sx={{
                 display: 'flex',
                 justifyContent: isOwn ? 'flex-end' : 'flex-start',
                 alignItems: 'flex-end',
                 mb: 2,
+                ...rowEnterSx,
                 ...rowHighlightSx,
             }}
         >
@@ -1229,35 +1271,11 @@ const MessageItem = ({
                                         </Box>
                                     </Box>
                                 ) : (
-                                    <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
-                                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                                            {renderMessageText()}
-                                        </Box>
-                                        <IconButton
-                                            size="small"
-                                            onClick={openMenu}
-                                            aria-label={t('message.actions.aria')}
-                                            sx={{ mt: -0.5, mr: -0.5, flexShrink: 0 }}
-                                        >
-                                            <MoreVertIcon fontSize="small" />
-                                        </IconButton>
-                                    </Box>
+                                    renderTextWithActionsMenu()
                                 )
                         )
                     ) : (
-                        !hasAttachments && hasText && (
-                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
-                                <IconButton
-                                    size="small"
-                                    onClick={openMenu}
-                                    aria-label={t('message.actions.aria')}
-                                    sx={{ mt: -0.25, ml: -0.5, flexShrink: 0, alignSelf: 'flex-start' }}
-                                >
-                                    <MoreVertIcon fontSize="small" />
-                                </IconButton>
-                                <Box sx={{ flex: 1, minWidth: 0 }}>{renderMessageText()}</Box>
-                            </Box>
-                        )
+                        !hasAttachments && hasText && renderTextWithActionsMenu()
                     )}
 
                     {hasAttachments && (

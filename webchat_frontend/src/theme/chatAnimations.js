@@ -2,6 +2,8 @@
 
 export const CHAT_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
 export const CHAT_EASE_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)';
+export const CHAT_MESSAGE_ENTER_MS = 380;
+export const CHAT_MESSAGE_EASE = 'cubic-bezier(0.19, 1, 0.22, 1)';
 
 export const chatMotionKeyframes = {
   '@keyframes chatPanelIn': {
@@ -25,6 +27,42 @@ export const chatMotionKeyframes = {
   '@keyframes chatHeaderSwitch': {
     from: { opacity: 0, transform: 'translate3d(0, -6px, 0)' },
     to: { opacity: 1, transform: 'translate3d(0, 0, 0)' },
+  },
+  '@keyframes chatEmojiSidebarIn': {
+    from: {
+      opacity: 0,
+      transform: 'translate3d(20px, 0, 0)',
+    },
+    to: {
+      opacity: 1,
+      transform: 'translate3d(0, 0, 0)',
+    },
+  },
+  '@keyframes chatMessageInOwn': {
+    '0%': {
+      opacity: 0,
+      transform: 'translate3d(4px, 7px, 0) scale(0.992)',
+    },
+    '55%': {
+      opacity: 0.92,
+    },
+    '100%': {
+      opacity: 1,
+      transform: 'translate3d(0, 0, 0) scale(1)',
+    },
+  },
+  '@keyframes chatMessageInOther': {
+    '0%': {
+      opacity: 0,
+      transform: 'translate3d(-4px, 7px, 0) scale(0.992)',
+    },
+    '55%': {
+      opacity: 0.92,
+    },
+    '100%': {
+      opacity: 1,
+      transform: 'translate3d(0, 0, 0) scale(1)',
+    },
   },
 };
 
@@ -60,6 +98,19 @@ export const chatListItemEnterSx = (index = 0) =>
 export const chatHeaderSwitchSx = withChatReducedMotion({
   animation: `chatHeaderSwitch 0.22s ${CHAT_EASE_OUT} both`,
 });
+
+/** Emoji sidebar slides in from the right when opened. */
+export const chatEmojiSidebarEnterSx = withChatReducedMotion({
+  animation: `chatEmojiSidebarIn 0.42s ${CHAT_EASE_OUT} both`,
+  willChange: 'transform, opacity',
+});
+
+/** New message bubble enter — direction follows sender side. */
+export const chatMessageEnterSx = (isOwn = false) =>
+  withChatReducedMotion({
+    animation: `chatMessageIn${isOwn ? 'Own' : 'Other'} ${CHAT_MESSAGE_ENTER_MS}ms ${CHAT_MESSAGE_EASE} both`,
+    willChange: 'transform, opacity',
+  });
 
 /**
  * Message pane blur while the next conversation loads.

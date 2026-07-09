@@ -1,4 +1,6 @@
-const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
+import { MESSAGE_URL_REGEX, trimUrlTrailingPunctuation } from './linkifyMessageText';
+
+const URL_REGEX = MESSAGE_URL_REGEX;
 
 const mediaCache = new Map();
 const deletedMessageIdsByRoom = new Map();
@@ -158,7 +160,7 @@ export const extractLinksFromMessages = (messages) => {
     const matches = content.match(URL_REGEX);
     if (!matches) return;
     matches.forEach((raw) => {
-      const url = raw.replace(/[.,;:!?)]+$/g, '');
+      const url = trimUrlTrailingPunctuation(raw);
       if (!url || seen.has(url)) return;
       seen.add(url);
       links.push({
