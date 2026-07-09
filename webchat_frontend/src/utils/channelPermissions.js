@@ -44,6 +44,12 @@ function isRoomOwner(chat, currentUserId) {
   return Number(chat.createdBy) === Number(currentUserId);
 }
 
+/** Only the room creator may change public/private visibility after creation. */
+export function canChangeRoomVisibility(chat, currentUserId = null) {
+  if (!isGroupOrChannelType(chat)) return false;
+  return isRoomOwner(chat, currentUserId);
+}
+
 /** Group admins or channel owner/moderators may edit name, description, and avatar. */
 export function canEditRoomProfile(chat, currentUserId = null) {
   if (!chat) return false;
@@ -87,6 +93,17 @@ export function canDeleteChat(chat) {
 /** Group admins or channel owner/moderators may ban and unban members. */
 export function canBanRoomMembers(chat, currentUserId = null) {
   return canEditRoomProfile(chat, currentUserId);
+}
+
+/** Group chats: all members. Channels: owner and moderators only. */
+export function canViewRoomMembers(chat) {
+  if (!chat) return false;
+  const t = String(chat?.type || '').toUpperCase();
+  if (t === 'GROUP') return true;
+  if (t === 'CHANNEL') {
+    return Boolean(chat.isCurrentUserChannelCreator || chat.isCurrentUserChannelAdmin);
+  }
+  return false;
 }
 
 export function roomTypeLabel(chat) {

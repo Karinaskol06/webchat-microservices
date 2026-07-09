@@ -67,6 +67,18 @@ public class ChatRoomPermissionService {
         return new HashSet<>(room.getChannelPosterIds());
     }
 
+    public void assertCanChangeRoomVisibility(ChatRoom room, Long actorId) {
+        if (room.getType() != ChatType.GROUP && room.getType() != ChatType.CHANNEL) {
+            throw new IllegalArgumentException("Visibility can only be changed for groups or channels");
+        }
+        if (!room.isMember(actorId)) {
+            throw new ForbiddenChatOperationException("You are not a member of this chat");
+        }
+        if (!sameUserId(room.getCreatedBy(), actorId)) {
+            throw new ForbiddenChatOperationException("Only the room owner can change visibility");
+        }
+    }
+
     public void assertCanManageRoomProfile(ChatRoom room, Long actorId) {
         if (room.getType() == ChatType.PERSONAL_SPACE) {
             if (!room.isMember(actorId) || !sameUserId(room.getCreatedBy(), actorId)) {

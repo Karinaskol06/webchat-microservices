@@ -14,6 +14,7 @@ import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
+import com.project.webchat.chat.service.support.RoomOwnerSuccessionService;
 import com.project.webchat.chat.service.support.UserBanGuardService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.shared.dto.UserDTO;
@@ -52,6 +53,7 @@ public class ChatRoomManagementService {
     private final ChatNotificationEventPublisher chatNotificationEventPublisher;
     private final PersonalSpaceService personalSpaceService;
     private final UserBanGuardService userBanGuardService;
+    private final RoomOwnerSuccessionService roomOwnerSuccessionService;
 
     public Page<ChatRoomDTO> getAllUserChatsSorted(Long userId, Pageable pageable) {
         Page<ChatRoom> chatPage = chatRoomRepository
@@ -80,6 +82,15 @@ public class ChatRoomManagementService {
 
         if (!chat.getMemberIds().contains(userId)) {
             throw new IllegalArgumentException("User is not a member of this chat");
+        }
+
+        ChatType type = chat.getType() == null ? ChatType.PRIVATE : chat.getType();
+        if ((type == ChatType.GROUP || type == ChatType.CHANNEL)
+                && roomPermissionService.sameUserId(chat.getCreatedBy(), userId)) {
+            Long successor = roomOwnerSuccessionService.pickOwnerSuccessor(chat, userId);
+            if (successor != null) {
+                roomOwnerSuccessionService.transferOwnership(chat, successor);
+            }
         }
 
         // remove user from chat
@@ -503,12 +514,18 @@ public class ChatRoomManagementService {
         boolean hasName = request.getGroupName() != null;
         boolean hasDescription = request.getDescription() != null;
         boolean hasPhoto = request.getGroupPhoto() != null;
-        if (!hasName && !hasDescription && !hasPhoto) {
+        boolean hasVisibility = request.getVisibility() != null;
+        if (!hasName && !hasDescription && !hasPhoto && !hasVisibility) {
             throw new IllegalArgumentException("At least one field must be provided to update");
         }
 
         ChatRoom room = loadRoom(roomId);
-        roomPermissionService.assertCanManageRoomProfile(room, actorId);
+        if (hasName || hasDescription || hasPhoto) {
+            roomPermissionService.assertCanManageRoomProfile(room, actorId);
+        }
+        if (hasVisibility) {
+            roomPermissionService.assertCanChangeRoomVisibility(room, actorId);
+        }
 
         if (hasName) {
             String name = request.getGroupName().trim();
@@ -522,6 +539,18 @@ public class ChatRoomManagementService {
         }
         if (hasPhoto) {
             room.setGroupPhoto(normalizeGroupPhoto(request.getGroupPhoto()));
+        }
+        if (hasVisibility) {
+            RoomVisibility newVisibility = request.getVisibility();
+            RoomVisibility current = room.getVisibility() != null ? room.getVisibility() : RoomVisibility.PRIVATE;
+            if (newVisibility != current) {
+                room.setVisibility(newVisibility);
+                if (newVisibility == RoomVisibility.PRIVATE) {
+                    room.setInviteToken(UUID.randomUUID().toString());
+                } else {
+                    room.setInviteToken(null);
+                }
+            }
         }
 
         ChatRoom saved = chatRoomRepository.save(room);
