@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: webchat-dev
+  labels:
+    app: auth-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: auth-service
+          image: webchat/auth-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          env:
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: REDIS_PASSWORD
+            - name: EUREKA_URL
+              value: http://discovery-service:8761/eureka/
+            - name: EUREKA_INSTANCE_HOSTNAME
+              value: auth-service
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: JWT_SECRET
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 40
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8082
+            initialDelaySeconds: 90
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

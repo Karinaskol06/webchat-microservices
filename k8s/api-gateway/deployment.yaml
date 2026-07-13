@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: webchat-dev
+  labels:
+    app: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: api-gateway
+          image: webchat/api-gateway:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8089
+          env:
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: REDIS_PASSWORD
+            - name: GATEWAY_INTERNAL_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: GATEWAY_INTERNAL_AUTH_TOKEN
+            - name: EUREKA_URL
+              value: http://discovery-service:8761/eureka/
+            - name: EUREKA_INSTANCE_HOSTNAME
+              value: api-gateway
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: JWT_SECRET
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8089
+            initialDelaySeconds: 40
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8089
+            initialDelaySeconds: 90
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

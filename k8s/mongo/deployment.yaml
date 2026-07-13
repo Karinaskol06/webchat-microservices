@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+  namespace: webchat-dev
+  labels:
+    app: mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:7
+          ports:
+            - containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: MONGO_INITDB_ROOT_USERNAME
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: MONGO_INITDB_ROOT_PASSWORD
+            - name: MONGO_INITDB_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: MONGO_INITDB_DATABASE
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'mongosh --quiet "mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@127.0.0.1:27017/admin" --eval "db.adminCommand({ ping: 1 }).ok" | grep 1'
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - 'mongosh --quiet "mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@127.0.0.1:27017/admin" --eval "db.adminCommand({ ping: 1 }).ok" | grep 1'
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: mongo-data
+          emptyDir: {}

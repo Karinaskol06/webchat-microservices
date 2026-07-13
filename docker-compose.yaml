@@ -237,6 +237,8 @@ services:
     depends_on:
       discovery-service:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       user-service:
         condition: service_started
       auth-service:
@@ -246,6 +248,8 @@ services:
       notification-service:
         condition: service_started
     environment:
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - EUREKA_URL=http://discovery-service:8761/eureka/
       - JWT_SECRET=${JWT_SECRET}
       - GATEWAY_INTERNAL_AUTH_TOKEN=${GATEWAY_INTERNAL_AUTH_TOKEN:-local-gateway-token}

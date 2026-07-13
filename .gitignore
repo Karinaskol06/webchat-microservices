@@ -56,6 +56,7 @@ docs/
 
 # Security-sensitive files
 secrets/
+k8s/secrets.local.yaml
 *.pem
 *.key
 *.p12
