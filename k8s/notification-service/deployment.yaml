@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: webchat-dev
+  labels:
+    app: notification-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: notification-service
+          image: webchat/notification-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+          env:
+            - name: DB_HOST
+              value: postgres
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: POSTGRES_PASSWORD
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: POSTGRES_DB
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:29092
+            - name: KAFKA_CONSUMER_GROUP
+              value: notification-service
+            - name: KAFKA_TOPIC_MESSAGE_CREATED
+              value: chat.message.created.v1
+            - name: KAFKA_TOPIC_MESSAGE_CREATED_DLQ
+              value: chat.message.created.v1.dlq
+            - name: KAFKA_TOPIC_MESSAGE_REACTION
+              value: chat.message.reaction.v1
+            - name: KAFKA_TOPIC_MESSAGE_REACTION_DLQ
+              value: chat.message.reaction.v1.dlq
+            - name: KAFKA_TOPIC_ROOM_MEMBER_INVITED
+              value: chat.room.member.invited.v1
+            - name: KAFKA_TOPIC_ROOM_MEMBER_INVITED_DLQ
+              value: chat.room.member.invited.v1.dlq
+            - name: VAPID_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: VAPID_PUBLIC_KEY
+            - name: VAPID_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: VAPID_PRIVATE_KEY
+            - name: VAPID_SUBJECT
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: VAPID_SUBJECT
+            - name: EUREKA_URL
+              value: http://discovery-service:8761/eureka/
+            - name: EUREKA_INSTANCE_HOSTNAME
+              value: notification-service
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: JWT_SECRET
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 120
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

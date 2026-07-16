@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-service
+  namespace: webchat-dev
+  labels:
+    app: chat-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chat-service
+  template:
+    metadata:
+      labels:
+        app: chat-service
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: chat-service
+          image: webchat/chat-service:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+          env:
+            - name: MONGO_HOST
+              value: mongo
+            - name: MONGO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: MONGO_INITDB_ROOT_USERNAME
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: MONGO_INITDB_ROOT_PASSWORD
+            - name: MONGO_DB
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: MONGO_INITDB_DATABASE
+            - name: MONGO_AUTH_DB
+              value: admin
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: REDIS_PASSWORD
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:29092
+            - name: APP_UPLOAD_DIR
+              value: /var/webchat/uploads
+            - name: GATEWAY_INTERNAL_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: GATEWAY_INTERNAL_AUTH_TOKEN
+            - name: EUREKA_URL
+              value: http://discovery-service:8761/eureka/
+            - name: EUREKA_INSTANCE_HOSTNAME
+              value: chat-service
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: JWT_SECRET
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+            initialDelaySeconds: 120
+            periodSeconds: 20
+          volumeMounts:
+            - name: chat-uploads
+              mountPath: /var/webchat/uploads
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: chat-uploads
+          emptyDir: {}
