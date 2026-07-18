@@ -7,6 +7,8 @@ metadata:
     app: mongo
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: mongo
@@ -37,21 +39,19 @@ spec:
                   name: webchat-secrets
                   key: MONGO_INITDB_DATABASE
           readinessProbe:
-            exec:
-              command:
-                - sh
-                - -c
-                - 'mongosh --quiet "mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@127.0.0.1:27017/admin" --eval "db.adminCommand({ ping: 1 }).ok" | grep 1'
-            initialDelaySeconds: 20
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
-            exec:
-              command:
-                - sh
-                - -c
-                - 'mongosh --quiet "mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@127.0.0.1:27017/admin" --eval "db.adminCommand({ ping: 1 }).ok" | grep 1'
+            tcpSocket:
+              port: 27017
             initialDelaySeconds: 40
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           volumeMounts:
             - name: mongo-data
               mountPath: /data/db
@@ -64,4 +64,5 @@ spec:
               memory: 512Mi
       volumes:
         - name: mongo-data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: mongo-data

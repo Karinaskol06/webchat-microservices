@@ -41,6 +41,27 @@ spec:
                 secretKeyRef:
                   name: webchat-secrets
                   key: JWT_SECRET
+            - name: MAIL_ENABLED
+              value: "true"
+            - name: MAIL_HOST
+              value: smtp.gmail.com
+            - name: MAIL_PORT
+              value: "587"
+            - name: MAIL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: MAIL_USERNAME
+            - name: MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: MAIL_PASSWORD
+            - name: MAIL_FROM
+              value: "webchatadmin@gmail.com"
+            - name: PASSWORD_RESET_FRONTEND_URL
+              # Prefer Ingress on :80 (http://localhost)
+              value: "http://localhost"
           readinessProbe:
             httpGet:
               path: /actuator/health

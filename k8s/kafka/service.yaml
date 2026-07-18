@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: webchat-dev
+  labels:
+    app: kafka
+spec:
+  selector:
+    app: kafka
+  ports:
+    - name: plaintext
+      port: 29092
+      targetPort: 29092
+  type: ClusterIP
