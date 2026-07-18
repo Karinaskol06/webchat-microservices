@@ -60,7 +60,8 @@ spec:
             - name: MAIL_FROM
               value: "webchatadmin@gmail.com"
             - name: PASSWORD_RESET_FRONTEND_URL
-              value: "http://localhost:8080"
+              # Prefer Ingress on :80 (http://localhost)
+              value: "http://localhost"
           readinessProbe:
             httpGet:
               path: /actuator/health
