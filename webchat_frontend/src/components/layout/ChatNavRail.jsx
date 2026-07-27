@@ -19,7 +19,7 @@ import useChatStore from '../../store/useChatStore';
 import useChatFolderStore from '../../store/useChatFolderStore';
 import ChatFolderRailSection from './ChatFolderRailSection';
 import { isChatDragEvent, readChatDragId } from '../../utils/chatDrag';
-import { chatColors, chatLayout, muiTransparent } from '../../theme/chatDesignTokens';
+import { chatColors, muiTransparent } from '../../theme/chatDesignTokens';
 import UserAvatar from '../user/UserAvatar';
 import useTranslation from '../../hooks/useTranslation';
 
@@ -80,7 +80,6 @@ const ChatNavRail = ({
 
   const findUsersLabel = t('nav.findUsers');
   const chats = useChatStore((s) => s.chats);
-  const folders = useChatFolderStore((s) => s.folders);
   const dragOverFolderId = useChatFolderStore((s) => s.dragOverFolderId);
   const setDragOverFolderId = useChatFolderStore((s) => s.setDragOverFolderId);
   const assignChatToFolder = useChatFolderStore((s) => s.assignChatToFolder);

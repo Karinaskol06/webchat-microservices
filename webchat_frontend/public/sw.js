@@ -1,5 +1,3 @@
-/* global clients, indexedDB */
-
 // Force a freshly-installed service worker to skip the "waiting" phase.
 self.addEventListener('install', () => {
   self.skipWaiting();

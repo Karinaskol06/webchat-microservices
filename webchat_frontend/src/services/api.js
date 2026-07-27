@@ -94,8 +94,6 @@ api.interceptors.response.use(
 
     const silentError = Boolean(error.config?.silentError);
     if (!silentError) {
-      const gatewayMsg = error.response?.headers?.["x-error-message"]
-        ?? error.response?.headers?.["X-Error-Message"];
       console.error("❌ Response error:", {
         url,
         status,

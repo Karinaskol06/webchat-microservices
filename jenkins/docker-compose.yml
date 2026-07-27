@@ -1,0 +1,39 @@
+# Jenkins controller for CI/CD learning (Docker Desktop + local Kubernetes)
+services:
+  jenkins:
+    build:
+      # Build from jenkins/ folder, use that folder's Dockerfile (to install CLI + kubectl)
+      context: .
+      dockerfile: Dockerfile
+    # Tag the built image with this name
+    image: webchat/jenkins:local
+    container_name: webchat-jenkins
+    # If docker restarts or container crashes - start it again
+    restart: unless-stopped
+    ports:
+      # Host:container
+      # Jenkins UI inside the container
+      - "8080:8080"
+      # Ports Jenkins agents use to connect
+      - "50000:50000"
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=true"
+      # kubectl reads cluster credentials from this file
+      KUBECONFIG: /home/jenkins/.kube/config
+    volumes:
+      # Docker volume on PC:folder inside the container
+      - jenkins_home:/var/jenkins_home
+      # Host Docker daemon (Desktop) connection with the container
+      - //var/run/docker.sock:/var/run/docker.sock
+      # Mounts PC .kube folder into the container (read-only)
+      # For Jenkins to know how to reach K8s
+      - ${USERPROFILE}/.kube:/home/jenkins/.kube:ro
+    extra_hosts:
+      # So kubectl inside the container can reach Docker Desktop's Kubernetes API.
+      - "kubernetes.docker.internal:host-gateway"
+    # docker.sock is typically owned by root
+    group_add:
+      - "0"
+
+volumes:
+  jenkins_home:
