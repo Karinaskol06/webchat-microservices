@@ -57,8 +57,8 @@ public class UserServiceTest {
         assertThat(result.getEmail()).isEqualTo("karinaskol@gmail.com");
         assertThat(result.getFirstName()).isEqualTo("Karina");
         assertThat(result.getLastName()).isEqualTo("Skoliboh");
-        assertThat(result.getPhoneNumber()).isEqualTo("+15551234567");
-        assertThat(result.getCountryCode()).isEqualTo("US");
+        assertThat(result.getPhoneNumber()).isEqualTo("+48572579928");
+        assertThat(result.getCountryCode()).isEqualTo("PL");
 
         User savedUser = userRepository.findByUsername("karinaskol").orElseThrow();
         assertThat(savedUser).isNotNull();
