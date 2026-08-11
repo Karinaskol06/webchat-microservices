@@ -16,7 +16,7 @@ pipeline {
         // GHCR image prefix
         GHCR_OWNER = 'karinaskol06'
         GHCR_PREFIX = "ghcr.io/${GHCR_OWNER}/webchat"
-        // Dockerfiles use RUN --mount=type=cache; legacy builder rejects that
+        // Dockerfiles use RUN --mount=type=cache (needs BuildKit / buildx)
         DOCKER_BUILDKIT = '1'
     }
 
@@ -51,42 +51,43 @@ pipeline {
             }
         }
 
-        // Parallel builds — each service runs as its own branch of this stage
+        // Parallel builds — each service runs as its own branch of this stage.
+        // buildx --load puts images on the host Docker daemon (needed for local K8s :local tags).
         stage('Docker Build') {
             parallel {
                 stage('discovery-service') {
                     steps {
-                        sh 'docker build -f discovery-service/Dockerfile -t webchat/discovery-service:local -t webchat/discovery-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-discovery-service:b${BUILD_NUMBER} .'
+                        sh 'docker buildx build --load -f discovery-service/Dockerfile -t webchat/discovery-service:local -t webchat/discovery-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-discovery-service:b${BUILD_NUMBER} .'
                     }
                 }
                 stage('user-service') {
                     steps {
-                        sh 'docker build -f user-service/Dockerfile -t webchat/user-service:local -t webchat/user-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-user-service:b${BUILD_NUMBER} .'
+                        sh 'docker buildx build --load -f user-service/Dockerfile -t webchat/user-service:local -t webchat/user-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-user-service:b${BUILD_NUMBER} .'
                     }
                 }
                 stage('auth-service') {
                     steps {
-                        sh 'docker build -f auth-service/Dockerfile -t webchat/auth-service:local -t webchat/auth-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-auth-service:b${BUILD_NUMBER} .'
+                        sh 'docker buildx build --load -f auth-service/Dockerfile -t webchat/auth-service:local -t webchat/auth-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-auth-service:b${BUILD_NUMBER} .'
                     }
                 }
                 stage('chat-service') {
                     steps {
-                        sh 'docker build -f chat-service/Dockerfile -t webchat/chat-service:local -t webchat/chat-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-chat-service:b${BUILD_NUMBER} .'
+                        sh 'docker buildx build --load -f chat-service/Dockerfile -t webchat/chat-service:local -t webchat/chat-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-chat-service:b${BUILD_NUMBER} .'
                     }
                 }
                 stage('notification-service') {
                     steps {
-                        sh 'docker build -f notification-service/Dockerfile -t webchat/notification-service:local -t webchat/notification-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-notification-service:b${BUILD_NUMBER} .'
+                        sh 'docker buildx build --load -f notification-service/Dockerfile -t webchat/notification-service:local -t webchat/notification-service:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-notification-service:b${BUILD_NUMBER} .'
                     }
                 }
                 stage('api-gateway') {
                     steps {
-                        sh 'docker build -f api-gateway/Dockerfile -t webchat/api-gateway:local -t webchat/api-gateway:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-api-gateway:b${BUILD_NUMBER} .'
+                        sh 'docker buildx build --load -f api-gateway/Dockerfile -t webchat/api-gateway:local -t webchat/api-gateway:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-api-gateway:b${BUILD_NUMBER} .'
                     }
                 }
                 stage('frontend') {
                     steps {
-                        sh 'docker build -f webchat_frontend/Dockerfile -t webchat/frontend:local -t webchat/frontend:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-frontend:b${BUILD_NUMBER} webchat_frontend'
+                        sh 'docker buildx build --load -f webchat_frontend/Dockerfile -t webchat/frontend:local -t webchat/frontend:b${BUILD_NUMBER} -t ${GHCR_PREFIX}-frontend:b${BUILD_NUMBER} webchat_frontend'
                     }
                 }
             }
