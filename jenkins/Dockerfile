@@ -26,6 +26,16 @@ RUN curl -fsSLo /usr/local/bin/kubectl \
         "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
     && chmod +x /usr/local/bin/kubectl
 
+# Maven + Node for pipeline test stages (Java 21 image already has a JDK).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends maven \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && mvn -version \
+    && node -v \
+    && npm -v
+
 # Put jenkins user in group docker so it can use the mounted socket (permissions)
 RUN groupadd -f docker \
     && usermod -aG docker jenkins
