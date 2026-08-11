@@ -91,7 +91,7 @@ const MessageInput = forwardRef(function MessageInput(
   const [pinMenuOpen, setPinMenuOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [dropActive, setDropActive] = useState(false);
-  const [dropCounter, setDropCounter] = useState(0);
+  const [, setDropCounter] = useState(0);
   const lastTypingNotifyRef = useRef(0);
 
   useEffect(() => {

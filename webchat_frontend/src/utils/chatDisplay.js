@@ -35,7 +35,7 @@ export const getChatDisplayLabel = (chat, t) => {
   return u?.username || 'Chat';
 };
 
-export const getChatDisplaySecondary = (chat, t) => {
+export const getChatDisplaySecondary = (chat) => {
   const chatType = getChatTypeUpper(chat);
   if (chatType === 'PERSONAL_SPACE') return 'Personal Space';
   if (chatType === 'CHANNEL') return 'Channel';
@@ -54,5 +54,7 @@ export function isEmojiOnlyMessage(text) {
   if (!value) return false;
   const compact = value.replace(/\s/g, '');
   if (!compact) return false;
+  // Intentional: emoji grapheme class + ZWJ / variation selectors.
+  // eslint-disable-next-line no-misleading-character-class -- emoji-only matcher
   return /^[\p{Extended_Pictographic}\p{Emoji_Modifier}\u200D\uFE0F]+$/u.test(compact);
 }

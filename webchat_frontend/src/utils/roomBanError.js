@@ -3,7 +3,7 @@ export const ROOM_BANNED_CODE = 'ROOM_BANNED';
 export function parseRoomBanError(error) {
   const body = typeof error === 'object' && error !== null ? error : null;
   if (!body) return null;
-  if (body.code === ROOM_BANNED) {
+  if (body.code === ROOM_BANNED_CODE) {
     return {
       banned: true,
       message: body.message || body.error || 'You have been banned from this room.',

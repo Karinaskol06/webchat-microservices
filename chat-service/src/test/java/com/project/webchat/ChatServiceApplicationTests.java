@@ -34,8 +34,12 @@ class ChatServiceApplicationTests {
     private AttachmentRepository attachmentRepository;
     @MockBean
     private RedisService redisService;
-    @MockBean
-    private KafkaTemplate<?, ?> kafkaTemplate;
+    @MockBean(name = "messageCreatedKafkaTemplate")
+    private KafkaTemplate<?, ?> messageCreatedKafkaTemplate;
+    @MockBean(name = "messageReactionKafkaTemplate")
+    private KafkaTemplate<?, ?> messageReactionKafkaTemplate;
+    @MockBean(name = "roomMemberInvitedKafkaTemplate")
+    private KafkaTemplate<?, ?> roomMemberInvitedKafkaTemplate;
 
     @Autowired
     private ChatService chatService;

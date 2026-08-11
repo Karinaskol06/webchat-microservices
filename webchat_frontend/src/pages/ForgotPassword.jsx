@@ -115,7 +115,6 @@ const ForgotPassword = () => {
               onChange={(e) => {
                 setEmail(e.target.value);
                 setError('');
-                setErrorShake(false);
               }}
               required
               disabled={loading}
