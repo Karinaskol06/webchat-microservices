@@ -16,6 +16,8 @@ pipeline {
         // GHCR image prefix
         GHCR_OWNER = 'karinaskol06'
         GHCR_PREFIX = "ghcr.io/${GHCR_OWNER}/webchat"
+        // Dockerfiles use RUN --mount=type=cache; legacy builder rejects that
+        DOCKER_BUILDKIT = '1'
     }
 
     // Pipeline starts
