@@ -120,7 +120,8 @@ The pipeline is versioned with the application. Jenkins discovers changes via a 
 | Stage | Runs on |
 |-------|---------|
 | Backend Test, Frontend Test, Docker Build | Every branch with `Jenkinsfile` |
-| Push GHCR, Deploy | `main`, `master`, `cicd-processes` only |
+| Push GHCR | `main`, `master`, `cicd-processes` only |
+| Deploy | `main`, `master` only |
 
 Feature branches get **CI only** (tests + image build). Deploy and registry push run only when merging to integration branches.
 
@@ -175,7 +176,7 @@ Jenkins needs permission to build, push images, and call `kubectl`; it does not 
 Backend Test ──► Frontend Test ──► Docker Build (×7 parallel)
                                         │
                     ┌───────────────────┴────────────────────┐
-                    │  (only main / master / cicd-processes) │
+                    │       (only main / master)             │
                     ▼                                        ▼
               Push GHCR                              Deploy (kubectl)
 ```
@@ -232,8 +233,8 @@ Each branch that contains `Jenkinsfile` gets its own job (`main`, `cicd-processe
 1. Develop on a feature branch
 2. git push
 3. Jenkins scans -> runs Backend Test -> Frontend Test -> Docker Build
-4. Merge to main / cicd-processes
-5. Pipeline adds Push GHCR + Deploy
+4. Merge to main (deployment)
+5. Pipeline adds Push GHCR (allowed on integration branches) and Deploy on main
 6. New images on Docker Desktop; pods restart
 7. User opens http://localhost and sees the update (page reload; WebSocket may reconnect)
 ```

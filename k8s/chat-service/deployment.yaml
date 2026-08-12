@@ -64,6 +64,9 @@ spec:
               value: http://discovery-service:8761/eureka/
             - name: EUREKA_INSTANCE_HOSTNAME
               value: chat-service
+            # Override image defaults so lb://chat-service uses Cluster DNS, not a stale pod IP.
+            - name: EUREKA_INSTANCE_PREFER_IP_ADDRESS
+              value: "false"
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
@@ -71,7 +74,7 @@ spec:
                   key: JWT_SECRET
           readinessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/readiness
               port: 8083
             initialDelaySeconds: 60
             periodSeconds: 10
@@ -80,7 +83,7 @@ spec:
           livenessProbe:
             # Avoid killing the JVM on short Docker Desktop CPU stalls (default timeout is 1s).
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: 8083
             initialDelaySeconds: 120
             periodSeconds: 20

@@ -112,6 +112,9 @@ management:
       access: permitAll
     info:
       access: permitAll
+  health:
+    redis:
+      enabled: false
 
 logging:
   level:

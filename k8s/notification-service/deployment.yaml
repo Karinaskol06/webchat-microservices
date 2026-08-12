@@ -77,6 +77,9 @@ spec:
               value: http://discovery-service:8761/eureka/
             - name: EUREKA_INSTANCE_HOSTNAME
               value: notification-service
+            # Override image defaults so lb://notification-service uses Cluster DNS, not a stale pod IP.
+            - name: EUREKA_INSTANCE_PREFER_IP_ADDRESS
+              value: "false"
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:

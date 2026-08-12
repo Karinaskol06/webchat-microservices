@@ -128,18 +128,17 @@ pipeline {
                 anyOf {
                     branch 'main'
                     branch 'master'
-                    branch 'cicd-processes'
                 }
             }
             steps {
-                // K8s restarts all services deployments and picks up changes
-                // Waits for each rollout to finish
+                // Restart app deployments only
                 sh '''
                     set -e
-                    for dep in discovery-service user-service auth-service chat-service notification-service api-gateway frontend; do
+                    kubectl rollout status "deployment/discovery-service" -n "${KUBE_NS}" --timeout=120s
+                    for dep in user-service auth-service chat-service notification-service api-gateway frontend; do
                       kubectl rollout restart "deployment/${dep}" -n "${KUBE_NS}"
                     done
-                    for dep in discovery-service user-service auth-service chat-service notification-service api-gateway frontend; do
+                    for dep in user-service auth-service chat-service notification-service api-gateway frontend; do
                       kubectl rollout status "deployment/${dep}" -n "${KUBE_NS}" --timeout=180s
                     done
                 '''

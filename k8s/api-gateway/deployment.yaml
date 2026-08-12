@@ -32,6 +32,9 @@ spec:
                 secretKeyRef:
                   name: webchat-secrets
                   key: REDIS_PASSWORD
+            # Redis rate-limiting is unused; ignore redis health so probes stay green.
+            - name: MANAGEMENT_HEALTH_REDIS_ENABLED
+              value: "false"
             - name: GATEWAY_INTERNAL_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -48,14 +51,14 @@ spec:
                   key: JWT_SECRET
           readinessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/readiness
               port: 8089
             initialDelaySeconds: 40
             periodSeconds: 10
             failureThreshold: 12
           livenessProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: 8089
             initialDelaySeconds: 90
             periodSeconds: 20
