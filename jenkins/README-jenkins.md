@@ -9,7 +9,7 @@ Related files:
 | [`jenkins/Dockerfile`](Dockerfile) | Custom Jenkins controller image |
 | [`jenkins/docker-compose.yml`](docker-compose.yml) | How Jenkins runs on Docker Desktop |
 | [`Jenkinsfile`](../Jenkinsfile) | Declarative pipeline (Pipeline as Code) |
-| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | GitHub Actions CI on pull requests |
+| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | GitHub Actions CI (tests + image build; no registry push) |
 | [`k8s/README-k8s.md`](../k8s/README-k8s.md) | Local Kubernetes stack |
 
 Jenkins UI (when running): **http://localhost:8080**
@@ -46,11 +46,9 @@ GitHub Actions (hosted)              Jenkins (local)
    │  webhook (instant)                   │  poll or manual scan
    ▼                                      ▼
    CI: test, lint, build images           CI: mvn test, npm lint/test
-   Push to GHCR on main                   Parallel docker build
+   (no registry push)                    Parallel docker build
                                           Push GHCR (main branches)
                                           CD: kubectl rollout restart
-   │                                      │
-   └────────────── images ────────────────┘
                          │
                          ▼
               Docker Desktop (single daemon)
@@ -64,12 +62,14 @@ GitHub Actions (hosted)              Jenkins (local)
 
 ### Why two CI systems?
 
+**Split:** **GitHub Actions = CI** (tests + prove Dockerfiles build). **Jenkins = GHCR + CD** (push images and deploy to local K8s).
+
 | Tool | Responsibility | Rationale |
 |------|----------------|-----------|
-| **GitHub Actions** | CI on every PR and push to `main` | Fast feedback via webhooks; no need to expose local Jenkins to the internet; publishes images to GHCR on `main`. |
-| **Jenkins** | Full pipeline including **CD to local K8s** | Self-hosted controller; demonstrates Multibranch Pipeline, Declarative `Jenkinsfile`, credentials, and `kubectl` deploy. |
+| **GitHub Actions** | CI on every PR and push to `main` | Fast hosted feedback via webhooks; no registry permissions or local Jenkins exposure needed. |
+| **Jenkins** | **GHCR push** and **CD to local K8s** | Self-hosted pipeline; Multibranch `Jenkinsfile`, credentials, registry publish, and `kubectl` deploy. |
 
-This project keeps both to show understanding of each model.
+This project keeps both to show understanding of each model without duplicate registry publishers.
 
 ---
 
@@ -239,7 +239,7 @@ Each branch that contains `Jenkinsfile` gets its own job (`main`, `cicd-processe
 7. User opens http://localhost and sees the update (page reload; WebSocket may reconnect)
 ```
 
-GitHub Actions runs in parallel on PRs for hosted CI and GHCR publish on `main`. Jenkins owns the **local CD** story.
+GitHub Actions runs hosted CI on PRs and on `main` (tests + build only). Jenkins owns **GHCR publish and local CD**.
 
 ---
 
@@ -308,4 +308,4 @@ Pipeline, Git, GitHub Branch Source (or Git), Pipeline: Stage View, Credentials 
 
 ## 10. Summary
 
-Jenkins in this project is a **self-hosted Declarative pipeline** that complements **GitHub Actions**: Actions provides fast PR CI and GHCR publish; Jenkins demonstrates Multibranch workflows, parallel image builds, registry push, and **Continuous Deployment** to a local Kubernetes namespace. The setup deliberately uses Docker Desktop integration (socket mount, `:local` tags, mounted kubeconfig) as a learning path toward cloud patterns (registry + EKS + separate agents) without changing the fundamental CI/CD stages.
+Jenkins in this project is a **self-hosted Declarative pipeline** that complements **GitHub Actions**: **GHA = CI; Jenkins = GHCR + CD.** Actions runs fast hosted quality gates; Jenkins handles Multibranch workflows, parallel image builds, registry push, and **Continuous Deployment** to a local Kubernetes namespace. The setup deliberately uses Docker Desktop integration (socket mount, `:local` tags, mounted kubeconfig) as a learning path toward cloud patterns (registry + EKS + separate agents) without changing the fundamental CI/CD stages.
