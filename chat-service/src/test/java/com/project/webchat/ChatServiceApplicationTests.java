@@ -7,6 +7,7 @@ import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.chat.service.ChatService;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.message.ChatMessageCommandService;
+import com.project.webchat.chat.service.message.ChatMessageDeliveryService;
 import com.project.webchat.chat.service.message.MessageReactionService;
 import com.project.webchat.chat.service.room.ChatRoomManagementService;
 import com.project.webchat.chat.service.room.PrivateChatService;
@@ -51,6 +52,9 @@ class ChatServiceApplicationTests {
     private ChatMessageCommandService chatMessageCommandService;
 
     @Autowired
+    private ChatMessageDeliveryService chatMessageDeliveryService;
+
+    @Autowired
     private MessageReactionService messageReactionService;
 
     @Autowired
@@ -64,6 +68,7 @@ class ChatServiceApplicationTests {
         assertThat(chatService).isNotNull();
         assertThat(privateChatService).isNotNull();
         assertThat(chatMessageCommandService).isNotNull();
+        assertThat(chatMessageDeliveryService).isNotNull();
         assertThat(messageReactionService).isNotNull();
         assertThat(chatRoomManagementService).isNotNull();
         assertThat(roomEnrichmentService).isNotNull();

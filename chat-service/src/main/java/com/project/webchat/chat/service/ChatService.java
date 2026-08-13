@@ -59,9 +59,8 @@ public class ChatService {
     @Transactional
     public ChatMessageDTO sendRichMessage(Long senderId, String chatId, MessageType type,
                                           String content, String replyToMessageId) {
-        ChatMessageDTO dto = chatMessageCommandService.sendRichMessage(senderId, chatId, type, content, replyToMessageId);
-        chatRoomManagementService.revealChatOnNewMessage(chatId);
-        return dto;
+        // Delivery pipeline owns push/WS fan-out and reveal-on-send.
+        return chatMessageCommandService.sendRichMessage(senderId, chatId, type, content, replyToMessageId);
     }
 
     @Transactional
@@ -71,26 +70,20 @@ public class ChatService {
 
     @Transactional
     public ChatMessageDTO sendMessage(Long senderId, SendMessageRequest sendMessageRequest) {
-        ChatMessageDTO dto = chatMessageCommandService.sendMessage(senderId, sendMessageRequest);
-        chatRoomManagementService.revealChatOnNewMessage(sendMessageRequest.getChatId());
-        return dto;
+        return chatMessageCommandService.sendMessage(senderId, sendMessageRequest);
     }
 
     @Transactional
     public ChatMessageDTO forwardMessage(Long senderId, String targetChatId, String forwardSourceMessageId) {
-        ChatMessageDTO dto = chatMessageCommandService.forwardMessage(senderId, targetChatId, forwardSourceMessageId);
-        chatRoomManagementService.revealChatOnNewMessage(targetChatId);
-        return dto;
+        return chatMessageCommandService.forwardMessage(senderId, targetChatId, forwardSourceMessageId);
     }
 
     @Transactional
     public MessageWithAttachmentsDTO sendMixedMessage(Long senderId, String chatId,
                                                       String content, List<String> attachmentIds,
                                                       MessageType type, String replyToMessageId) {
-        MessageWithAttachmentsDTO dto = chatMessageCommandService.sendMixedMessage(
+        return chatMessageCommandService.sendMixedMessage(
                 senderId, chatId, content, attachmentIds, type, replyToMessageId);
-        chatRoomManagementService.revealChatOnNewMessage(chatId);
-        return dto;
     }
 
     @Transactional
@@ -98,10 +91,8 @@ public class ChatService {
                                                                 List<String> attachmentIds,
                                                                 MessageType type,
                                                                 String replyToMessageId) {
-        MessageWithAttachmentsDTO dto = chatMessageCommandService.sendAttachmentsOnlyMessage(
+        return chatMessageCommandService.sendAttachmentsOnlyMessage(
                 senderId, chatId, attachmentIds, type, replyToMessageId);
-        chatRoomManagementService.revealChatOnNewMessage(chatId);
-        return dto;
     }
 
     public Page<ChatRoomDTO> getAllUserChatsSorted(Long userId, Pageable pageable) {

@@ -2,7 +2,6 @@ package com.project.webchat.chat.service.message;
 
 import com.project.webchat.chat.dto.AttachmentDTO;
 import com.project.webchat.chat.dto.ChatMessageDTO;
-import com.project.webchat.chat.dto.ChatRoomDTO;
 import com.project.webchat.chat.dto.MessageWithAttachmentsDTO;
 import com.project.webchat.chat.dto.SendMessageRequest;
 import com.project.webchat.chat.entity.Attachment;
@@ -15,9 +14,7 @@ import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.FileStorageService;
-import com.project.webchat.chat.service.MessageEventPublisher;
 import com.project.webchat.chat.service.RedisService;
-import com.project.webchat.chat.service.WebSocketService;
 import com.project.webchat.chat.service.support.ChatMessageMapper;
 import com.project.webchat.chat.service.support.ChatMessagePreviewHelper;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
@@ -27,9 +24,7 @@ import com.project.webchat.chat.service.support.PollPayloadHelper;
 import com.project.webchat.chat.service.support.SharedPollService;
 import com.project.webchat.chat.service.support.UserBanGuardService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
-import com.project.webchat.chat.service.user.PrivateChatContactRequestService;
 import com.project.webchat.shared.dto.UserInfoDTO;
-import com.project.webchat.shared.events.v1.MessageCreatedEventV1;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -38,7 +33,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -46,9 +40,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * Message write commands: validate membership/permissions, persist, update room activity,
+ * then hand off outbound notification to {@link ChatMessageDeliveryService}.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -58,8 +55,6 @@ public class ChatMessageCommandService {
     private final ChatRoomRepository chatRoomRepository;
     private final AttachmentRepository attachmentRepository;
     private final RedisService redisService;
-    private final WebSocketService webSocketService;
-    private final MessageEventPublisher messageEventPublisher;
     private final FileStorageService fileStorageService;
     private final ChatUserInfoService chatUserInfoService;
     private final ChatMessageMapper chatMessageMapper;
@@ -70,7 +65,7 @@ public class ChatMessageCommandService {
     private final PollPayloadHelper pollPayloadHelper;
     private final SharedPollService sharedPollService;
     private final UserBanGuardService userBanGuardService;
-    private final PrivateChatContactRequestService privateChatContactRequestService;
+    private final ChatMessageDeliveryService messageDeliveryService;
 
     @Transactional
     public ChatMessageDTO sendRichMessage(Long senderId, String chatId, MessageType type,
@@ -107,11 +102,10 @@ public class ChatMessageCommandService {
                 .build();
         ChatMessage saved = chatMessageRepository.save(chatMessage);
         String preview = previewHelper.getPreviewText(normalized, List.of(), type);
-        publishMessageCreatedV1(saved, preview);
         updateChatLastActivity(chatId, preview);
         redisService.updatePresence(senderId, chatId);
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(saved, senderInfo);
-        deliverSentMessage(room, senderId, messageDTO);
+        messageDeliveryService.notifyMessageCreated(room, senderId, saved, messageDTO, preview);
         return messageDTO;
     }
 
@@ -138,12 +132,11 @@ public class ChatMessageCommandService {
                 .isRead(false)
                 .build();
         ChatMessage saved = chatMessageRepository.save(chatMessage);
-        publishMessageCreatedV1(saved, previewHelper.getPreviewText(sendMessageRequest.getContent(), List.of()));
-
-        updateChatLastActivity(sendMessageRequest.getChatId(), sendMessageRequest.getContent());
+        String preview = previewHelper.getPreviewText(sendMessageRequest.getContent(), List.of());
+        updateChatLastActivity(sendMessageRequest.getChatId(), preview);
         redisService.updatePresence(senderId, sendMessageRequest.getChatId());
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(saved, senderInfo);
-        deliverSentMessage(room, senderId, messageDTO);
+        messageDeliveryService.notifyMessageCreated(room, senderId, saved, messageDTO, preview);
         return messageDTO;
     }
 
@@ -211,13 +204,11 @@ public class ChatMessageCommandService {
                     targetChatId, senderId);
             newAttachments.add(clone);
         }
-        updateChatLastActivity(targetChatId,
-                previewHelper.getPreviewText(saved.getContent(), newAttachments, saved.getMessageType()));
-        publishMessageCreatedV1(saved,
-                previewHelper.getPreviewText(saved.getContent(), newAttachments, saved.getMessageType()));
+        String preview = previewHelper.getPreviewText(saved.getContent(), newAttachments, saved.getMessageType());
+        updateChatLastActivity(targetChatId, preview);
         redisService.updatePresence(senderId, targetChatId);
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(saved, senderInfo);
-        deliverSentMessage(targetRoom, senderId, messageDTO);
+        messageDeliveryService.notifyMessageCreated(targetRoom, senderId, saved, messageDTO, preview);
         return messageDTO;
     }
 
@@ -248,11 +239,11 @@ public class ChatMessageCommandService {
 
         List<Attachment> attachments = linkAttachments(attachmentIds, savedMessage);
 
-        updateChatLastActivity(chatId, previewHelper.getPreviewText(content, attachments));
-        publishMessageCreatedV1(savedMessage, previewHelper.getPreviewText(content, attachments));
+        String preview = previewHelper.getPreviewText(content, attachments);
+        updateChatLastActivity(chatId, preview);
         redisService.updatePresence(senderId, chatId);
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(savedMessage, senderInfo);
-        deliverSentMessage(room, senderId, messageDTO);
+        messageDeliveryService.notifyMessageCreated(room, senderId, savedMessage, messageDTO, preview);
         return MessageWithAttachmentsDTO.fromEntity(savedMessage, attachments);
     }
 
@@ -284,11 +275,11 @@ public class ChatMessageCommandService {
         ChatMessage savedMessage = chatMessageRepository.save(message);
         List<Attachment> attachments = linkAttachments(attachmentIds, savedMessage);
 
-        updateChatLastActivity(chatId, previewHelper.getPreviewText(null, attachments));
-        publishMessageCreatedV1(savedMessage, previewHelper.getPreviewText(null, attachments));
+        String preview = previewHelper.getPreviewText(null, attachments);
+        updateChatLastActivity(chatId, preview);
         redisService.updatePresence(senderId, chatId);
         ChatMessageDTO messageDTO = chatMessageMapper.toMessageDTO(savedMessage, senderInfo);
-        deliverSentMessage(room, senderId, messageDTO);
+        messageDeliveryService.notifyMessageCreated(room, senderId, savedMessage, messageDTO, preview);
         return MessageWithAttachmentsDTO.fromEntity(savedMessage, attachments);
     }
 
@@ -321,7 +312,7 @@ public class ChatMessageCommandService {
         }
 
         redisService.updatePresence(senderId, chatId);
-        webSocketService.notifyUserJoinedChat(chatId, senderId);
+        messageDeliveryService.notifyReaderPresent(chatId, senderId);
 
         List<ChatMessage> unreadMessages = chatMessageRepository
                 .findUnreadMessagesNotFromUser(chatId, senderId);
@@ -337,7 +328,7 @@ public class ChatMessageCommandService {
 
         chatMessageRepository.saveAll(unreadMessages);
         List<String> readMessageIds = unreadMessages.stream().map(ChatMessage::getId).toList();
-        webSocketService.sendReadReceipt(chatId, senderId, readMessageIds);
+        messageDeliveryService.notifyReadReceipt(chatId, senderId, readMessageIds);
     }
 
     @Transactional
@@ -362,7 +353,7 @@ public class ChatMessageCommandService {
         }
 
         chatMessageRepository.delete(toDelete);
-        webSocketService.notifyMessageDeleted(messageId, chatId, actorId, room.getMemberIds());
+        messageDeliveryService.notifyMessageDeleted(messageId, chatId, actorId, room.getMemberIds());
         try {
             refreshChatLastMessageAfterDelete(chatId);
         } catch (Exception ex) {
@@ -425,7 +416,7 @@ public class ChatMessageCommandService {
         message.setEditedAt(editedAt);
         ChatMessage updatedMessage = chatMessageRepository.save(message);
 
-        webSocketService.notifyMessageEdited(
+        messageDeliveryService.notifyMessageEdited(
                 updatedMessage.getId(),
                 updatedMessage.getChatId(),
                 updatedMessage.getContent(),
@@ -471,7 +462,7 @@ public class ChatMessageCommandService {
             message.setContent(updatedContent);
             ChatMessage saved = chatMessageRepository.save(message);
             ChatRoom room = loadRoom(saved.getChatId());
-            webSocketService.notifyMessageEdited(
+            messageDeliveryService.notifyMessageEdited(
                     saved.getId(),
                     saved.getChatId(),
                     saved.getContent(),
@@ -564,35 +555,6 @@ public class ChatMessageCommandService {
         });
     }
 
-    private void deliverSentMessage(ChatRoom room, Long senderId, ChatMessageDTO messageDTO) {
-        if (room == null || room.getId() == null || messageDTO == null) {
-            if (messageDTO != null && messageDTO.getChatId() != null) {
-                webSocketService.sendMessageToChat(messageDTO.getChatId(), messageDTO);
-            }
-            return;
-        }
-        privateChatContactRequestService.maybeCreateContactRequestForPrivateMessage(room, senderId);
-        webSocketService.sendMessageToChat(room.getId(), messageDTO);
-        webSocketService.notifyUserJoinedChat(room.getId(), senderId);
-        try {
-            roomEnrichmentService.notifyRoomMembersChatUpdated(room);
-        } catch (Exception ex) {
-            log.warn("Failed to refresh room sidebar for chat {} after message {}: {}",
-                    room.getId(), messageDTO.getId(), ex.getMessage());
-        }
-        if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {
-            return;
-        }
-        for (Long memberId : room.getMemberIds()) {
-            if (memberId == null || memberId.equals(senderId)) {
-                continue;
-            }
-            int unread = roomEnrichmentService.getUnreadCount(room.getId(), memberId);
-            ChatRoomDTO chatDto = roomEnrichmentService.enrichChatWithUserData(room, memberId, unread);
-            webSocketService.notifyIncomingChatMessage(memberId, chatDto, messageDTO);
-        }
-    }
-
     private void refreshChatLastMessageAfterDelete(String chatId) {
         chatRoomRepository.findById(chatId).ifPresent(chatRoom -> {
             Optional<ChatMessage> latest = chatMessageRepository.findTopByChatIdOrderByTimestampDesc(chatId);
@@ -619,59 +581,5 @@ public class ChatMessageCommandService {
     private ChatRoom loadRoom(String roomId) {
         return chatRoomRepository.findById(roomId)
                 .orElseThrow(() -> new IllegalArgumentException("Chat not found"));
-    }
-
-    private void publishMessageCreatedV1(ChatMessage savedMessage, String previewText) {
-        ChatRoom room = chatRoomRepository.findById(savedMessage.getChatId())
-                .orElseThrow(() -> new IllegalStateException("Chat room not found for message " + savedMessage.getId()));
-
-        List<Long> recipientIds = room.getMemberIds().stream()
-                .filter(memberId -> !memberId.equals(savedMessage.getSenderId()))
-                .filter(memberId -> !shouldSkipPushBecauseClientIsViewingChat(memberId, savedMessage.getChatId()))
-                .toList();
-
-        if (recipientIds.isEmpty()) {
-            log.debug("Skipping message-created event for message {} because no recipients need push",
-                    savedMessage.getId());
-            return;
-        }
-
-        UserInfoDTO senderDto = chatUserInfoService.getUserInfo(savedMessage.getSenderId());
-        String senderAvatarUrl = senderDto != null ? senderDto.getProfilePicture() : null;
-
-        MessageCreatedEventV1 event = MessageCreatedEventV1.builder()
-                .eventId(UUID.randomUUID())
-                .occurredAt(Instant.now())
-                .schemaVersion(MessageCreatedEventV1.SCHEMA_VERSION_V1)
-                .chatId(savedMessage.getChatId())
-                .messageId(savedMessage.getId())
-                .senderId(savedMessage.getSenderId())
-                .senderDisplayName(savedMessage.getSenderName())
-                .senderAvatarUrl(senderAvatarUrl)
-                .recipientUserIds(recipientIds)
-                .previewText(previewText)
-                .messageType((savedMessage.getMessageType() != null
-                        ? savedMessage.getMessageType()
-                        : MessageType.TEXT).name())
-                .build();
-
-        messageEventPublisher.publishMessageCreated(event);
-    }
-
-    /**
-     * Skip web push only when the recipient is actively viewing this chat (not AFK).
-     * Other chats still get push; the WebSocket path handles in-app toasts when visible.
-     */
-    private boolean shouldSkipPushBecauseClientIsViewingChat(Long userId, String chatId) {
-        if (userId == null || chatId == null || chatId.isBlank()) {
-            return false;
-        }
-        if (!redisService.isUserOnline(userId)) {
-            return false;
-        }
-        if (redisService.isUserAfk(userId)) {
-            return false;
-        }
-        return chatId.equals(redisService.getCurrentChat(userId));
     }
 }
