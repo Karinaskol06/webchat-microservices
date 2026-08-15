@@ -418,7 +418,7 @@ const UserProfileDialog = ({
           ...chatHideScrollbarSx,
         }}
       >
-        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={locale === "uk" ? uk : enUS}>
+        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={dateLocale}>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {fetchError ? (
               <Alert severity="warning" onClose={() => setFetchError("")}>
