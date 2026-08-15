@@ -201,6 +201,14 @@ public class UserServiceController {
         return ResponseEntity.ok(contactService.getContacts(currentUserId));
     }
 
+    /** One-sided add to current user's contact list (e.g. from profile). */
+    @PostMapping("/contacts/{contactUserId}")
+    public ResponseEntity<ContactStatusDTO> addContact(
+            @PathVariable Long contactUserId,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        return ResponseEntity.ok(contactService.addDirectContact(currentUserId, contactUserId));
+    }
+
     @DeleteMapping("/contacts/{contactUserId}")
     public ResponseEntity<Void> removeContact(
             @PathVariable Long contactUserId,
@@ -219,14 +227,22 @@ public class UserServiceController {
     public ResponseEntity<ContactStatusDTO> acceptRequest(
             @PathVariable("id") Long requestId,
             @RequestHeader("X-User-Id") Long currentUserId) {
-        return ResponseEntity.ok(contactService.acceptRequest(requestId, currentUserId));
+        return ResponseEntity.ok(contactService.addFromPrompt(requestId, currentUserId));
+    }
+
+    /** Same as accept: add other user to my contacts and close my prompt. */
+    @PostMapping("/contacts/requests/{id}/add-sender")
+    public ResponseEntity<ContactStatusDTO> addSenderContact(
+            @PathVariable("id") Long requestId,
+            @RequestHeader("X-User-Id") Long currentUserId) {
+        return ResponseEntity.ok(contactService.addFromPrompt(requestId, currentUserId));
     }
 
     @PostMapping("/contacts/requests/{id}/decline")
     public ResponseEntity<ContactStatusDTO> declineRequest(
             @PathVariable("id") Long requestId,
             @RequestHeader("X-User-Id") Long currentUserId) {
-        return ResponseEntity.ok(contactService.declineWithSnooze(requestId, currentUserId));
+        return ResponseEntity.ok(contactService.dismissPrompt(requestId, currentUserId));
     }
 
     @GetMapping("/contacts/status/{otherUserId}")

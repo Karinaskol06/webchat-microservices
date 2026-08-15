@@ -98,7 +98,8 @@ Gateway routes:
 
 ### Contacts & moderation
 
-- Contact requests: send, accept, decline (declined requests can be snoozed)
+- Contact requests: send, accept, decline (declined requests are permanent; first private message only)
+
 - Global user bans (block users across private chats)
 - Room-level bans and admin roles
 

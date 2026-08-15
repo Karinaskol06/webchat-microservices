@@ -1,5 +1,6 @@
 package com.project.webchat.user.entity;
 
+import com.project.webchat.shared.dto.ContactPromptDecision;
 import com.project.webchat.shared.dto.ContactRequestState;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -34,6 +35,16 @@ public class FriendRequest {
 
     @Enumerated(EnumType.STRING)
     private ContactRequestState state;
+
+    /** Sender's independent decision on the contact prompt. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "from_user_decision")
+    private ContactPromptDecision fromUserDecision;
+
+    /** Recipient's independent decision on the contact prompt. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "to_user_decision")
+    private ContactPromptDecision toUserDecision;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

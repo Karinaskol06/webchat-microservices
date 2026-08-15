@@ -12,4 +12,6 @@ import lombok.NoArgsConstructor;
 public class ContactStatusDTO {
     private ContactRequestState state;
     private ContactPromptDescriptorDTO prompt;
+    /** True when current user already has the other user on their own contact list (one-sided OK). */
+    private Boolean onMyList;
 }
