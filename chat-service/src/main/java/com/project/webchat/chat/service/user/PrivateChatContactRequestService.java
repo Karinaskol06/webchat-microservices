@@ -18,10 +18,17 @@ public class PrivateChatContactRequestService {
     private final UserBanGuardService userBanGuardService;
 
     /**
-     * When user A messages user B in a private chat, create a pending contact request
-     * from A to B unless they are already contacts or the request is snoozed.
+     * On the first message in a private chat, create a pending contact request
+     * from sender to the other member (unless already contacts / rejected / pending).
+     * Later messages in the same chat do not call user-service.
+     *
+     * @param messageCountInChat number of messages in the chat after the current save (1 = first)
      */
-    public void maybeCreateContactRequestForPrivateMessage(ChatRoom room, Long senderId) {
+    public void maybeCreateContactRequestForPrivateMessage(
+            ChatRoom room, Long senderId, long messageCountInChat) {
+        if (messageCountInChat != 1L) {
+            return;
+        }
         if (room == null || senderId == null || room.getType() != ChatType.PRIVATE) {
             return;
         }

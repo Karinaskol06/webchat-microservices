@@ -18,9 +18,12 @@ import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { enUS, uk } from "date-fns/locale";
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import PersonAddAlt1OutlinedIcon from '@mui/icons-material/PersonAddAlt1Outlined';
 import userService from "../../services/userService";
 import userBanService from "../../services/userBanService";
+import contactsService from "../../services/contactsService";
 import { getApiErrorMessage } from "../../services/api";
+import { WEBCHAT_CONTACT_CHANGED } from "../../constants/chatEvents";
 import useAuthStore from "../../store/useAuthStore";
 import PhoneCountryField from "../common/PhoneCountryField";
 import BirthdayField from "../common/BirthdayField";
@@ -87,6 +90,8 @@ const UserProfileDialog = ({
   const [isBanned, setIsBanned] = useState(false);
   const [banLoading, setBanLoading] = useState(false);
   const [banConfirmOpen, setBanConfirmOpen] = useState(false);
+  const [onMyContactList, setOnMyContactList] = useState(true);
+  const [contactLoading, setContactLoading] = useState(false);
   const avatarInputRef = useRef(null);
   const backgroundInputRef = useRef(null);
 
@@ -96,6 +101,13 @@ const UserProfileDialog = ({
     currentUserId != null &&
     user?.id != null &&
     Number(currentUserId) !== Number(user.id);
+
+  const canAddContact =
+    !editable &&
+    currentUserId != null &&
+    user?.id != null &&
+    Number(currentUserId) !== Number(user.id) &&
+    !onMyContactList;
 
   useEffect(() => {
     if (!open || !user?.id) {
@@ -119,6 +131,7 @@ const UserProfileDialog = ({
 
     setFetchLoading(true);
     setIsBanned(false);
+    setOnMyContactList(true);
     userService
       .getUserById(user.id)
       .then((full) => {
@@ -147,6 +160,22 @@ const UserProfileDialog = ({
           setFetchLoading(false);
         }
       });
+
+    if (
+      !editable &&
+      currentUserId != null &&
+      user?.id != null &&
+      Number(currentUserId) !== Number(user.id)
+    ) {
+      contactsService
+        .getStatus(user.id, currentUserId)
+        .then((status) => {
+          if (!cancelled) setOnMyContactList(Boolean(status?.onMyList));
+        })
+        .catch(() => {
+          if (!cancelled) setOnMyContactList(false);
+        });
+    }
 
     if (canModerateBan) {
       userBanService
@@ -350,6 +379,26 @@ const UserProfileDialog = ({
     }
   };
 
+  const handleAddContact = async () => {
+    if (!canAddContact || !user?.id) return;
+    setContactLoading(true);
+    setError("");
+    try {
+      const status = await contactsService.addContact(user.id, currentUserId);
+      setOnMyContactList(Boolean(status?.onMyList ?? true));
+      setSnackbar(t("profile.contact.add.success"));
+      window.dispatchEvent(
+        new CustomEvent(WEBCHAT_CONTACT_CHANGED, { detail: { userId: user.id } }),
+      );
+    } catch (contactError) {
+      setError(getApiErrorMessage(contactError, t("profile.error.addContact")));
+    } finally {
+      setContactLoading(false);
+    }
+  };
+
+  const dateLocale = locale === "uk" ? uk : enUS;
+
   if (!user || !profile) {
     return null;
   }
@@ -498,6 +547,16 @@ const UserProfileDialog = ({
         />
       </DialogContent>
       <DialogActions>
+        {canAddContact ? (
+          <Button
+            color="primary"
+            startIcon={<PersonAddAlt1OutlinedIcon />}
+            onClick={handleAddContact}
+            disabled={contactLoading}
+          >
+            {t("profile.contact.add")}
+          </Button>
+        ) : null}
         {canModerateBan ? (
           isBanned ? (
             <Button

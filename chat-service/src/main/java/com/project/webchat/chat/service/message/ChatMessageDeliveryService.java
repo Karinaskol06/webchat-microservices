@@ -6,6 +6,7 @@ import com.project.webchat.chat.entity.ChatMessage;
 import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.MessageType;
 import com.project.webchat.chat.repository.ChatRoomRepository;
+import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.service.MessageEventPublisher;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
@@ -36,6 +37,7 @@ import java.util.UUID;
 public class ChatMessageDeliveryService {
 
     private final ChatRoomRepository chatRoomRepository;
+    private final ChatMessageRepository chatMessageRepository;
     private final RedisService redisService;
     private final WebSocketService webSocketService;
     private final MessageEventPublisher messageEventPublisher;
@@ -107,7 +109,8 @@ public class ChatMessageDeliveryService {
             }
             return;
         }
-        privateChatContactRequestService.maybeCreateContactRequestForPrivateMessage(room, senderId);
+        privateChatContactRequestService.maybeCreateContactRequestForPrivateMessage(
+                room, senderId, chatMessageRepository.countByChatId(room.getId()));
         webSocketService.sendMessageToChat(room.getId(), messageDTO);
         webSocketService.notifyUserJoinedChat(room.getId(), senderId);
         try {

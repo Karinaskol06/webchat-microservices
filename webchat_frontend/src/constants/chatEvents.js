@@ -13,5 +13,8 @@ export const WEBCHAT_CHAT_DELETED = 'webchat:chat-deleted';
 /** Chat created or first opened for this user. Detail: { chat } */
 export const WEBCHAT_CHAT_CREATED = 'webchat:chat-created';
 
+/** Fired when the current user adds/removes a contact (e.g. from profile). */
+export const WEBCHAT_CONTACT_CHANGED = 'webchat:contact-changed';
+
 /** Open chat from push/in-app notification. Detail: { chatId, messageId?, focusComposer?, markRead? } */
 export const WEBCHAT_OPEN_CHAT_NOTIFICATION = 'webchat:open-chat-notification';

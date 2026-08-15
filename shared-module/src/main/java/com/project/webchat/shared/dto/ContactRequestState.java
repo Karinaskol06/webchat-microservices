@@ -4,5 +4,6 @@ public enum ContactRequestState {
     NONE,
     PENDING,
     ACCEPTED,
-    SNOOZED
+    /** Recipient declined; request will not be recreated on later messages */
+    REJECTED
 }

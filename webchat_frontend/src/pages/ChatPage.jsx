@@ -37,6 +37,7 @@ import {
   WEBCHAT_ACTIVATE_CHAT,
   WEBCHAT_CHAT_CREATED,
   WEBCHAT_CHAT_DELETED,
+  WEBCHAT_CONTACT_CHANGED,
   WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT,
 } from '../constants/chatEvents';
 import useMessages from '../hooks/useMessages';
@@ -81,14 +82,10 @@ const isDraftPrivateChat = (chat) =>
       String(chat.type || '').toUpperCase() === 'PRIVATE',
   );
 
-const isIncomingContactPrompt = (status, otherUserId) => {
-  if (!status || otherUserId == null) return false;
+const isPendingContactPrompt = (status) => {
+  if (!status) return false;
   const state = String(status.state ?? '').toUpperCase();
-  return (
-    state === 'PENDING' &&
-    status.prompt?.requestId &&
-    Number(status.prompt.fromUserId) === Number(otherUserId)
-  );
+  return state === 'PENDING' && Boolean(status.prompt?.requestId);
 };
 
 const ChatPage = () => {
@@ -960,9 +957,11 @@ const ChatPage = () => {
     };
     window.addEventListener(WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT, onContactRefresh);
     window.addEventListener(WEBCHAT_CHAT_CREATED, onContactRefresh);
+    window.addEventListener(WEBCHAT_CONTACT_CHANGED, onContactRefresh);
     return () => {
       window.removeEventListener(WEBCHAT_INCOMING_MESSAGE_OPEN_CHAT, onContactRefresh);
       window.removeEventListener(WEBCHAT_CHAT_CREATED, onContactRefresh);
+      window.removeEventListener(WEBCHAT_CONTACT_CHANGED, onContactRefresh);
     };
   }, []);
 
@@ -1000,7 +999,8 @@ const ChatPage = () => {
 
     void fetchStatus().then((status) => {
       if (cancelled || !latestIncomingMessageKey) return;
-      if (isIncomingContactPrompt(status, otherUserId)) return;
+      // Already have a pending prompt (either side) — no need to retry.
+      if (isPendingContactPrompt(status)) return;
       retryTimer = window.setTimeout(() => {
         if (!cancelled) {
           void fetchStatus();
@@ -1358,7 +1358,7 @@ const ChatPage = () => {
     return () => window.removeEventListener(WEBCHAT_CHAT_CREATED, onLocalChatCreated);
   }, [activateChat]);
 
-  const handleAcceptContact = async () => {
+  const handleAddContactFromPrompt = async () => {
     const requestId = contactStatus?.prompt?.requestId;
     if (!requestId) return;
     try {
@@ -1371,7 +1371,7 @@ const ChatPage = () => {
     }
   };
 
-  const handleDeclineContact = async () => {
+  const handleDismissContactPrompt = async () => {
     const requestId = contactStatus?.prompt?.requestId;
     if (!requestId) return;
     try {
@@ -1572,16 +1572,16 @@ const ChatPage = () => {
         onClose={closeInChatSearch}
       />
 
-      {isPrivateChat && isIncomingContactPrompt(contactStatus, otherUser?.id) && (
+      {isPrivateChat && isPendingContactPrompt(contactStatus) && (
         <Alert
           severity="info"
           sx={{ mx: 2, mt: 1, borderRadius: 3 }}
           action={
             <>
-              <Button color="inherit" size="small" onClick={handleAcceptContact} disabled={contactActionLoading}>
-                {t('common.yes')}
+              <Button color="inherit" size="small" onClick={handleAddContactFromPrompt} disabled={contactActionLoading}>
+                {t('chat.contact.add')}
               </Button>
-              <Button color="inherit" size="small" onClick={handleDeclineContact} disabled={contactActionLoading}>
+              <Button color="inherit" size="small" onClick={handleDismissContactPrompt} disabled={contactActionLoading}>
                 {t('common.no')}
               </Button>
             </>

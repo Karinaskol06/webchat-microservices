@@ -22,9 +22,29 @@ const contactsService = {
     return response.data;
   },
 
+  /** One-sided add from profile (no request required). */
+  addContact: async (contactUserId, currentUserId) => {
+    const response = await api.post(
+      `/api/users/contacts/${contactUserId}`,
+      {},
+      { headers: currentUserId ? { "X-User-Id": currentUserId } : undefined }
+    );
+    return response.data;
+  },
+
   acceptRequest: async (requestId, currentUserId) => {
     const response = await api.post(
       `/api/users/contacts/requests/${requestId}/accept`,
+      {},
+      { headers: currentUserId ? { "X-User-Id": currentUserId } : undefined }
+    );
+    return response.data;
+  },
+
+  /** Sender adds recipient to their own contact list (one-sided) while request is pending. */
+  addSenderContact: async (requestId, currentUserId) => {
+    const response = await api.post(
+      `/api/users/contacts/requests/${requestId}/add-sender`,
       {},
       { headers: currentUserId ? { "X-User-Id": currentUserId } : undefined }
     );

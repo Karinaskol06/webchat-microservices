@@ -7,6 +7,7 @@ import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.entity.MessageType;
 import com.project.webchat.chat.repository.ChatRoomRepository;
+import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.service.MessageEventPublisher;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
@@ -51,6 +52,7 @@ class ChatMessageDeliveryServiceTest {
     private static final Long THIRD_MEMBER_ID = 30L;
 
     @Mock private ChatRoomRepository chatRoomRepository;
+    @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private RedisService redisService;
     @Mock private WebSocketService webSocketService;
     @Mock private MessageEventPublisher messageEventPublisher;
@@ -86,6 +88,8 @@ class ChatMessageDeliveryServiceTest {
                 .chatId(CHAT_ID)
                 .content("hello")
                 .build();
+        // Default: treat as first message so delivery passes count into the contact hook.
+        org.mockito.Mockito.lenient().when(chatMessageRepository.countByChatId(CHAT_ID)).thenReturn(1L);
     }
 
     @Test
@@ -109,6 +113,7 @@ class ChatMessageDeliveryServiceTest {
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).unreadCount(2).build());
         when(roomEnrichmentService.enrichChatWithUserData(eq(groupRoom), eq(THIRD_MEMBER_ID), eq(1)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).unreadCount(1).build());
+        when(chatMessageRepository.countByChatId(CHAT_ID)).thenReturn(1L);
 
         // Act: one call = Kafka push eligibility + full WebSocket / sidebar fan-out
         deliveryService.notifyMessageCreated(groupRoom, SENDER_ID, savedMessage, messageDto, "hello");
@@ -122,10 +127,10 @@ class ChatMessageDeliveryServiceTest {
         assertThat(event.getValue().getSenderAvatarUrl()).isEqualTo("avatar.png");
 
         // Assert — WebSocket / side effects after persist:
-        // contact-request hook (no-op for groups, still always invoked),
+        // contact-request hook receives message count
         // broadcast message to chat topic, mark sender present in chat,
         // refresh every member's sidebar, then per-member "incoming" inbox notify
-        verify(privateChatContactRequestService).maybeCreateContactRequestForPrivateMessage(groupRoom, SENDER_ID);
+        verify(privateChatContactRequestService).maybeCreateContactRequestForPrivateMessage(groupRoom, SENDER_ID, 1L);
         verify(webSocketService).sendMessageToChat(CHAT_ID, messageDto);
         verify(webSocketService).notifyUserJoinedChat(CHAT_ID, SENDER_ID);
         verify(roomEnrichmentService).notifyRoomMembersChatUpdated(groupRoom);
@@ -219,7 +224,7 @@ class ChatMessageDeliveryServiceTest {
         verify(messageEventPublisher, never()).publishMessageCreated(any());
         verify(chatRoomRepository, never()).findById(any());
         verify(privateChatContactRequestService, never())
-                .maybeCreateContactRequestForPrivateMessage(any(), any());
+                .maybeCreateContactRequestForPrivateMessage(any(), any(), org.mockito.ArgumentMatchers.anyLong());
         // Still reveal by chatId from the DTO so hidden chats reappear on activity.
         verify(chatRoomManagementService).revealChatOnNewMessage(CHAT_ID);
     }
