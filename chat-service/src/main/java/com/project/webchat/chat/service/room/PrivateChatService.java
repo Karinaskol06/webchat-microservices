@@ -55,7 +55,7 @@ public class PrivateChatService {
     private final UserBanGuardService userBanGuardService;
 
     private final ChatUserInfoService chatUserInfoService;
-    private final ChatRoomManagementService chatRoomManagementService;
+    private final ChatRoomQueryService chatRoomQueryService;
 
 
 
@@ -106,7 +106,7 @@ public class PrivateChatService {
         if (existsAlready.isPresent()) {
 
             ChatRoom existing = existsAlready.get();
-            chatRoomManagementService.revealChatForMember(existing.getId(), userId1);
+            chatRoomQueryService.revealChatForMember(existing.getId(), userId1);
             return new PrivateChatLookup(chatRoomRepository.findById(existing.getId()).orElse(existing), false);
 
         }
