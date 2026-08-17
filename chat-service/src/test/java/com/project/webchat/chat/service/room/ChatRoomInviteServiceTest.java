@@ -5,7 +5,6 @@ import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.entity.RoomMemberInvite;
 import com.project.webchat.chat.entity.RoomMemberInviteState;
-import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import com.project.webchat.chat.feign.UserServiceClient;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
@@ -27,15 +26,13 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class ChatRoomMembershipServiceTest {
+class ChatRoomInviteServiceTest {
 
     private static final String ROOM_ID = "room-1";
     private static final Long ACTOR_ID = 10L;
@@ -53,24 +50,7 @@ class ChatRoomMembershipServiceTest {
     @Mock private ChatRoomMemberMutationHelper memberMutationHelper;
 
     @InjectMocks
-    private ChatRoomMembershipService membershipService;
-
-    @Test
-    void banRoomMember_rejectsBanningSelf() {
-        ChatRoom room = ChatRoom.builder()
-                .id(ROOM_ID)
-                .type(ChatType.GROUP)
-                .createdBy(99L)
-                .memberIds(new HashSet<>(Set.of(ACTOR_ID, TARGET_ID)))
-                .build();
-        when(memberMutationHelper.loadRoom(ROOM_ID)).thenReturn(room);
-        when(roomPermissionService.sameUserId(ACTOR_ID, 99L)).thenReturn(false);
-        when(roomPermissionService.sameUserId(ACTOR_ID, ACTOR_ID)).thenReturn(true);
-
-        assertThatThrownBy(() -> membershipService.banRoomMember(ROOM_ID, ACTOR_ID, ACTOR_ID))
-                .isInstanceOf(ForbiddenChatOperationException.class)
-                .hasMessageContaining("cannot ban yourself");
-    }
+    private ChatRoomInviteService inviteService;
 
     @Test
     void declineRoomMemberInvite_marksDeclined() {
@@ -81,7 +61,7 @@ class ChatRoomMembershipServiceTest {
                 .build();
         when(roomMemberInviteRepository.findById("inv-1")).thenReturn(Optional.of(invite));
 
-        membershipService.declineRoomMemberInvite("inv-1", TARGET_ID);
+        inviteService.declineRoomMemberInvite("inv-1", TARGET_ID);
 
         assertThat(invite.getState()).isEqualTo(RoomMemberInviteState.DECLINED);
         assertThat(invite.getRespondedAt()).isNotNull();
@@ -108,7 +88,7 @@ class ChatRoomMembershipServiceTest {
         when(roomEnrichmentService.enrichChatWithUserData(eq(room), eq(TARGET_ID), anyInt()))
                 .thenReturn(ChatRoomDTO.builder().id(ROOM_ID).build());
 
-        ChatRoomDTO dto = membershipService.acceptRoomMemberInvite("inv-1", TARGET_ID);
+        ChatRoomDTO dto = inviteService.acceptRoomMemberInvite("inv-1", TARGET_ID);
 
         assertThat(dto.getId()).isEqualTo(ROOM_ID);
         assertThat(invite.getState()).isEqualTo(RoomMemberInviteState.ACCEPTED);

@@ -9,7 +9,9 @@ import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.message.ChatMessageCommandService;
 import com.project.webchat.chat.service.message.ChatMessageDeliveryService;
 import com.project.webchat.chat.service.message.MessageReactionService;
-import com.project.webchat.chat.service.room.ChatRoomMembershipService;
+import com.project.webchat.chat.service.room.ChatRoomInviteService;
+import com.project.webchat.chat.service.room.ChatRoomModerationService;
+import com.project.webchat.chat.service.room.ChatRoomProfileService;
 import com.project.webchat.chat.service.room.ChatRoomQueryService;
 import com.project.webchat.chat.service.room.PrivateChatService;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
@@ -60,7 +62,13 @@ class ChatServiceApplicationTests {
     private MessageReactionService messageReactionService;
 
     @Autowired
-    private ChatRoomMembershipService ChatRoomMembershipService;
+    private ChatRoomInviteService chatRoomInviteService;
+
+    @Autowired
+    private ChatRoomModerationService chatRoomModerationService;
+
+    @Autowired
+    private ChatRoomProfileService chatRoomProfileService;
 
     @Autowired
     private ChatRoomQueryService chatRoomQueryService;
@@ -78,7 +86,9 @@ class ChatServiceApplicationTests {
         assertThat(chatMessageCommandService).isNotNull();
         assertThat(chatMessageDeliveryService).isNotNull();
         assertThat(messageReactionService).isNotNull();
-        assertThat(ChatRoomMembershipService).isNotNull();
+        assertThat(chatRoomInviteService).isNotNull();
+        assertThat(chatRoomModerationService).isNotNull();
+        assertThat(chatRoomProfileService).isNotNull();
         assertThat(chatRoomQueryService).isNotNull();
         assertThat(chatRoomMemberMutationHelper).isNotNull();
         assertThat(roomEnrichmentService).isNotNull();
