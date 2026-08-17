@@ -18,8 +18,10 @@ import com.project.webchat.chat.service.message.ChatMessageCommandService;
 import com.project.webchat.chat.service.message.MessageReactionService;
 import com.project.webchat.chat.service.room.ChatRoomCreationService;
 import com.project.webchat.chat.service.room.ChatRoomDiscoveryService;
+import com.project.webchat.chat.service.room.ChatRoomInviteService;
 import com.project.webchat.chat.service.room.ChatRoomLifecycleService;
-import com.project.webchat.chat.service.room.ChatRoomMembershipService;
+import com.project.webchat.chat.service.room.ChatRoomModerationService;
+import com.project.webchat.chat.service.room.ChatRoomProfileService;
 import com.project.webchat.chat.service.room.ChatRoomQueryService;
 import com.project.webchat.chat.service.room.PersonalSpaceService;
 import com.project.webchat.chat.service.room.PrivateChatService;
@@ -43,7 +45,9 @@ public class ChatService {
     private final PrivateChatService privateChatService;
     private final ChatMessageCommandService chatMessageCommandService;
     private final MessageReactionService messageReactionService;
-    private final ChatRoomMembershipService chatRoomMembershipService;
+    private final ChatRoomInviteService chatRoomInviteService;
+    private final ChatRoomModerationService chatRoomModerationService;
+    private final ChatRoomProfileService chatRoomProfileService;
     private final ChatRoomQueryService chatRoomQueryService;
     private final ChatRoomCreationService chatRoomCreationService;
     private final ChatRoomDiscoveryService chatRoomDiscoveryService;
@@ -223,76 +227,76 @@ public class ChatService {
     /** Rotates the invite link token for a private room (admin/moderator only). */
     @Transactional
     public InvitePayloadDTO regenerateInvite(String roomId, Long userId) {
-        return chatRoomMembershipService.regenerateInvite(roomId, userId);
+        return chatRoomInviteService.regenerateInvite(roomId, userId);
     }
 
     /** Returns the current invite link token for a private room (admin/moderator only). */
     public InvitePayloadDTO getInvitePayload(String roomId, Long userId) {
-        return chatRoomMembershipService.getInvitePayload(roomId, userId);
+        return chatRoomInviteService.getInvitePayload(roomId, userId);
     }
 
     /** Promotes/demotes group admins or channel moderators/posters. */
     @Transactional
     public ChatRoomDTO mutateGroupAdmins(String roomId, Long actorId, AdminMutationRequest request) {
-        return chatRoomMembershipService.mutateGroupAdmins(roomId, actorId, request);
+        return chatRoomModerationService.mutateGroupAdmins(roomId, actorId, request);
     }
 
     /** Adds a user to a group or channel directly (admin/moderator only). */
     @Transactional
     public ChatRoomDTO addRoomMember(String roomId, Long actorId, Long newMemberId) {
-        return chatRoomMembershipService.addRoomMember(roomId, actorId, newMemberId);
+        return chatRoomInviteService.addRoomMember(roomId, actorId, newMemberId);
     }
 
     /** Updates the room cover photo. */
     @Transactional
     public ChatRoomDTO updateRoomPhoto(String roomId, Long actorId, String groupPhotoRaw) {
-        return chatRoomMembershipService.updateRoomPhoto(roomId, actorId, groupPhotoRaw);
+        return chatRoomProfileService.updateRoomPhoto(roomId, actorId, groupPhotoRaw);
     }
 
     /** Updates room name, description, photo, and/or visibility. */
     @Transactional
     public ChatRoomDTO updateRoomProfile(String roomId, Long actorId, UpdateRoomProfileRequest request) {
-        return chatRoomMembershipService.updateRoomProfile(roomId, actorId, request);
+        return chatRoomProfileService.updateRoomProfile(roomId, actorId, request);
     }
 
     /** Lists pending username-based invites addressed to the user. */
     public List<RoomMemberInviteDTO> listPendingRoomMemberInvites(Long inviteeUserId) {
-        return chatRoomMembershipService.listPendingRoomMemberInvites(inviteeUserId);
+        return chatRoomInviteService.listPendingRoomMemberInvites(inviteeUserId);
     }
 
     /** Invites a user to the room by username (admin/moderator only). */
     @Transactional
     public RoomMemberInviteDTO inviteRoomMemberByUsername(String roomId, Long actorId, String rawUsername) {
-        return chatRoomMembershipService.inviteRoomMemberByUsername(roomId, actorId, rawUsername);
+        return chatRoomInviteService.inviteRoomMemberByUsername(roomId, actorId, rawUsername);
     }
 
     /** Accepts a pending room member invite and joins the room. */
     @Transactional
     public ChatRoomDTO acceptRoomMemberInvite(String inviteId, Long inviteeId) {
-        return chatRoomMembershipService.acceptRoomMemberInvite(inviteId, inviteeId);
+        return chatRoomInviteService.acceptRoomMemberInvite(inviteId, inviteeId);
     }
 
     /** Declines a pending room member invite. */
     @Transactional
     public void declineRoomMemberInvite(String inviteId, Long inviteeId) {
-        chatRoomMembershipService.declineRoomMemberInvite(inviteId, inviteeId);
+        chatRoomInviteService.declineRoomMemberInvite(inviteId, inviteeId);
     }
 
     /** Bans a member from the room (moderator only); removes them if present. */
     @Transactional
     public ChatRoomDTO banRoomMember(String roomId, Long actorId, Long targetUserId) {
-        return chatRoomMembershipService.banRoomMember(roomId, actorId, targetUserId);
+        return chatRoomModerationService.banRoomMember(roomId, actorId, targetUserId);
     }
 
     /** Lifts a room ban for a user (moderator only). */
     @Transactional
     public ChatRoomDTO unbanRoomMember(String roomId, Long actorId, Long targetUserId) {
-        return chatRoomMembershipService.unbanRoomMember(roomId, actorId, targetUserId);
+        return chatRoomModerationService.unbanRoomMember(roomId, actorId, targetUserId);
     }
 
     /** Lists users banned from the room (moderator only). */
     public List<UserInfoDTO> listBannedRoomMembers(String roomId, Long actorId) {
-        return chatRoomMembershipService.listBannedRoomMembers(roomId, actorId);
+        return chatRoomModerationService.listBannedRoomMembers(roomId, actorId);
     }
 
     /** Returns whether the user is a member of the chat. */
