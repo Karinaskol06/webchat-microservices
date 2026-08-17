@@ -9,7 +9,7 @@ import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.MessageEventPublisher;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.room.ChatRoomManagementService;
+import com.project.webchat.chat.service.room.ChatRoomQueryService;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.chat.service.user.PrivateChatContactRequestService;
@@ -42,7 +42,7 @@ public class ChatMessageDeliveryService {
     private final ChatUserInfoService chatUserInfoService;
     private final ChatRoomEnrichmentService roomEnrichmentService;
     private final PrivateChatContactRequestService privateChatContactRequestService;
-    private final ChatRoomManagementService chatRoomManagementService;
+    private final ChatRoomQueryService chatRoomQueryService;
 
     /**
      * After a message is persisted: push + WS fan-out, then un-hide the chat for members.
@@ -97,7 +97,7 @@ public class ChatMessageDeliveryService {
         if (chatId == null || chatId.isBlank()) {
             return;
         }
-        chatRoomManagementService.revealChatOnNewMessage(chatId);
+        chatRoomQueryService.revealChatOnNewMessage(chatId);
     }
 
     private void deliverSentMessage(ChatRoom room, Long senderId, ChatMessageDTO messageDTO) {

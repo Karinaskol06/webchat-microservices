@@ -26,7 +26,7 @@ public class UserAccountDeletionService {
     private final RoomMemberInviteRepository roomMemberInviteRepository;
     private final RedisService redisService;
     private final ChatRoomEnrichmentService roomEnrichmentService;
-    private final ChatRoomManagementService chatRoomManagementService;
+    private final ChatRoomLifecycleService chatRoomLifecycleService;
     private final RoomOwnerSuccessionService roomOwnerSuccessionService;
 
     @Transactional
@@ -48,7 +48,7 @@ public class UserAccountDeletionService {
         for (ChatRoom room : chatRoomRepository.findByTypeAndCreatedByOrderByLastActivityDesc(
                 ChatType.PERSONAL_SPACE, userId)) {
             if (room.getId() != null && processed.add(room.getId())) {
-                chatRoomManagementService.purgeRoom(room);
+                chatRoomLifecycleService.purgeRoom(room);
             }
         }
 
@@ -64,7 +64,7 @@ public class UserAccountDeletionService {
 
         if (type == ChatType.PERSONAL_SPACE) {
             if (userId.equals(room.getCreatedBy())) {
-                chatRoomManagementService.purgeRoom(room);
+                chatRoomLifecycleService.purgeRoom(room);
             }
             return;
         }
@@ -78,7 +78,7 @@ public class UserAccountDeletionService {
             if (userId.equals(room.getCreatedBy())) {
                 Long successor = roomOwnerSuccessionService.pickOwnerSuccessor(room, userId);
                 if (successor == null) {
-                    chatRoomManagementService.purgeRoom(room);
+                    chatRoomLifecycleService.purgeRoom(room);
                     return;
                 }
                 roomOwnerSuccessionService.transferOwnership(room, successor);
@@ -86,7 +86,7 @@ public class UserAccountDeletionService {
 
             removeDepartingMember(room, userId);
             if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {
-                chatRoomManagementService.purgeRoom(room);
+                chatRoomLifecycleService.purgeRoom(room);
                 return;
             }
 

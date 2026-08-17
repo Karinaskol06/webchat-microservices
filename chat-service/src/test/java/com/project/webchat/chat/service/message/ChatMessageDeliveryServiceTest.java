@@ -10,7 +10,7 @@ import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.MessageEventPublisher;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.room.ChatRoomManagementService;
+import com.project.webchat.chat.service.room.ChatRoomQueryService;
 import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.chat.service.user.PrivateChatContactRequestService;
@@ -57,7 +57,7 @@ class ChatMessageDeliveryServiceTest {
     @Mock private ChatUserInfoService chatUserInfoService;
     @Mock private ChatRoomEnrichmentService roomEnrichmentService;
     @Mock private PrivateChatContactRequestService privateChatContactRequestService;
-    @Mock private ChatRoomManagementService chatRoomManagementService;
+    @Mock private ChatRoomQueryService chatRoomQueryService;
 
     @InjectMocks
     private ChatMessageDeliveryService deliveryService;
@@ -134,7 +134,7 @@ class ChatMessageDeliveryServiceTest {
         verify(webSocketService).notifyIncomingChatMessage(
                 eq(THIRD_MEMBER_ID), any(ChatRoomDTO.class), eq(messageDto));
         // After fan-out, un-hide the chat for members who used "delete for me".
-        verify(chatRoomManagementService).revealChatOnNewMessage(CHAT_ID);
+        verify(chatRoomQueryService).revealChatOnNewMessage(CHAT_ID);
     }
 
     @Test
@@ -221,7 +221,7 @@ class ChatMessageDeliveryServiceTest {
         verify(privateChatContactRequestService, never())
                 .maybeCreateContactRequestForPrivateMessage(any(), any());
         // Still reveal by chatId from the DTO so hidden chats reappear on activity.
-        verify(chatRoomManagementService).revealChatOnNewMessage(CHAT_ID);
+        verify(chatRoomQueryService).revealChatOnNewMessage(CHAT_ID);
     }
 
     @Test
