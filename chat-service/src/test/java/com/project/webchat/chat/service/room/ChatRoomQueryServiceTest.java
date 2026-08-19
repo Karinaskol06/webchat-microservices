@@ -161,15 +161,13 @@ class ChatRoomQueryServiceTest {
         when(userBanGuardService.isPrivateChatHiddenForViewer(any(), eq(USER_ID), any(), any()))
                 .thenReturn(false);
         when(roomEnricher.getUnreadCount("g1", USER_ID)).thenReturn(1);
-        when(roomEnricher.enrichChatWithUserData(eq(group), eq(USER_ID), eq(1), eq(true)))
+        when(roomEnricher.enrichChatForList(eq(group), eq(USER_ID), eq(1)))
                 .thenReturn(ChatRoomDTO.builder().id("g1").build());
 
         Page<ChatRoomDTO> page = queryService.getAllUserChatsSorted(USER_ID, pageable);
 
         assertThat(page.getContent()).extracting(ChatRoomDTO::getId).containsExactly("g1");
-        verify(roomEnricher, never())
-                .enrichChatWithUserData(eq(personal), anyLong(), anyInt(), anyBoolean());
-        verify(roomEnricher, never())
-                .enrichChatWithUserData(eq(hiddenPrivate), anyLong(), anyInt(), anyBoolean());
+        verify(roomEnricher, never()).enrichChatForList(eq(personal), anyLong(), anyInt());
+        verify(roomEnricher, never()).enrichChatForList(eq(hiddenPrivate), anyLong(), anyInt());
     }
 }

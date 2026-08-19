@@ -52,8 +52,8 @@ public class ChatRoomQueryService {
                 .filter(chat -> !chat.isHiddenFor(userId))
                 .filter(chat -> !userBanGuardService.isPrivateChatHiddenForViewer(
                         chat, userId, bannedUserIds, banningUserIds))
-                .map(chat -> roomEnricher.enrichChatWithUserData(
-                        chat, userId, roomEnricher.getUnreadCount(chat.getId(), userId), true))
+                .map(chat -> roomEnricher.enrichChatForList(
+                        chat, userId, roomEnricher.getUnreadCount(chat.getId(), userId)))
                 .toList();
 
         return new PageImpl<>(chatRooms, pageable, chatPage.getTotalElements());

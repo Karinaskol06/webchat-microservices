@@ -111,11 +111,14 @@ class ChatMessageDeliveryServiceTest {
         // WS "incoming" path builds a personalized sidebar DTO per recipient (unread + enrich)
         when(roomEnricher.getUnreadCount(CHAT_ID, OTHER_MEMBER_ID)).thenReturn(2);
         when(roomEnricher.getUnreadCount(CHAT_ID, THIRD_MEMBER_ID)).thenReturn(1);
+        when(roomEnricher.getUnreadCount(CHAT_ID, SENDER_ID)).thenReturn(0);
         when(roomEnricher.enrichChatWithUserData(eq(groupRoom), eq(OTHER_MEMBER_ID), eq(2)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).unreadCount(2).build());
         when(roomEnricher.enrichChatWithUserData(eq(groupRoom), eq(THIRD_MEMBER_ID), eq(1)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).unreadCount(1).build());
         when(chatMessageRepository.countByChatId(CHAT_ID)).thenReturn(1L);
+        when(roomEnricher.enrichChatWithUserData(eq(groupRoom), eq(SENDER_ID), eq(0)))
+                .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).unreadCount(0).build());
 
         // Act: one call = Kafka push eligibility + full WebSocket / sidebar fan-out
         deliveryService.notifyMessageCreated(groupRoom, SENDER_ID, savedMessage, messageDto, "hello");
@@ -135,11 +138,14 @@ class ChatMessageDeliveryServiceTest {
         verify(privateChatContactRequestService).maybeCreateContactRequestForPrivateMessage(groupRoom, SENDER_ID, 1L);
         verify(webSocketService).sendMessageToChat(CHAT_ID, messageDto);
         verify(webSocketService).notifyUserJoinedChat(CHAT_ID, SENDER_ID);
-        verify(roomUpdateNotifier).notifyRoomMembersChatUpdated(groupRoom);
+        // sender gets targeted sidebar update (not full fan-out via notifyRoomMembersChatUpdated)
+        verify(webSocketService).notifyChatUpdated(eq(CHAT_ID), any(ChatRoomDTO.class), eq(Set.of(SENDER_ID)));
         verify(webSocketService).notifyIncomingChatMessage(
                 eq(OTHER_MEMBER_ID), any(ChatRoomDTO.class), eq(messageDto));
         verify(webSocketService).notifyIncomingChatMessage(
                 eq(THIRD_MEMBER_ID), any(ChatRoomDTO.class), eq(messageDto));
+        // notifyRoomMembersChatUpdated must NOT be called during delivery (double-enrichment eliminated)
+        verify(roomUpdateNotifier, never()).notifyRoomMembersChatUpdated(any());
         // After fan-out, un-hide the chat for members who used "delete for me".
         verify(chatRoomQueryService).revealChatOnNewMessage(CHAT_ID);
     }
@@ -179,6 +185,9 @@ class ChatMessageDeliveryServiceTest {
         when(redisService.isUserOnline(OTHER_MEMBER_ID)).thenReturn(true);
         when(redisService.isUserAfk(OTHER_MEMBER_ID)).thenReturn(false);
         when(redisService.getCurrentChat(OTHER_MEMBER_ID)).thenReturn(CHAT_ID);
+        when(roomEnricher.getUnreadCount(CHAT_ID, SENDER_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(twoMemberRoom), eq(SENDER_ID), eq(0)))
+                .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).build());
         when(roomEnricher.getUnreadCount(CHAT_ID, OTHER_MEMBER_ID)).thenReturn(0);
         when(roomEnricher.enrichChatWithUserData(eq(twoMemberRoom), eq(OTHER_MEMBER_ID), eq(0)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).build());
@@ -206,6 +215,9 @@ class ChatMessageDeliveryServiceTest {
                 .id(SENDER_ID)
                 .username("alice")
                 .build());
+        when(roomEnricher.getUnreadCount(CHAT_ID, SENDER_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(twoMemberRoom), eq(SENDER_ID), eq(0)))
+                .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).build());
         when(roomEnricher.getUnreadCount(CHAT_ID, OTHER_MEMBER_ID)).thenReturn(1);
         when(roomEnricher.enrichChatWithUserData(eq(twoMemberRoom), eq(OTHER_MEMBER_ID), eq(1)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).build());

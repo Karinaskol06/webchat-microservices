@@ -44,7 +44,7 @@ class ChatRoomEnricherTest {
         enricher = new ChatRoomEnricher(chatUserInfoService, roomPermissionService, chatMessageRepository);
     }
 
-    // ─── Personal Space ───────────────────────────────────────────────────────
+    // Personal Space
 
     @Test
     void enrichChatWithUserData_includesDescriptionForPersonalSpace() {
@@ -66,7 +66,7 @@ class ChatRoomEnricherTest {
         assertThat(dto.getDescription()).isEqualTo("Project reminders and drafts");
     }
 
-    // ─── Private Room ─────────────────────────────────────────────────────────
+    // Private Room
 
     @Test
     void enrichChatWithUserData_privateRoom_populatesOtherUser() {
@@ -109,7 +109,7 @@ class ChatRoomEnricherTest {
         assertThat(dto.getGroupName()).isNull();
     }
 
-    // ─── Group Room ───────────────────────────────────────────────────────────
+    // Group Room
 
     @Test
     void enrichChatWithUserData_groupRoom_populatesMembersAndAdminIds() {
@@ -190,7 +190,7 @@ class ChatRoomEnricherTest {
         assertThat(dto.isCurrentUserCanModerateMembers()).isFalse();
     }
 
-    // ─── Channel Room ─────────────────────────────────────────────────────────
+    // Channel Room
 
     @Test
     void enrichChatWithUserData_channelRoom_creatorFlagsSet() {
@@ -280,5 +280,104 @@ class ChatRoomEnricherTest {
         int count = enricher.getUnreadCount("room-1", 7L);
 
         assertThat(count).isEqualTo(2);
+    }
+
+    // ─── enrichChatForList (lightweight sidebar path) ─────────────────────────
+
+    @Test
+    void enrichChatForList_privateRoom_includesOtherUserAndBaseFields() {
+        ChatRoom room = ChatRoom.builder()
+                .id("priv-list")
+                .type(ChatType.PRIVATE)
+                .memberIds(Set.of(1L, 2L))
+                .createdBy(1L)
+                .lastMessage("hello")
+                .visibility(RoomVisibility.PRIVATE)
+                .build();
+
+        UserInfoDTO other = UserInfoDTO.builder().id(2L).username("alice").build();
+        when(chatUserInfoService.getUserInfo(2L, true)).thenReturn(other);
+
+        ChatRoomDTO dto = enricher.enrichChatForList(room, 1L, 3);
+
+        assertThat(dto.getId()).isEqualTo("priv-list");
+        assertThat(dto.getType()).isEqualTo("PRIVATE");
+        assertThat(dto.getUnreadCount()).isEqualTo(3);
+        assertThat(dto.getLastMessage()).isEqualTo("hello");
+        assertThat(dto.getOtherUser()).isNotNull();
+        assertThat(dto.getOtherUser().getUsername()).isEqualTo("alice");
+        // heavy fields must be absent
+        assertThat(dto.getMembers()).isNull();
+        assertThat(dto.getAdminUserIds()).isNull();
+    }
+
+    @Test
+    void enrichChatForList_groupRoom_includesNameAndPhotoOnly_noMemberList() {
+        ChatRoom room = ChatRoom.builder()
+                .id("grp-list")
+                .type(ChatType.GROUP)
+                .memberIds(Set.of(1L, 2L, 3L))
+                .adminIds(Set.of(1L))
+                .createdBy(1L)
+                .groupName("Team Alpha")
+                .groupPhoto("https://example.com/photo.jpg")
+                .visibility(RoomVisibility.PUBLIC)
+                .build();
+
+        ChatRoomDTO dto = enricher.enrichChatForList(room, 1L, 0);
+
+        assertThat(dto.getGroupName()).isEqualTo("Team Alpha");
+        assertThat(dto.getGroupPhoto()).isEqualTo("https://example.com/photo.jpg");
+        assertThat(dto.getMemberCount()).isEqualTo(3);
+        // heavy fields must be absent
+        assertThat(dto.getMembers()).isNull();
+        assertThat(dto.getAdminUserIds()).isNull();
+        assertThat(dto.getBannedMembers()).isNull();
+        assertThat(dto.isCurrentUserAdmin()).isFalse();
+        assertThat(dto.isCurrentUserCanModerateMembers()).isFalse();
+    }
+
+    @Test
+    void enrichChatForList_channelRoom_includesNameAndPhotoOnly_noPermissionFlags() {
+        ChatRoom room = ChatRoom.builder()
+                .id("ch-list")
+                .type(ChatType.CHANNEL)
+                .memberIds(Set.of(1L, 2L))
+                .adminIds(Set.of(2L))
+                .channelPosterIds(Set.of(1L))
+                .createdBy(2L)
+                .groupName("Announcements")
+                .visibility(RoomVisibility.PUBLIC)
+                .build();
+
+        ChatRoomDTO dto = enricher.enrichChatForList(room, 1L, 1);
+
+        assertThat(dto.getGroupName()).isEqualTo("Announcements");
+        assertThat(dto.getUnreadCount()).isEqualTo(1);
+        // heavy fields must be absent
+        assertThat(dto.getMembers()).isNull();
+        assertThat(dto.getChannelPosterUserIds()).isNull();
+        assertThat(dto.isCurrentUserChannelCreator()).isFalse();
+        assertThat(dto.isCurrentUserChannelAdmin()).isFalse();
+        assertThat(dto.isCurrentUserChannelPoster()).isFalse();
+    }
+
+    @Test
+    void enrichChatForList_personalSpace_includesNameAndDescription() {
+        ChatRoom room = ChatRoom.builder()
+                .id("ps-list")
+                .type(ChatType.PERSONAL_SPACE)
+                .memberIds(Set.of(42L))
+                .createdBy(42L)
+                .groupName("My Notes")
+                .description("Private drafts")
+                .visibility(RoomVisibility.PRIVATE)
+                .build();
+
+        ChatRoomDTO dto = enricher.enrichChatForList(room, 42L, 0);
+
+        assertThat(dto.getGroupName()).isEqualTo("My Notes");
+        assertThat(dto.getDescription()).isEqualTo("Private drafts");
+        assertThat(dto.getMembers()).isNull();
     }
 }

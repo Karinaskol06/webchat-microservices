@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -115,10 +116,15 @@ public class ChatMessageDeliveryService {
                 room, senderId, chatMessageRepository.countByChatId(room.getId()));
         webSocketService.sendMessageToChat(room.getId(), messageDTO);
         webSocketService.notifyUserJoinedChat(room.getId(), senderId);
+        // Refresh the sender's sidebar only — recipients get their update via notifyIncomingChatMessage below,
+        // which already carries a personalized DTO. Full fan-out via notifyRoomMembersChatUpdated would
+        // double-enrich every member and is not needed here.
         try {
-            roomUpdateNotifier.notifyRoomMembersChatUpdated(room);
+            int senderUnread = roomEnricher.getUnreadCount(room.getId(), senderId);
+            ChatRoomDTO senderDto = roomEnricher.enrichChatWithUserData(room, senderId, senderUnread);
+            webSocketService.notifyChatUpdated(room.getId(), senderDto, Set.of(senderId));
         } catch (Exception ex) {
-            log.warn("Failed to refresh room sidebar for chat {} after message {}: {}",
+            log.warn("Failed to refresh sender sidebar for chat {} after message {}: {}",
                     room.getId(), messageDTO.getId(), ex.getMessage());
         }
         if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {

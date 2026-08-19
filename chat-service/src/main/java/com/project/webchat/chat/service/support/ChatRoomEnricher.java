@@ -15,7 +15,6 @@ import java.util.List;
 
 /**
  * Pure room enrichment: maps a {@link ChatRoom} entity to a personalized {@link ChatRoomDTO}.
- * No WebSocket or notification side effects — safe to call from any read path.
  */
 @Service
 @RequiredArgsConstructor
@@ -28,6 +27,52 @@ public class ChatRoomEnricher {
     /** Returns the number of unread messages in {@code chatId} that were not sent by {@code currentUserId}. */
     public int getUnreadCount(String chatId, Long currentUserId) {
         return (int) chatMessageRepository.countUnreadMessagesNotFromUser(chatId, currentUserId);
+    }
+
+    /**
+     * Lightweight enrichment for the chat sidebar list.
+     * Populates base fields and the other-user profile for PRIVATE rooms.
+     * Omits member list, admin IDs, permission flags, and banned members —
+     * none of which are needed to render a chat row.
+     */
+    public ChatRoomDTO enrichChatForList(ChatRoom chat, Long currentUserId, int unreadCount) {
+        RoomVisibility visibility = chat.getVisibility() != null ? chat.getVisibility() : RoomVisibility.PRIVATE;
+
+        ChatRoomDTO.ChatRoomDTOBuilder builder = ChatRoomDTO.builder()
+                .id(chat.getId())
+                .type(chat.getType().toString())
+                .visibility(visibility.name())
+                .createdAt(chat.getCreatedAt())
+                .lastActivity(chat.getLastActivity())
+                .lastMessage(chat.getLastMessage())
+                .unreadCount(unreadCount)
+                .createdBy(chat.getCreatedBy())
+                .memberCount(chat.getMemberIds() != null ? chat.getMemberIds().size() : 0);
+
+        if (chat.getType() == ChatType.PRIVATE) {
+            Long otherUserId = chat.getMemberIds().stream()
+                    .filter(id -> !id.equals(currentUserId))
+                    .findFirst()
+                    .orElse(null);
+            if (otherUserId != null) {
+                builder.otherUser(chatUserInfoService.getUserInfo(otherUserId, true));
+            }
+        }
+
+        if (chat.getType() == ChatType.GROUP || chat.getType() == ChatType.CHANNEL) {
+            builder.groupName(chat.getGroupName());
+            builder.groupPhoto(chat.getGroupPhoto());
+        }
+
+        if (chat.getType() == ChatType.PERSONAL_SPACE) {
+            builder.groupName(chat.getGroupName() != null
+                    ? chat.getGroupName()
+                    : com.project.webchat.chat.service.room.PersonalSpaceService.PERSONAL_SPACE_DISPLAY_NAME);
+            builder.groupPhoto(chat.getGroupPhoto());
+            builder.description(chat.getDescription());
+        }
+
+        return builder.build();
     }
 
     public ChatRoomDTO enrichChatWithUserData(ChatRoom chat, Long currentUserId, int unreadCount) {
