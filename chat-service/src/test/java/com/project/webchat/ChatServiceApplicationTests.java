@@ -9,9 +9,13 @@ import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.message.ChatMessageCommandService;
 import com.project.webchat.chat.service.message.ChatMessageDeliveryService;
 import com.project.webchat.chat.service.message.MessageReactionService;
-import com.project.webchat.chat.service.room.ChatRoomManagementService;
+import com.project.webchat.chat.service.room.ChatRoomInviteService;
+import com.project.webchat.chat.service.room.ChatRoomModerationService;
+import com.project.webchat.chat.service.room.ChatRoomProfileService;
+import com.project.webchat.chat.service.room.ChatRoomQueryService;
 import com.project.webchat.chat.service.room.PrivateChatService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -58,10 +62,22 @@ class ChatServiceApplicationTests {
     private MessageReactionService messageReactionService;
 
     @Autowired
-    private ChatRoomManagementService chatRoomManagementService;
+    private ChatRoomInviteService chatRoomInviteService;
 
     @Autowired
-    private ChatRoomEnrichmentService roomEnrichmentService;
+    private ChatRoomModerationService chatRoomModerationService;
+
+    @Autowired
+    private ChatRoomProfileService chatRoomProfileService;
+
+    @Autowired
+    private ChatRoomQueryService chatRoomQueryService;
+
+    @Autowired
+    private ChatRoomMemberMutationHelper chatRoomMemberMutationHelper;
+
+    @Autowired
+    private ChatRoomEnricher chatRoomEnricher;
 
     @Test
     void contextLoadsAndWiresRefactoredServices() {
@@ -70,7 +86,11 @@ class ChatServiceApplicationTests {
         assertThat(chatMessageCommandService).isNotNull();
         assertThat(chatMessageDeliveryService).isNotNull();
         assertThat(messageReactionService).isNotNull();
-        assertThat(chatRoomManagementService).isNotNull();
-        assertThat(roomEnrichmentService).isNotNull();
+        assertThat(chatRoomInviteService).isNotNull();
+        assertThat(chatRoomModerationService).isNotNull();
+        assertThat(chatRoomProfileService).isNotNull();
+        assertThat(chatRoomQueryService).isNotNull();
+        assertThat(chatRoomMemberMutationHelper).isNotNull();
+        assertThat(chatRoomEnricher).isNotNull();
     }
 }

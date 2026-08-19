@@ -4,7 +4,7 @@ import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -30,7 +30,7 @@ class UserBanChatSyncServiceTest {
     private WebSocketService webSocketService;
 
     @Mock
-    private ChatRoomEnrichmentService roomEnrichmentService;
+    private ChatRoomEnricher roomEnricher;
 
     @InjectMocks
     private UserBanChatSyncService userBanChatSyncService;
@@ -69,8 +69,8 @@ class UserBanChatSyncServiceTest {
                 .build();
         when(chatRoomRepository.findPrivateChatBetweenUsers(ChatType.PRIVATE, List.of(1L, 2L)))
                 .thenReturn(Optional.of(room));
-        when(roomEnrichmentService.getUnreadCount("private-1", 1L)).thenReturn(0);
-        when(roomEnrichmentService.getUnreadCount("private-1", 2L)).thenReturn(3);
+        when(roomEnricher.getUnreadCount("private-1", 1L)).thenReturn(0);
+        when(roomEnricher.getUnreadCount("private-1", 2L)).thenReturn(3);
 
         userBanChatSyncService.handleUserUnbanned(1L, 2L);
 

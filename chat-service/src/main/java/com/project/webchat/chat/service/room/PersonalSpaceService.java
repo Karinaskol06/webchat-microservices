@@ -14,7 +14,7 @@ import com.project.webchat.chat.entity.RoomVisibility;
 
 import com.project.webchat.chat.repository.ChatRoomRepository;
 
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
 
 import lombok.RequiredArgsConstructor;
 
@@ -44,7 +44,7 @@ public class PersonalSpaceService {
 
     private final ChatRoomRepository chatRoomRepository;
 
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
 
 
 
@@ -56,9 +56,9 @@ public class PersonalSpaceService {
 
                 .map(this::ensureCreatedBy)
 
-                .map(room -> roomEnrichmentService.enrichChatWithUserData(
+                .map(room -> roomEnricher.enrichChatWithUserData(
 
-                        room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId)))
+                        room, userId, roomEnricher.getUnreadCount(room.getId(), userId)))
 
                 .toList();
 
@@ -74,9 +74,9 @@ public class PersonalSpaceService {
 
         ChatRoom room = existing.isEmpty() ? createDefaultRoom(userId) : ensureCreatedBy(existing.get(0));
 
-        int unread = roomEnrichmentService.getUnreadCount(room.getId(), userId);
+        int unread = roomEnricher.getUnreadCount(room.getId(), userId);
 
-        return roomEnrichmentService.enrichChatWithUserData(room, userId, unread);
+        return roomEnricher.enrichChatWithUserData(room, userId, unread);
 
     }
 
@@ -114,9 +114,9 @@ public class PersonalSpaceService {
 
         ChatRoom saved = chatRoomRepository.save(room);
 
-        return roomEnrichmentService.enrichChatWithUserData(
+        return roomEnricher.enrichChatWithUserData(
 
-                saved, userId, roomEnrichmentService.getUnreadCount(saved.getId(), userId));
+                saved, userId, roomEnricher.getUnreadCount(saved.getId(), userId));
 
     }
 

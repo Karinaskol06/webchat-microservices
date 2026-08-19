@@ -14,7 +14,7 @@ import com.project.webchat.chat.service.FileStorageService;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.support.ChatMessageMapper;
 import com.project.webchat.chat.service.support.ChatMessagePreviewHelper;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.support.PersonalSpacePayloadValidator;
 import com.project.webchat.chat.service.support.PollPayloadHelper;
@@ -70,7 +70,7 @@ class ChatMessageCommandServiceTest {
     @Mock private ChatMessageMapper chatMessageMapper;
     @Mock private ChatMessagePreviewHelper previewHelper;
     @Mock private ChatRoomPermissionService roomPermissionService;
-    @Mock private ChatRoomEnrichmentService roomEnrichmentService;
+    @Mock private ChatRoomUpdateNotifier roomUpdateNotifier;
     @Mock private PersonalSpacePayloadValidator personalSpacePayloadValidator;
     @Mock private PollPayloadHelper pollPayloadHelper;
     @Mock private SharedPollService sharedPollService;

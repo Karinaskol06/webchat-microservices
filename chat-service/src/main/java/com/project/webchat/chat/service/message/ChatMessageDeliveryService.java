@@ -10,8 +10,9 @@ import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.service.MessageEventPublisher;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.room.ChatRoomManagementService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.room.ChatRoomQueryService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.chat.service.user.PrivateChatContactRequestService;
 import com.project.webchat.shared.dto.UserInfoDTO;
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -42,9 +44,10 @@ public class ChatMessageDeliveryService {
     private final WebSocketService webSocketService;
     private final MessageEventPublisher messageEventPublisher;
     private final ChatUserInfoService chatUserInfoService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final PrivateChatContactRequestService privateChatContactRequestService;
-    private final ChatRoomManagementService chatRoomManagementService;
+    private final ChatRoomQueryService chatRoomQueryService;
 
     /**
      * After a message is persisted: push + WS fan-out, then un-hide the chat for members.
@@ -99,7 +102,7 @@ public class ChatMessageDeliveryService {
         if (chatId == null || chatId.isBlank()) {
             return;
         }
-        chatRoomManagementService.revealChatOnNewMessage(chatId);
+        chatRoomQueryService.revealChatOnNewMessage(chatId);
     }
 
     private void deliverSentMessage(ChatRoom room, Long senderId, ChatMessageDTO messageDTO) {
@@ -113,10 +116,15 @@ public class ChatMessageDeliveryService {
                 room, senderId, chatMessageRepository.countByChatId(room.getId()));
         webSocketService.sendMessageToChat(room.getId(), messageDTO);
         webSocketService.notifyUserJoinedChat(room.getId(), senderId);
+        // Refresh the sender's sidebar only — recipients get their update via notifyIncomingChatMessage below,
+        // which already carries a personalized DTO. Full fan-out via notifyRoomMembersChatUpdated would
+        // double-enrich every member and is not needed here.
         try {
-            roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+            int senderUnread = roomEnricher.getUnreadCount(room.getId(), senderId);
+            ChatRoomDTO senderDto = roomEnricher.enrichChatWithUserData(room, senderId, senderUnread);
+            webSocketService.notifyChatUpdated(room.getId(), senderDto, Set.of(senderId));
         } catch (Exception ex) {
-            log.warn("Failed to refresh room sidebar for chat {} after message {}: {}",
+            log.warn("Failed to refresh sender sidebar for chat {} after message {}: {}",
                     room.getId(), messageDTO.getId(), ex.getMessage());
         }
         if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {
@@ -126,8 +134,8 @@ public class ChatMessageDeliveryService {
             if (memberId == null || memberId.equals(senderId)) {
                 continue;
             }
-            int unread = roomEnrichmentService.getUnreadCount(room.getId(), memberId);
-            ChatRoomDTO chatDto = roomEnrichmentService.enrichChatWithUserData(room, memberId, unread);
+            int unread = roomEnricher.getUnreadCount(room.getId(), memberId);
+            ChatRoomDTO chatDto = roomEnricher.enrichChatWithUserData(room, memberId, unread);
             webSocketService.notifyIncomingChatMessage(memberId, chatDto, messageDTO);
         }
     }

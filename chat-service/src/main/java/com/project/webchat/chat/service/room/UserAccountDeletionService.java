@@ -5,7 +5,7 @@ import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.chat.service.RedisService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.RoomOwnerSuccessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,8 +25,8 @@ public class UserAccountDeletionService {
     private final ChatRoomRepository chatRoomRepository;
     private final RoomMemberInviteRepository roomMemberInviteRepository;
     private final RedisService redisService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
-    private final ChatRoomManagementService chatRoomManagementService;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
+    private final ChatRoomLifecycleService chatRoomLifecycleService;
     private final RoomOwnerSuccessionService roomOwnerSuccessionService;
 
     @Transactional
@@ -48,7 +48,7 @@ public class UserAccountDeletionService {
         for (ChatRoom room : chatRoomRepository.findByTypeAndCreatedByOrderByLastActivityDesc(
                 ChatType.PERSONAL_SPACE, userId)) {
             if (room.getId() != null && processed.add(room.getId())) {
-                chatRoomManagementService.purgeRoom(room);
+                chatRoomLifecycleService.purgeRoom(room);
             }
         }
 
@@ -64,13 +64,13 @@ public class UserAccountDeletionService {
 
         if (type == ChatType.PERSONAL_SPACE) {
             if (userId.equals(room.getCreatedBy())) {
-                chatRoomManagementService.purgeRoom(room);
+                chatRoomLifecycleService.purgeRoom(room);
             }
             return;
         }
 
         if (type == ChatType.PRIVATE) {
-            roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+            roomUpdateNotifier.notifyRoomMembersChatUpdated(room);
             return;
         }
 
@@ -78,7 +78,7 @@ public class UserAccountDeletionService {
             if (userId.equals(room.getCreatedBy())) {
                 Long successor = roomOwnerSuccessionService.pickOwnerSuccessor(room, userId);
                 if (successor == null) {
-                    chatRoomManagementService.purgeRoom(room);
+                    chatRoomLifecycleService.purgeRoom(room);
                     return;
                 }
                 roomOwnerSuccessionService.transferOwnership(room, successor);
@@ -86,13 +86,13 @@ public class UserAccountDeletionService {
 
             removeDepartingMember(room, userId);
             if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {
-                chatRoomManagementService.purgeRoom(room);
+                chatRoomLifecycleService.purgeRoom(room);
                 return;
             }
 
             ChatRoom saved = chatRoomRepository.save(room);
             redisService.evictChatParticipants(saved.getId());
-            roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
+            roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
         }
     }
 

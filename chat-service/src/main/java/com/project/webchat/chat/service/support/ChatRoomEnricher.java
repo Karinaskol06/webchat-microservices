@@ -5,28 +5,74 @@ import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.entity.RoomVisibility;
 import com.project.webchat.chat.repository.ChatMessageRepository;
-import com.project.webchat.chat.service.WebSocketService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
+/**
+ * Pure room enrichment: maps a {@link ChatRoom} entity to a personalized {@link ChatRoomDTO}.
+ */
 @Service
 @RequiredArgsConstructor
-public class ChatRoomEnrichmentService {
+public class ChatRoomEnricher {
 
     private final ChatUserInfoService chatUserInfoService;
     private final ChatRoomPermissionService roomPermissionService;
     private final ChatMessageRepository chatMessageRepository;
-    private final WebSocketService webSocketService;
 
+    /** Returns the number of unread messages in {@code chatId} that were not sent by {@code currentUserId}. */
     public int getUnreadCount(String chatId, Long currentUserId) {
-        return chatMessageRepository.findUnreadMessagesNotFromUser(chatId, currentUserId).size();
+        return (int) chatMessageRepository.countUnreadMessagesNotFromUser(chatId, currentUserId);
+    }
+
+    /**
+     * Lightweight enrichment for the chat sidebar list.
+     * Populates base fields and the other-user profile for PRIVATE rooms.
+     * Omits member list, admin IDs, permission flags, and banned members —
+     * none of which are needed to render a chat row.
+     */
+    public ChatRoomDTO enrichChatForList(ChatRoom chat, Long currentUserId, int unreadCount) {
+        RoomVisibility visibility = chat.getVisibility() != null ? chat.getVisibility() : RoomVisibility.PRIVATE;
+
+        ChatRoomDTO.ChatRoomDTOBuilder builder = ChatRoomDTO.builder()
+                .id(chat.getId())
+                .type(chat.getType().toString())
+                .visibility(visibility.name())
+                .createdAt(chat.getCreatedAt())
+                .lastActivity(chat.getLastActivity())
+                .lastMessage(chat.getLastMessage())
+                .unreadCount(unreadCount)
+                .createdBy(chat.getCreatedBy())
+                .memberCount(chat.getMemberIds() != null ? chat.getMemberIds().size() : 0);
+
+        if (chat.getType() == ChatType.PRIVATE) {
+            Long otherUserId = chat.getMemberIds().stream()
+                    .filter(id -> !id.equals(currentUserId))
+                    .findFirst()
+                    .orElse(null);
+            if (otherUserId != null) {
+                builder.otherUser(chatUserInfoService.getUserInfo(otherUserId, true));
+            }
+        }
+
+        if (chat.getType() == ChatType.GROUP || chat.getType() == ChatType.CHANNEL) {
+            builder.groupName(chat.getGroupName());
+            builder.groupPhoto(chat.getGroupPhoto());
+        }
+
+        if (chat.getType() == ChatType.PERSONAL_SPACE) {
+            builder.groupName(chat.getGroupName() != null
+                    ? chat.getGroupName()
+                    : com.project.webchat.chat.service.room.PersonalSpaceService.PERSONAL_SPACE_DISPLAY_NAME);
+            builder.groupPhoto(chat.getGroupPhoto());
+            builder.description(chat.getDescription());
+        }
+
+        return builder.build();
     }
 
     public ChatRoomDTO enrichChatWithUserData(ChatRoom chat, Long currentUserId, int unreadCount) {
@@ -109,15 +155,5 @@ public class ChatRoomEnrichmentService {
         }
 
         return builder.build();
-    }
-
-    public void notifyRoomMembersChatUpdated(ChatRoom room) {
-        if (room.getMemberIds() == null || room.getMemberIds().isEmpty()) {
-            return;
-        }
-        for (Long memberId : new HashSet<>(room.getMemberIds())) {
-            ChatRoomDTO dto = enrichChatWithUserData(room, memberId, getUnreadCount(room.getId(), memberId));
-            webSocketService.notifyChatUpdated(room.getId(), dto, Set.of(memberId));
-        }
     }
 }

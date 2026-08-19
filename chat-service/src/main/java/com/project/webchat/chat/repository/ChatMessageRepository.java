@@ -20,6 +20,9 @@ public interface ChatMessageRepository extends MongoRepository<ChatMessage, Stri
     @Query("{ 'chatId' : ?0, 'senderId' : { $ne: ?1 }, 'isRead' : false }")
     List<ChatMessage> findUnreadMessagesNotFromUser(String chatId, Long senderId);
 
+    @Query(value = "{ 'chatId' : ?0, 'senderId' : { $ne: ?1 }, 'isRead' : false }", count = true)
+    long countUnreadMessagesNotFromUser(String chatId, Long senderId);
+
     //last 30 messages in the chat
     @Query(value = "{ 'chatId' : ?0 }", sort = "{ 'timestamp' : -1 }")
     List<ChatMessage> findLast30ByChatId(String chatId, Pageable pageable);

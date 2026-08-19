@@ -11,8 +11,9 @@ import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.service.MessageEventPublisher;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.room.ChatRoomManagementService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.room.ChatRoomQueryService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.chat.service.user.PrivateChatContactRequestService;
 import com.project.webchat.shared.dto.UserInfoDTO;
@@ -57,9 +58,10 @@ class ChatMessageDeliveryServiceTest {
     @Mock private WebSocketService webSocketService;
     @Mock private MessageEventPublisher messageEventPublisher;
     @Mock private ChatUserInfoService chatUserInfoService;
-    @Mock private ChatRoomEnrichmentService roomEnrichmentService;
+    @Mock private ChatRoomEnricher roomEnricher;
+    @Mock private ChatRoomUpdateNotifier roomUpdateNotifier;
     @Mock private PrivateChatContactRequestService privateChatContactRequestService;
-    @Mock private ChatRoomManagementService chatRoomManagementService;
+    @Mock private ChatRoomQueryService chatRoomQueryService;
 
     @InjectMocks
     private ChatMessageDeliveryService deliveryService;
@@ -107,13 +109,16 @@ class ChatMessageDeliveryServiceTest {
                 .profilePicture("avatar.png")
                 .build());
         // WS "incoming" path builds a personalized sidebar DTO per recipient (unread + enrich)
-        when(roomEnrichmentService.getUnreadCount(CHAT_ID, OTHER_MEMBER_ID)).thenReturn(2);
-        when(roomEnrichmentService.getUnreadCount(CHAT_ID, THIRD_MEMBER_ID)).thenReturn(1);
-        when(roomEnrichmentService.enrichChatWithUserData(eq(groupRoom), eq(OTHER_MEMBER_ID), eq(2)))
+        when(roomEnricher.getUnreadCount(CHAT_ID, OTHER_MEMBER_ID)).thenReturn(2);
+        when(roomEnricher.getUnreadCount(CHAT_ID, THIRD_MEMBER_ID)).thenReturn(1);
+        when(roomEnricher.getUnreadCount(CHAT_ID, SENDER_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(groupRoom), eq(OTHER_MEMBER_ID), eq(2)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).unreadCount(2).build());
-        when(roomEnrichmentService.enrichChatWithUserData(eq(groupRoom), eq(THIRD_MEMBER_ID), eq(1)))
+        when(roomEnricher.enrichChatWithUserData(eq(groupRoom), eq(THIRD_MEMBER_ID), eq(1)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).unreadCount(1).build());
         when(chatMessageRepository.countByChatId(CHAT_ID)).thenReturn(1L);
+        when(roomEnricher.enrichChatWithUserData(eq(groupRoom), eq(SENDER_ID), eq(0)))
+                .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).unreadCount(0).build());
 
         // Act: one call = Kafka push eligibility + full WebSocket / sidebar fan-out
         deliveryService.notifyMessageCreated(groupRoom, SENDER_ID, savedMessage, messageDto, "hello");
@@ -133,13 +138,16 @@ class ChatMessageDeliveryServiceTest {
         verify(privateChatContactRequestService).maybeCreateContactRequestForPrivateMessage(groupRoom, SENDER_ID, 1L);
         verify(webSocketService).sendMessageToChat(CHAT_ID, messageDto);
         verify(webSocketService).notifyUserJoinedChat(CHAT_ID, SENDER_ID);
-        verify(roomEnrichmentService).notifyRoomMembersChatUpdated(groupRoom);
+        // sender gets targeted sidebar update (not full fan-out via notifyRoomMembersChatUpdated)
+        verify(webSocketService).notifyChatUpdated(eq(CHAT_ID), any(ChatRoomDTO.class), eq(Set.of(SENDER_ID)));
         verify(webSocketService).notifyIncomingChatMessage(
                 eq(OTHER_MEMBER_ID), any(ChatRoomDTO.class), eq(messageDto));
         verify(webSocketService).notifyIncomingChatMessage(
                 eq(THIRD_MEMBER_ID), any(ChatRoomDTO.class), eq(messageDto));
+        // notifyRoomMembersChatUpdated must NOT be called during delivery (double-enrichment eliminated)
+        verify(roomUpdateNotifier, never()).notifyRoomMembersChatUpdated(any());
         // After fan-out, un-hide the chat for members who used "delete for me".
-        verify(chatRoomManagementService).revealChatOnNewMessage(CHAT_ID);
+        verify(chatRoomQueryService).revealChatOnNewMessage(CHAT_ID);
     }
 
     @Test
@@ -155,8 +163,8 @@ class ChatMessageDeliveryServiceTest {
                 .id(SENDER_ID)
                 .username("alice")
                 .build());
-        when(roomEnrichmentService.getUnreadCount(any(), any())).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(any(), any(), any(Integer.class)))
+        when(roomEnricher.getUnreadCount(any(), any())).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(any(), any(), any(Integer.class)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).build());
 
         deliveryService.notifyMessageCreated(groupRoom, SENDER_ID, savedMessage, messageDto, "hello");
@@ -177,8 +185,11 @@ class ChatMessageDeliveryServiceTest {
         when(redisService.isUserOnline(OTHER_MEMBER_ID)).thenReturn(true);
         when(redisService.isUserAfk(OTHER_MEMBER_ID)).thenReturn(false);
         when(redisService.getCurrentChat(OTHER_MEMBER_ID)).thenReturn(CHAT_ID);
-        when(roomEnrichmentService.getUnreadCount(CHAT_ID, OTHER_MEMBER_ID)).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(eq(twoMemberRoom), eq(OTHER_MEMBER_ID), eq(0)))
+        when(roomEnricher.getUnreadCount(CHAT_ID, SENDER_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(twoMemberRoom), eq(SENDER_ID), eq(0)))
+                .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).build());
+        when(roomEnricher.getUnreadCount(CHAT_ID, OTHER_MEMBER_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(twoMemberRoom), eq(OTHER_MEMBER_ID), eq(0)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).build());
 
         deliveryService.notifyMessageCreated(twoMemberRoom, SENDER_ID, savedMessage, messageDto, "hello");
@@ -204,8 +215,11 @@ class ChatMessageDeliveryServiceTest {
                 .id(SENDER_ID)
                 .username("alice")
                 .build());
-        when(roomEnrichmentService.getUnreadCount(CHAT_ID, OTHER_MEMBER_ID)).thenReturn(1);
-        when(roomEnrichmentService.enrichChatWithUserData(eq(twoMemberRoom), eq(OTHER_MEMBER_ID), eq(1)))
+        when(roomEnricher.getUnreadCount(CHAT_ID, SENDER_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(twoMemberRoom), eq(SENDER_ID), eq(0)))
+                .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).build());
+        when(roomEnricher.getUnreadCount(CHAT_ID, OTHER_MEMBER_ID)).thenReturn(1);
+        when(roomEnricher.enrichChatWithUserData(eq(twoMemberRoom), eq(OTHER_MEMBER_ID), eq(1)))
                 .thenReturn(ChatRoomDTO.builder().id(CHAT_ID).build());
 
         deliveryService.notifyMessageCreated(twoMemberRoom, SENDER_ID, savedMessage, messageDto, "hello");
@@ -226,7 +240,7 @@ class ChatMessageDeliveryServiceTest {
         verify(privateChatContactRequestService, never())
                 .maybeCreateContactRequestForPrivateMessage(any(), any(), org.mockito.ArgumentMatchers.anyLong());
         // Still reveal by chatId from the DTO so hidden chats reappear on activity.
-        verify(chatRoomManagementService).revealChatOnNewMessage(CHAT_ID);
+        verify(chatRoomQueryService).revealChatOnNewMessage(CHAT_ID);
     }
 
     @Test

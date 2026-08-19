@@ -5,7 +5,7 @@ import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.entity.RoomVisibility;
 import com.project.webchat.chat.repository.ChatRoomRepository;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,7 +29,7 @@ class PersonalSpaceServiceTest {
     private ChatRoomRepository chatRoomRepository;
 
     @Mock
-    private ChatRoomEnrichmentService roomEnrichmentService;
+    private ChatRoomEnricher roomEnricher;
 
     @InjectMocks
     private PersonalSpaceService personalSpaceService;
@@ -52,8 +52,8 @@ class PersonalSpaceServiceTest {
         when(chatRoomRepository.findByTypeAndMemberIdsContainsOrderByLastActivityDesc(
                 ChatType.PERSONAL_SPACE, 42L)).thenReturn(List.of(legacyRoom));
         when(chatRoomRepository.save(legacyRoom)).thenReturn(legacyRoom);
-        when(roomEnrichmentService.getUnreadCount("ps-1", 42L)).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(legacyRoom, 42L, 0))
+        when(roomEnricher.getUnreadCount("ps-1", 42L)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(legacyRoom, 42L, 0))
                 .thenReturn(com.project.webchat.chat.dto.ChatRoomDTO.builder().id("ps-1").build());
 
         var result = personalSpaceService.listPersonalSpaces(42L);
@@ -73,8 +73,8 @@ class PersonalSpaceServiceTest {
             saved.setId("ps-new");
             return saved;
         });
-        when(roomEnrichmentService.getUnreadCount("ps-new", 7L)).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(any(), eq(7L), eq(0)))
+        when(roomEnricher.getUnreadCount("ps-new", 7L)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(any(), eq(7L), eq(0)))
                 .thenReturn(com.project.webchat.chat.dto.ChatRoomDTO.builder().id("ps-new").build());
 
         var result = personalSpaceService.createPersonalSpace(7L, request);
@@ -95,8 +95,8 @@ class PersonalSpaceServiceTest {
             assertThat(saved.getDescription()).isEqualTo("Project drafts");
             return saved;
         });
-        when(roomEnrichmentService.getUnreadCount("ps-new", 7L)).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(any(), eq(7L), eq(0)))
+        when(roomEnricher.getUnreadCount("ps-new", 7L)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(any(), eq(7L), eq(0)))
                 .thenReturn(com.project.webchat.chat.dto.ChatRoomDTO.builder().id("ps-new").build());
 
         personalSpaceService.createPersonalSpace(7L, request);

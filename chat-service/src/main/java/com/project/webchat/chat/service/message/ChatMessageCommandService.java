@@ -17,7 +17,7 @@ import com.project.webchat.chat.service.FileStorageService;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.support.ChatMessageMapper;
 import com.project.webchat.chat.service.support.ChatMessagePreviewHelper;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.support.PersonalSpacePayloadValidator;
 import com.project.webchat.chat.service.support.PollPayloadHelper;
@@ -60,7 +60,7 @@ public class ChatMessageCommandService {
     private final ChatMessageMapper chatMessageMapper;
     private final ChatMessagePreviewHelper previewHelper;
     private final ChatRoomPermissionService roomPermissionService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final PersonalSpacePayloadValidator personalSpacePayloadValidator;
     private final PollPayloadHelper pollPayloadHelper;
     private final SharedPollService sharedPollService;
@@ -574,7 +574,7 @@ public class ChatMessageCommandService {
                 }
             }
             chatRoomRepository.save(chatRoom);
-            roomEnrichmentService.notifyRoomMembersChatUpdated(chatRoom);
+            roomUpdateNotifier.notifyRoomMembersChatUpdated(chatRoom);
         });
     }
 
