@@ -7,7 +7,8 @@ import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import com.project.webchat.chat.repository.ChatRoomRepository;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
@@ -29,7 +30,8 @@ public class ChatRoomModerationService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatUserInfoService chatUserInfoService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final ChatRoomPermissionService roomPermissionService;
     private final ChatRoomMemberMutationHelper memberMutationHelper;
 
@@ -51,9 +53,9 @@ public class ChatRoomModerationService {
             mutateChannelRole(room, actorId, target, action);
         }
         ChatRoom saved = chatRoomRepository.save(room);
-        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
-        return roomEnrichmentService.enrichChatWithUserData(
-                saved, actorId, roomEnrichmentService.getUnreadCount(saved.getId(), actorId));
+        roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
+        return roomEnricher.enrichChatWithUserData(
+                saved, actorId, roomEnricher.getUnreadCount(saved.getId(), actorId));
     }
 
     @Transactional
@@ -80,9 +82,9 @@ public class ChatRoomModerationService {
             chatRoomRepository.save(room);
         }
         ChatRoom saved = chatRoomRepository.findById(roomId).orElse(room);
-        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
-        return roomEnrichmentService.enrichChatWithUserData(
-                saved, actorId, roomEnrichmentService.getUnreadCount(saved.getId(), actorId));
+        roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
+        return roomEnricher.enrichChatWithUserData(
+                saved, actorId, roomEnricher.getUnreadCount(saved.getId(), actorId));
     }
 
     @Transactional
@@ -97,9 +99,9 @@ public class ChatRoomModerationService {
         }
         room.getBannedUserIds().remove(targetUserId);
         ChatRoom saved = chatRoomRepository.save(room);
-        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
-        return roomEnrichmentService.enrichChatWithUserData(
-                saved, actorId, roomEnrichmentService.getUnreadCount(saved.getId(), actorId));
+        roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
+        return roomEnricher.enrichChatWithUserData(
+                saved, actorId, roomEnricher.getUnreadCount(saved.getId(), actorId));
     }
 
     public List<UserInfoDTO> listBannedRoomMembers(String roomId, Long actorId) {

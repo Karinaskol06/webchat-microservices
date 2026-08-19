@@ -10,7 +10,8 @@ import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.chat.service.ChatNotificationEventPublisher;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.support.UserBanGuardService;
@@ -43,7 +44,8 @@ class ChatRoomInviteServiceTest {
     @Mock private UserServiceClient userServiceClient;
     @Mock private WebSocketService webSocketService;
     @Mock private ChatUserInfoService chatUserInfoService;
-    @Mock private ChatRoomEnrichmentService roomEnrichmentService;
+    @Mock private ChatRoomEnricher roomEnricher;
+    @Mock private ChatRoomUpdateNotifier roomUpdateNotifier;
     @Mock private ChatRoomPermissionService roomPermissionService;
     @Mock private ChatNotificationEventPublisher chatNotificationEventPublisher;
     @Mock private UserBanGuardService userBanGuardService;
@@ -84,8 +86,8 @@ class ChatRoomInviteServiceTest {
         when(roomMemberInviteRepository.findById("inv-1")).thenReturn(Optional.of(invite));
         when(memberMutationHelper.loadRoom(ROOM_ID)).thenReturn(room);
         when(memberMutationHelper.addMemberToRoom(room, TARGET_ID)).thenReturn(room);
-        when(roomEnrichmentService.getUnreadCount(ROOM_ID, TARGET_ID)).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(eq(room), eq(TARGET_ID), anyInt()))
+        when(roomEnricher.getUnreadCount(ROOM_ID, TARGET_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(room), eq(TARGET_ID), anyInt()))
                 .thenReturn(ChatRoomDTO.builder().id(ROOM_ID).build());
 
         ChatRoomDTO dto = inviteService.acceptRoomMemberInvite("inv-1", TARGET_ID);

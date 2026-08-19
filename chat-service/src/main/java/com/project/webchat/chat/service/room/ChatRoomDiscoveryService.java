@@ -7,7 +7,8 @@ import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.entity.RoomVisibility;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.RedisService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -28,7 +29,8 @@ public class ChatRoomDiscoveryService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final RedisService redisService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final ChatRoomPermissionService roomPermissionService;
 
     public Page<DiscoverableRoomDTO> discoverPublicRooms(Long currentUserId, String q, Pageable pageable) {
@@ -66,16 +68,16 @@ public class ChatRoomDiscoveryService {
             throw new IllegalArgumentException("This room is not public");
         }
         if (room.isMember(userId)) {
-            return roomEnrichmentService.enrichChatWithUserData(
-                    room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));
+            return roomEnricher.enrichChatWithUserData(
+                    room, userId, roomEnricher.getUnreadCount(room.getId(), userId));
         }
         roomPermissionService.assertNotBanned(room, userId);
         room.addMember(userId);
         ChatRoom saved = chatRoomRepository.save(room);
         redisService.evictChatParticipants(roomId);
-        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
-        return roomEnrichmentService.enrichChatWithUserData(
-                saved, userId, roomEnrichmentService.getUnreadCount(saved.getId(), userId));
+        roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
+        return roomEnricher.enrichChatWithUserData(
+                saved, userId, roomEnricher.getUnreadCount(saved.getId(), userId));
     }
 
     @Transactional
@@ -94,15 +96,15 @@ public class ChatRoomDiscoveryService {
             throw new IllegalArgumentException("This invite is not valid for this room");
         }
         if (room.isMember(userId)) {
-            return roomEnrichmentService.enrichChatWithUserData(
-                    room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));
+            return roomEnricher.enrichChatWithUserData(
+                    room, userId, roomEnricher.getUnreadCount(room.getId(), userId));
         }
         roomPermissionService.assertNotBanned(room, userId);
         room.addMember(userId);
         ChatRoom saved = chatRoomRepository.save(room);
         redisService.evictChatParticipants(saved.getId());
-        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
-        return roomEnrichmentService.enrichChatWithUserData(
-                saved, userId, roomEnrichmentService.getUnreadCount(saved.getId(), userId));
+        roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
+        return roomEnricher.enrichChatWithUserData(
+                saved, userId, roomEnricher.getUnreadCount(saved.getId(), userId));
     }
 }

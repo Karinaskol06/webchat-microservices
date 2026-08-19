@@ -5,7 +5,8 @@ import com.project.webchat.chat.dto.UpdateRoomProfileRequest;
 import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.repository.ChatRoomRepository;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,8 @@ class ChatRoomProfileServiceTest {
     private static final Long ACTOR_ID = 10L;
 
     @Mock private ChatRoomRepository chatRoomRepository;
-    @Mock private ChatRoomEnrichmentService roomEnrichmentService;
+    @Mock private ChatRoomEnricher roomEnricher;
+    @Mock private ChatRoomUpdateNotifier roomUpdateNotifier;
     @Mock private ChatRoomPermissionService roomPermissionService;
     @Mock private ChatRoomMemberMutationHelper memberMutationHelper;
 
@@ -55,8 +57,8 @@ class ChatRoomProfileServiceTest {
                 .build();
         when(memberMutationHelper.loadRoom(ROOM_ID)).thenReturn(room);
         when(chatRoomRepository.save(room)).thenReturn(room);
-        when(roomEnrichmentService.getUnreadCount(ROOM_ID, ACTOR_ID)).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(eq(room), eq(ACTOR_ID), anyInt()))
+        when(roomEnricher.getUnreadCount(ROOM_ID, ACTOR_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(room), eq(ACTOR_ID), anyInt()))
                 .thenReturn(ChatRoomDTO.builder().id(ROOM_ID).build());
 
         UpdateRoomProfileRequest request = new UpdateRoomProfileRequest();
@@ -67,6 +69,6 @@ class ChatRoomProfileServiceTest {
         assertThat(dto.getId()).isEqualTo(ROOM_ID);
         assertThat(room.getGroupName()).isEqualTo("Engineering");
         verify(roomPermissionService).assertCanManageRoomProfile(room, ACTOR_ID);
-        verify(roomEnrichmentService).notifyRoomMembersChatUpdated(room);
+        verify(roomUpdateNotifier).notifyRoomMembersChatUpdated(room);
     }
 }

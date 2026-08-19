@@ -8,7 +8,7 @@ import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.support.RoomOwnerSuccessionService;
@@ -41,7 +41,7 @@ class ChatRoomLifecycleServiceTest {
     @Mock private RoomMemberInviteRepository roomMemberInviteRepository;
     @Mock private RedisService redisService;
     @Mock private WebSocketService webSocketService;
-    @Mock private ChatRoomEnrichmentService roomEnrichmentService;
+    @Mock private ChatRoomUpdateNotifier roomUpdateNotifier;
     @Mock private ChatRoomPermissionService roomPermissionService;
     @Mock private PersonalSpaceService personalSpaceService;
     @Mock private RoomOwnerSuccessionService roomOwnerSuccessionService;

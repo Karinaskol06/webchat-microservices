@@ -4,7 +4,8 @@ import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import com.project.webchat.chat.repository.ChatRoomRepository;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
@@ -29,7 +30,8 @@ class ChatRoomModerationServiceTest {
 
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private ChatUserInfoService chatUserInfoService;
-    @Mock private ChatRoomEnrichmentService roomEnrichmentService;
+    @Mock private ChatRoomEnricher roomEnricher;
+    @Mock private ChatRoomUpdateNotifier roomUpdateNotifier;
     @Mock private ChatRoomPermissionService roomPermissionService;
     @Mock private ChatRoomMemberMutationHelper memberMutationHelper;
 

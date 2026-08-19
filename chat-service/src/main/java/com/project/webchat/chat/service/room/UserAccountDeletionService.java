@@ -5,7 +5,7 @@ import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.chat.service.RedisService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.RoomOwnerSuccessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +25,7 @@ public class UserAccountDeletionService {
     private final ChatRoomRepository chatRoomRepository;
     private final RoomMemberInviteRepository roomMemberInviteRepository;
     private final RedisService redisService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final ChatRoomLifecycleService chatRoomLifecycleService;
     private final RoomOwnerSuccessionService roomOwnerSuccessionService;
 
@@ -70,7 +70,7 @@ public class UserAccountDeletionService {
         }
 
         if (type == ChatType.PRIVATE) {
-            roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+            roomUpdateNotifier.notifyRoomMembersChatUpdated(room);
             return;
         }
 
@@ -92,7 +92,7 @@ public class UserAccountDeletionService {
 
             ChatRoom saved = chatRoomRepository.save(room);
             redisService.evictChatParticipants(saved.getId());
-            roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
+            roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
         }
     }
 

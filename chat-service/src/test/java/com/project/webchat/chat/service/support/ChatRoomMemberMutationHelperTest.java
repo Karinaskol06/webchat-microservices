@@ -38,7 +38,8 @@ class ChatRoomMemberMutationHelperTest {
     @Mock private RoomMemberInviteRepository roomMemberInviteRepository;
     @Mock private RedisService redisService;
     @Mock private WebSocketService webSocketService;
-    @Mock private ChatRoomEnrichmentService roomEnrichmentService;
+    @Mock private ChatRoomEnricher roomEnricher;
+    @Mock private ChatRoomUpdateNotifier roomUpdateNotifier;
     @Mock private ChatRoomPermissionService roomPermissionService;
 
     @InjectMocks
@@ -67,8 +68,8 @@ class ChatRoomMemberMutationHelperTest {
     void addMemberToRoom_whenNew_savesAndNotifies() {
         ChatRoom room = groupRoom(new HashSet<>(Set.of(MEMBER_ID)));
         when(chatRoomRepository.save(room)).thenAnswer(inv -> inv.getArgument(0));
-        when(roomEnrichmentService.getUnreadCount(ROOM_ID, NEW_MEMBER_ID)).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(eq(room), eq(NEW_MEMBER_ID), eq(0)))
+        when(roomEnricher.getUnreadCount(ROOM_ID, NEW_MEMBER_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(room), eq(NEW_MEMBER_ID), eq(0)))
                 .thenReturn(ChatRoomDTO.builder().id(ROOM_ID).build());
 
         ChatRoom saved = helper.addMemberToRoom(room, NEW_MEMBER_ID);
@@ -76,7 +77,7 @@ class ChatRoomMemberMutationHelperTest {
         assertThat(saved.isMember(NEW_MEMBER_ID)).isTrue();
         verify(roomPermissionService).assertNotBanned(room, NEW_MEMBER_ID);
         verify(redisService).evictChatParticipants(ROOM_ID);
-        verify(roomEnrichmentService).notifyRoomMembersChatUpdated(room);
+        verify(roomUpdateNotifier).notifyRoomMembersChatUpdated(room);
         verify(webSocketService).notifyChatCreated(eq(NEW_MEMBER_ID), any());
     }
 

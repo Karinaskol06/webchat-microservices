@@ -8,7 +8,7 @@ import com.project.webchat.chat.entity.RoomVisibility;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.UserBanGuardService;
 import org.junit.jupiter.api.Test;
@@ -40,7 +40,7 @@ class ChatRoomCreationServiceTest {
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private RedisService redisService;
     @Mock private WebSocketService webSocketService;
-    @Mock private ChatRoomEnrichmentService roomEnrichmentService;
+    @Mock private ChatRoomEnricher roomEnricher;
     @Mock private UserBanGuardService userBanGuardService;
     @Mock private ChatRoomMemberMutationHelper memberMutationHelper;
 
@@ -71,8 +71,8 @@ class ChatRoomCreationServiceTest {
             room.setId("room-new");
             return room;
         });
-        when(roomEnrichmentService.getUnreadCount(any(), anyLong())).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(any(), anyLong(), anyInt()))
+        when(roomEnricher.getUnreadCount(any(), anyLong())).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(any(), anyLong(), anyInt()))
                 .thenReturn(ChatRoomDTO.builder().id("room-new").build());
 
         ChatRoomDTO dto = creationService.createGroupRoom(CREATOR_ID, request);

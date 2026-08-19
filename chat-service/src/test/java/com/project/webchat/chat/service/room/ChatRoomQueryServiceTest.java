@@ -6,7 +6,8 @@ import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.RedisService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.support.UserBanGuardService;
@@ -53,7 +54,8 @@ class ChatRoomQueryServiceTest {
 
     @Mock private ChatRoomRepository chatRoomRepository;
     @Mock private ChatUserInfoService chatUserInfoService;
-    @Mock private ChatRoomEnrichmentService roomEnrichmentService;
+    @Mock private ChatRoomEnricher roomEnricher;
+    @Mock private ChatRoomUpdateNotifier roomUpdateNotifier;
     @Mock private ChatRoomPermissionService roomPermissionService;
     @Mock private UserBanGuardService userBanGuardService;
     @Mock private ChatRoomMemberMutationHelper memberMutationHelper;
@@ -83,7 +85,7 @@ class ChatRoomQueryServiceTest {
 
         assertThat(privateRoom.isHiddenFor(USER_ID)).isFalse();
         verify(chatRoomRepository).save(privateRoom);
-        verify(roomEnrichmentService).notifyRoomMembersChatUpdated(privateRoom);
+        verify(roomUpdateNotifier).notifyRoomMembersChatUpdated(privateRoom);
     }
 
     @Test
@@ -94,7 +96,7 @@ class ChatRoomQueryServiceTest {
         queryService.revealChatForMember(ROOM_ID, USER_ID);
 
         verify(chatRoomRepository, never()).save(any());
-        verify(roomEnrichmentService, never()).notifyRoomMembersChatUpdated(any());
+        verify(roomUpdateNotifier, never()).notifyRoomMembersChatUpdated(any());
     }
 
     @Test
@@ -105,7 +107,7 @@ class ChatRoomQueryServiceTest {
 
         assertThat(privateRoom.getHiddenForMemberIds()).isEmpty();
         verify(chatRoomRepository).save(privateRoom);
-        verify(roomEnrichmentService).notifyRoomMembersChatUpdated(privateRoom);
+        verify(roomUpdateNotifier).notifyRoomMembersChatUpdated(privateRoom);
     }
 
     @Test
@@ -121,8 +123,8 @@ class ChatRoomQueryServiceTest {
         when(memberMutationHelper.loadRoom(ROOM_ID)).thenReturn(privateRoom);
         when(userBanGuardService.getOtherPrivateChatMemberId(privateRoom, USER_ID)).thenReturn(OTHER_ID);
         when(chatUserInfoService.getUserInfo(OTHER_ID)).thenReturn(UserInfoDTO.builder().id(OTHER_ID).build());
-        when(roomEnrichmentService.getUnreadCount(ROOM_ID, USER_ID)).thenReturn(0);
-        when(roomEnrichmentService.enrichChatWithUserData(eq(privateRoom), eq(USER_ID), eq(0)))
+        when(roomEnricher.getUnreadCount(ROOM_ID, USER_ID)).thenReturn(0);
+        when(roomEnricher.enrichChatWithUserData(eq(privateRoom), eq(USER_ID), eq(0)))
                 .thenReturn(ChatRoomDTO.builder().id(ROOM_ID).build());
 
         ChatRoomDTO dto = queryService.getRoomForMember(ROOM_ID, USER_ID);
@@ -158,16 +160,16 @@ class ChatRoomQueryServiceTest {
         when(userBanGuardService.getBanningUserIds(USER_ID)).thenReturn(Set.of());
         when(userBanGuardService.isPrivateChatHiddenForViewer(any(), eq(USER_ID), any(), any()))
                 .thenReturn(false);
-        when(roomEnrichmentService.getUnreadCount("g1", USER_ID)).thenReturn(1);
-        when(roomEnrichmentService.enrichChatWithUserData(eq(group), eq(USER_ID), eq(1), eq(true)))
+        when(roomEnricher.getUnreadCount("g1", USER_ID)).thenReturn(1);
+        when(roomEnricher.enrichChatWithUserData(eq(group), eq(USER_ID), eq(1), eq(true)))
                 .thenReturn(ChatRoomDTO.builder().id("g1").build());
 
         Page<ChatRoomDTO> page = queryService.getAllUserChatsSorted(USER_ID, pageable);
 
         assertThat(page.getContent()).extracting(ChatRoomDTO::getId).containsExactly("g1");
-        verify(roomEnrichmentService, never())
+        verify(roomEnricher, never())
                 .enrichChatWithUserData(eq(personal), anyLong(), anyInt(), anyBoolean());
-        verify(roomEnrichmentService, never())
+        verify(roomEnricher, never())
                 .enrichChatWithUserData(eq(hiddenPrivate), anyLong(), anyInt(), anyBoolean());
     }
 }

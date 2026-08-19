@@ -8,7 +8,7 @@ import com.project.webchat.chat.entity.RoomVisibility;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.UserBanGuardService;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +30,7 @@ public class ChatRoomCreationService {
     private final ChatRoomRepository chatRoomRepository;
     private final RedisService redisService;
     private final WebSocketService webSocketService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
     private final UserBanGuardService userBanGuardService;
     private final ChatRoomMemberMutationHelper memberMutationHelper;
 
@@ -91,10 +91,10 @@ public class ChatRoomCreationService {
         redisService.evictChatParticipants(saved.getId());
         for (Long memberId : saved.getMemberIds()) {
             webSocketService.notifyChatCreated(memberId,
-                    roomEnrichmentService.enrichChatWithUserData(
-                            saved, memberId, roomEnrichmentService.getUnreadCount(saved.getId(), memberId)));
+                    roomEnricher.enrichChatWithUserData(
+                            saved, memberId, roomEnricher.getUnreadCount(saved.getId(), memberId)));
         }
-        return roomEnrichmentService.enrichChatWithUserData(
-                saved, creatorId, roomEnrichmentService.getUnreadCount(saved.getId(), creatorId));
+        return roomEnricher.enrichChatWithUserData(
+                saved, creatorId, roomEnricher.getUnreadCount(saved.getId(), creatorId));
     }
 }

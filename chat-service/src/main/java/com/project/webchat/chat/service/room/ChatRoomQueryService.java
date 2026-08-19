@@ -6,7 +6,8 @@ import com.project.webchat.chat.entity.ChatType;
 import com.project.webchat.chat.exception.ForbiddenChatOperationException;
 import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.service.RedisService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.support.UserBanGuardService;
@@ -32,7 +33,8 @@ public class ChatRoomQueryService {
     private final ChatRoomRepository chatRoomRepository;
     private final RedisService redisService;
     private final ChatUserInfoService chatUserInfoService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final ChatRoomPermissionService roomPermissionService;
     private final UserBanGuardService userBanGuardService;
     private final ChatRoomMemberMutationHelper memberMutationHelper;
@@ -50,8 +52,8 @@ public class ChatRoomQueryService {
                 .filter(chat -> !chat.isHiddenFor(userId))
                 .filter(chat -> !userBanGuardService.isPrivateChatHiddenForViewer(
                         chat, userId, bannedUserIds, banningUserIds))
-                .map(chat -> roomEnrichmentService.enrichChatWithUserData(
-                        chat, userId, roomEnrichmentService.getUnreadCount(chat.getId(), userId), true))
+                .map(chat -> roomEnricher.enrichChatWithUserData(
+                        chat, userId, roomEnricher.getUnreadCount(chat.getId(), userId), true))
                 .toList();
 
         return new PageImpl<>(chatRooms, pageable, chatPage.getTotalElements());
@@ -72,8 +74,8 @@ public class ChatRoomQueryService {
             revealChatForMember(roomId, userId);
             room = memberMutationHelper.loadRoom(roomId);
         }
-        return roomEnrichmentService.enrichChatWithUserData(
-                room, userId, roomEnrichmentService.getUnreadCount(room.getId(), userId));
+        return roomEnricher.enrichChatWithUserData(
+                room, userId, roomEnricher.getUnreadCount(room.getId(), userId));
     }
 
     public List<UserInfoDTO> getRoomParticipantsForMember(String roomId, Long userId) {
@@ -103,7 +105,7 @@ public class ChatRoomQueryService {
         }
         room.getHiddenForMemberIds().removeIf(id -> id != null && id.longValue() == userId.longValue());
         chatRoomRepository.save(room);
-        roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+        roomUpdateNotifier.notifyRoomMembersChatUpdated(room);
     }
 
     @Transactional
@@ -114,7 +116,7 @@ public class ChatRoomQueryService {
             }
             room.getHiddenForMemberIds().clear();
             chatRoomRepository.save(room);
-            roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+            roomUpdateNotifier.notifyRoomMembersChatUpdated(room);
         });
     }
 }

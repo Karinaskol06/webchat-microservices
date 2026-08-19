@@ -5,7 +5,8 @@ import com.project.webchat.chat.dto.UpdateRoomProfileRequest;
 import com.project.webchat.chat.entity.ChatRoom;
 import com.project.webchat.chat.entity.RoomVisibility;
 import com.project.webchat.chat.repository.ChatRoomRepository;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,8 @@ import java.util.UUID;
 public class ChatRoomProfileService {
 
     private final ChatRoomRepository chatRoomRepository;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final ChatRoomPermissionService roomPermissionService;
     private final ChatRoomMemberMutationHelper memberMutationHelper;
 
@@ -81,8 +83,8 @@ public class ChatRoomProfileService {
         }
 
         ChatRoom saved = chatRoomRepository.save(room);
-        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
-        return roomEnrichmentService.enrichChatWithUserData(
-                saved, actorId, roomEnrichmentService.getUnreadCount(saved.getId(), actorId));
+        roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
+        return roomEnricher.enrichChatWithUserData(
+                saved, actorId, roomEnricher.getUnreadCount(saved.getId(), actorId));
     }
 }

@@ -27,7 +27,8 @@ public class ChatRoomMemberMutationHelper {
     private final RoomMemberInviteRepository roomMemberInviteRepository;
     private final RedisService redisService;
     private final WebSocketService webSocketService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final ChatRoomPermissionService roomPermissionService;
 
     public ChatRoom loadRoom(String roomId) {
@@ -74,10 +75,10 @@ public class ChatRoomMemberMutationHelper {
         room.addMember(newMemberId);
         ChatRoom saved = chatRoomRepository.save(room);
         redisService.evictChatParticipants(saved.getId());
-        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
+        roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
         webSocketService.notifyChatCreated(newMemberId,
-                roomEnrichmentService.enrichChatWithUserData(
-                        saved, newMemberId, roomEnrichmentService.getUnreadCount(saved.getId(), newMemberId)));
+                roomEnricher.enrichChatWithUserData(
+                        saved, newMemberId, roomEnricher.getUnreadCount(saved.getId(), newMemberId)));
         return saved;
     }
 

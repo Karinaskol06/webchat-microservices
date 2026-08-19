@@ -25,7 +25,7 @@ import com.project.webchat.chat.service.room.ChatRoomProfileService;
 import com.project.webchat.chat.service.room.ChatRoomQueryService;
 import com.project.webchat.chat.service.room.PersonalSpaceService;
 import com.project.webchat.chat.service.room.PrivateChatService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
 import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -52,7 +52,7 @@ public class ChatService {
     private final ChatRoomCreationService chatRoomCreationService;
     private final ChatRoomDiscoveryService chatRoomDiscoveryService;
     private final ChatRoomLifecycleService chatRoomLifecycleService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
     private final PersonalSpaceService personalSpaceService;
 
     /** Returns the user's default personal space, creating one if none exists. */
@@ -311,6 +311,6 @@ public class ChatService {
 
     /** Returns unread message count for the user in the given chat. */
     public int getUnreadCount(String chatId, Long currentUserId) {
-        return roomEnrichmentService.getUnreadCount(chatId, currentUserId);
+        return roomEnricher.getUnreadCount(chatId, currentUserId);
     }
 }

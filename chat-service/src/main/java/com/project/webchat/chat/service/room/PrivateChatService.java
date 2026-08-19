@@ -12,7 +12,7 @@ import com.project.webchat.chat.repository.ChatRoomRepository;
 
 import com.project.webchat.chat.service.WebSocketService;
 
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
 
 import com.project.webchat.chat.service.support.UserBanGuardService;
 
@@ -50,7 +50,7 @@ public class PrivateChatService {
 
     private final WebSocketService webSocketService;
 
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
 
     private final UserBanGuardService userBanGuardService;
 
@@ -77,21 +77,21 @@ public class PrivateChatService {
         ChatRoom chatRoom = lookup.chatRoom();
 
         if (!lookup.createdNew()) {
-            int unreadCount = roomEnrichmentService.getUnreadCount(chatRoom.getId(), userId1);
+            int unreadCount = roomEnricher.getUnreadCount(chatRoom.getId(), userId1);
             notifyPrivateChatMembers(chatRoom, userId1, userId2, unreadCount);
-            return roomEnrichmentService.enrichChatWithUserData(chatRoom, userId1, unreadCount);
+            return roomEnricher.enrichChatWithUserData(chatRoom, userId1, unreadCount);
         }
 
         notifyPrivateChatMembers(chatRoom, userId1, userId2, 0);
-        return roomEnrichmentService.enrichChatWithUserData(chatRoom, userId1, 0);
+        return roomEnricher.enrichChatWithUserData(chatRoom, userId1, 0);
     }
 
     private void notifyPrivateChatMembers(ChatRoom chatRoom, Long userId1, Long userId2, int unreadForUser1) {
-        int unreadForUser2 = roomEnrichmentService.getUnreadCount(chatRoom.getId(), userId2);
+        int unreadForUser2 = roomEnricher.getUnreadCount(chatRoom.getId(), userId2);
         webSocketService.notifyChatCreated(userId1,
-                roomEnrichmentService.enrichChatWithUserData(chatRoom, userId1, unreadForUser1));
+                roomEnricher.enrichChatWithUserData(chatRoom, userId1, unreadForUser1));
         webSocketService.notifyChatCreated(userId2,
-                roomEnrichmentService.enrichChatWithUserData(chatRoom, userId2, unreadForUser2));
+                roomEnricher.enrichChatWithUserData(chatRoom, userId2, unreadForUser2));
 
     }
 

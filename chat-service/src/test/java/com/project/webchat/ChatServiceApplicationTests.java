@@ -14,7 +14,7 @@ import com.project.webchat.chat.service.room.ChatRoomModerationService;
 import com.project.webchat.chat.service.room.ChatRoomProfileService;
 import com.project.webchat.chat.service.room.ChatRoomQueryService;
 import com.project.webchat.chat.service.room.PrivateChatService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -77,7 +77,7 @@ class ChatServiceApplicationTests {
     private ChatRoomMemberMutationHelper chatRoomMemberMutationHelper;
 
     @Autowired
-    private ChatRoomEnrichmentService roomEnrichmentService;
+    private ChatRoomEnricher chatRoomEnricher;
 
     @Test
     void contextLoadsAndWiresRefactoredServices() {
@@ -91,6 +91,6 @@ class ChatServiceApplicationTests {
         assertThat(chatRoomProfileService).isNotNull();
         assertThat(chatRoomQueryService).isNotNull();
         assertThat(chatRoomMemberMutationHelper).isNotNull();
-        assertThat(roomEnrichmentService).isNotNull();
+        assertThat(chatRoomEnricher).isNotNull();
     }
 }

@@ -9,7 +9,7 @@ import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.support.RoomOwnerSuccessionService;
@@ -35,7 +35,7 @@ public class ChatRoomLifecycleService {
     private final RoomMemberInviteRepository roomMemberInviteRepository;
     private final RedisService redisService;
     private final WebSocketService webSocketService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final ChatRoomPermissionService roomPermissionService;
     private final PersonalSpaceService personalSpaceService;
     private final RoomOwnerSuccessionService roomOwnerSuccessionService;
@@ -77,7 +77,7 @@ public class ChatRoomLifecycleService {
             chatRoomRepository.save(chat);
             redisService.evictChatParticipants(chatId);
             webSocketService.notifyUserLeftChatForAll(chatId, userId, otherMembers);
-            roomEnrichmentService.notifyRoomMembersChatUpdated(chat);
+            roomUpdateNotifier.notifyRoomMembersChatUpdated(chat);
         }
 
         redisService.markUserOffline(userId);

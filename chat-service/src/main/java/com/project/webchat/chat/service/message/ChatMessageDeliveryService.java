@@ -11,7 +11,8 @@ import com.project.webchat.chat.service.MessageEventPublisher;
 import com.project.webchat.chat.service.RedisService;
 import com.project.webchat.chat.service.WebSocketService;
 import com.project.webchat.chat.service.room.ChatRoomQueryService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.chat.service.user.PrivateChatContactRequestService;
 import com.project.webchat.shared.dto.UserInfoDTO;
@@ -42,7 +43,8 @@ public class ChatMessageDeliveryService {
     private final WebSocketService webSocketService;
     private final MessageEventPublisher messageEventPublisher;
     private final ChatUserInfoService chatUserInfoService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final PrivateChatContactRequestService privateChatContactRequestService;
     private final ChatRoomQueryService chatRoomQueryService;
 
@@ -114,7 +116,7 @@ public class ChatMessageDeliveryService {
         webSocketService.sendMessageToChat(room.getId(), messageDTO);
         webSocketService.notifyUserJoinedChat(room.getId(), senderId);
         try {
-            roomEnrichmentService.notifyRoomMembersChatUpdated(room);
+            roomUpdateNotifier.notifyRoomMembersChatUpdated(room);
         } catch (Exception ex) {
             log.warn("Failed to refresh room sidebar for chat {} after message {}: {}",
                     room.getId(), messageDTO.getId(), ex.getMessage());
@@ -126,8 +128,8 @@ public class ChatMessageDeliveryService {
             if (memberId == null || memberId.equals(senderId)) {
                 continue;
             }
-            int unread = roomEnrichmentService.getUnreadCount(room.getId(), memberId);
-            ChatRoomDTO chatDto = roomEnrichmentService.enrichChatWithUserData(room, memberId, unread);
+            int unread = roomEnricher.getUnreadCount(room.getId(), memberId);
+            ChatRoomDTO chatDto = roomEnricher.enrichChatWithUserData(room, memberId, unread);
             webSocketService.notifyIncomingChatMessage(memberId, chatDto, messageDTO);
         }
     }

@@ -13,7 +13,8 @@ import com.project.webchat.chat.repository.ChatRoomRepository;
 import com.project.webchat.chat.repository.RoomMemberInviteRepository;
 import com.project.webchat.chat.service.ChatNotificationEventPublisher;
 import com.project.webchat.chat.service.WebSocketService;
-import com.project.webchat.chat.service.support.ChatRoomEnrichmentService;
+import com.project.webchat.chat.service.support.ChatRoomEnricher;
+import com.project.webchat.chat.service.support.ChatRoomUpdateNotifier;
 import com.project.webchat.chat.service.support.ChatRoomMemberMutationHelper;
 import com.project.webchat.chat.service.support.ChatRoomPermissionService;
 import com.project.webchat.chat.service.support.UserBanGuardService;
@@ -42,7 +43,8 @@ public class ChatRoomInviteService {
     private final UserServiceClient userServiceClient;
     private final WebSocketService webSocketService;
     private final ChatUserInfoService chatUserInfoService;
-    private final ChatRoomEnrichmentService roomEnrichmentService;
+    private final ChatRoomEnricher roomEnricher;
+    private final ChatRoomUpdateNotifier roomUpdateNotifier;
     private final ChatRoomPermissionService roomPermissionService;
     private final ChatNotificationEventPublisher chatNotificationEventPublisher;
     private final UserBanGuardService userBanGuardService;
@@ -62,7 +64,7 @@ public class ChatRoomInviteService {
         String newToken = UUID.randomUUID().toString();
         room.setInviteToken(newToken);
         ChatRoom saved = chatRoomRepository.save(room);
-        roomEnrichmentService.notifyRoomMembersChatUpdated(saved);
+        roomUpdateNotifier.notifyRoomMembersChatUpdated(saved);
         return new InvitePayloadDTO(newToken);
     }
 
@@ -92,12 +94,12 @@ public class ChatRoomInviteService {
         userBanGuardService.assertCanInviteUser(actorId, newMemberId);
         roomPermissionService.assertNotBanned(room, newMemberId);
         if (room.isMember(newMemberId)) {
-            return roomEnrichmentService.enrichChatWithUserData(
-                    room, actorId, roomEnrichmentService.getUnreadCount(room.getId(), actorId));
+            return roomEnricher.enrichChatWithUserData(
+                    room, actorId, roomEnricher.getUnreadCount(room.getId(), actorId));
         }
         ChatRoom saved = memberMutationHelper.addMemberToRoom(room, newMemberId);
-        return roomEnrichmentService.enrichChatWithUserData(
-                saved, actorId, roomEnrichmentService.getUnreadCount(saved.getId(), actorId));
+        return roomEnricher.enrichChatWithUserData(
+                saved, actorId, roomEnricher.getUnreadCount(saved.getId(), actorId));
     }
 
     public List<RoomMemberInviteDTO> listPendingRoomMemberInvites(Long inviteeUserId) {
@@ -164,8 +166,8 @@ public class ChatRoomInviteService {
         invite.setState(RoomMemberInviteState.ACCEPTED);
         invite.setRespondedAt(LocalDateTime.now());
         roomMemberInviteRepository.save(invite);
-        return roomEnrichmentService.enrichChatWithUserData(
-                saved, inviteeId, roomEnrichmentService.getUnreadCount(saved.getId(), inviteeId));
+        return roomEnricher.enrichChatWithUserData(
+                saved, inviteeId, roomEnricher.getUnreadCount(saved.getId(), inviteeId));
     }
 
     @Transactional
