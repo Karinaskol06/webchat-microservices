@@ -291,6 +291,23 @@ public class UserServiceController {
         return ResponseEntity.ok(userBanService.listBanningUserIds(userId));
     }
 
+    @PutMapping("/internal/{userId}/last-seen")
+    public ResponseEntity<Void> updateLastSeenInternal(
+            @PathVariable Long userId,
+            @RequestParam("epochMillis") long epochMillis) {
+        userService.updateLastSeen(userId, epochMillis);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/internal/{userId}/last-seen")
+    public ResponseEntity<Long> getLastSeenInternal(@PathVariable Long userId) {
+        Long lastSeen = userService.getLastSeenEpochMillis(userId);
+        if (lastSeen == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(lastSeen);
+    }
+
     @GetMapping("/internal/{userId}/has-banned/{targetUserId}")
     public ResponseEntity<Boolean> hasBannedInternal(
             @PathVariable Long userId,

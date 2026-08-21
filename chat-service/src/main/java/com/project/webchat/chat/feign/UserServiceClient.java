@@ -10,7 +10,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -53,4 +55,12 @@ public interface UserServiceClient {
     Boolean hasBanned(
             @PathVariable("userId") Long userId,
             @PathVariable("targetUserId") Long targetUserId);
+
+    @PutMapping("/api/users/internal/{userId}/last-seen")
+    ResponseEntity<Void> updateLastSeen(
+            @PathVariable("userId") Long userId,
+            @RequestParam("epochMillis") long epochMillis);
+
+    @GetMapping("/api/users/internal/{userId}/last-seen")
+    ResponseEntity<Long> getLastSeen(@PathVariable("userId") Long userId);
 }
