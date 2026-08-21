@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -92,10 +93,11 @@ public class AttachmentController {
             return ResponseEntity.status(403).build();
         }
 
-        FileSystemResource resource = new FileSystemResource(attachment.getFilePath());
-        if (!resource.exists()) {
+        Path storedFile = fileStorageService.findReadablePath(attachment).orElse(null);
+        if (storedFile == null) {
             return ResponseEntity.notFound().build();
         }
+        FileSystemResource resource = new FileSystemResource(storedFile);
 
         MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
         try {
