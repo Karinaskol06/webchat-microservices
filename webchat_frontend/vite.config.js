@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:8089';
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -14,12 +16,12 @@ export default defineConfig({
     open: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8089',
+        target: proxyTarget,
         changeOrigin: true,
       },
       // Same-origin /ws → gateway (avoids duplicate CORS on SockJS /info when dev server is on 5173)
       '/ws': {
-        target: 'http://localhost:8089',
+        target: proxyTarget,
         changeOrigin: true,
         ws: true,
         configure: (proxy) => {
