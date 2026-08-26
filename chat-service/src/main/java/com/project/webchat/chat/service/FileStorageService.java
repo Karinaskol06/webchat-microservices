@@ -4,6 +4,7 @@ import com.project.webchat.chat.entity.Attachment;
 import com.project.webchat.chat.entity.FileType;
 import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.service.support.AttachmentFilenameSecurity;
+import com.project.webchat.chat.service.support.AttachmentStoragePaths;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,6 +21,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -180,17 +182,17 @@ public class FileStorageService {
         return saveFile(file, userId, null, chatId);
     }
 
+    public Optional<Path> findReadablePath(Attachment attachment) {
+        return AttachmentStoragePaths.resolveReadableFile(uploadPath, attachment);
+    }
+
     // Receiving file for download
     public Path getFilePath(String attachmentId) {
         Attachment attachment = attachmentRepository.findById(attachmentId)
                 .orElseThrow(() -> new RuntimeException("Attachment not found: " + attachmentId));
 
-        Path filePath = Paths.get(attachment.getFilePath());
-        if (!Files.exists(filePath) || !Files.isReadable(filePath)) {
-            throw new RuntimeException("File not found or not readable: " + attachmentId);
-        }
-
-        return filePath;
+        return findReadablePath(attachment)
+                .orElseThrow(() -> new RuntimeException("File not found or not readable: " + attachmentId));
     }
 
     public void deleteFile(String attachmentId) {
@@ -198,8 +200,10 @@ public class FileStorageService {
                 .orElseThrow(() -> new RuntimeException("Attachment not found: " + attachmentId));
 
         try {
-            Path filePath = Paths.get(attachment.getFilePath());
-            Files.deleteIfExists(filePath);
+            Optional<Path> stored = findReadablePath(attachment);
+            if (stored.isPresent()) {
+                Files.deleteIfExists(stored.get());
+            }
             attachmentRepository.delete(attachment);
             log.info("File deleted: {} ({})", attachment.getFilename(), attachmentId);
         } catch (IOException e) {
@@ -234,10 +238,8 @@ public class FileStorageService {
     public Attachment cloneAttachmentForForward(Attachment source, String newMessageId, String targetChatId,
                                               Long uploaderId) {
         try {
-            Path sourcePath = Paths.get(source.getFilePath()).toAbsolutePath().normalize();
-            if (!Files.exists(sourcePath) || !Files.isRegularFile(sourcePath)) {
-                throw new IllegalArgumentException("Original file is missing for this attachment.");
-            }
+            Path sourcePath = findReadablePath(source)
+                    .orElseThrow(() -> new IllegalArgumentException("Original file is missing for this attachment."));
 
             String extension = getFileExtension(source.getFilename());
             if ((extension == null || extension.isEmpty()) && source.getStoredFilename() != null

@@ -59,6 +59,10 @@ public class User {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    /** Durable last-seen; overwritten on each offline  */
+    @Column(name = "last_seen_at")
+    private LocalDateTime lastSeenAt;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

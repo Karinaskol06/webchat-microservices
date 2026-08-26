@@ -2,10 +2,12 @@ package com.project.webchat.chat.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.webchat.chat.feign.UserServiceClient;
 import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -21,6 +23,7 @@ public class RedisService {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
+    private final UserServiceClient userServiceClient;
 
     //redis set for storing all online users
     private static final String ONLINE_USERS_KEY = "online_users";
@@ -31,9 +34,11 @@ public class RedisService {
     private static final String USER_CHAT_KEY_PREFIX = "user_chat:";
     private static final String AFK_CHAT_PREFIX = "AFK:";
     private static final String LAST_SEEN_PREFIX = "last_seen:";
+    /** Set after last_seen was written to Postgres for this offline period */
+    private static final String LAST_SEEN_FLUSHED_PREFIX = "last_seen_flushed:";
     private static final String USER_INFO_PREFIX = "user_info:";
     private static final String CHAT_PARTICIPANTS_PREFIX = "chat_participants:";
-    private static final Duration USER_CACHE_TIMEOUT = Duration.ofMinutes(30);
+    private static final Duration USER_CACHE_TIMEOUT = Duration.ofMinutes(10);
     private static final Duration CHAT_PARTICIPANTS_CACHE_TIMEOUT = Duration.ofMinutes(5);
     private static final Duration ONLINE_TIMEOUT = Duration.ofMinutes(1);
 
@@ -52,6 +57,7 @@ public class RedisService {
         //to automatically disconnect user after 1 min
         redisTemplate.opsForValue().set(userKey, chatId, ONLINE_TIMEOUT);
         redisTemplate.opsForValue().set(lastSeenKey, String.valueOf(System.currentTimeMillis()));
+        redisTemplate.delete(LAST_SEEN_FLUSHED_PREFIX + userId);
 
         //add user to online users
         redisTemplate.opsForSet().add(ONLINE_USERS_KEY, userId.toString());
@@ -94,6 +100,7 @@ public class RedisService {
 
         String lastSeenKey = LAST_SEEN_PREFIX + userId;
         redisTemplate.opsForValue().set(lastSeenKey, String.valueOf(System.currentTimeMillis()));
+        persistLastSeenBestEffort(userId);
 
         log.debug("User {} marked offline", userId);
     }
@@ -140,17 +147,64 @@ public class RedisService {
     }
 
     public Long getLastSeen(Long userId) {
-        String lastSeenKey = LAST_SEEN_PREFIX + userId;
-        String timestamp = redisTemplate.opsForValue().get(lastSeenKey);
+        Long cached = getCachedLastSeen(userId);
+        if (cached != null) {
+            if (!isUserOnline(userId)) {
+                persistLastSeenBestEffort(userId);
+            }
+            return cached;
+        }
 
-        if (timestamp != null) {
-            try {
-                return Long.parseLong(timestamp);
-            } catch (NumberFormatException e) {
+        Long fromDb = fetchLastSeenFromUserService(userId);
+        if (fromDb != null) {
+            redisTemplate.opsForValue().set(LAST_SEEN_PREFIX + userId, String.valueOf(fromDb));
+            redisTemplate.opsForValue().set(LAST_SEEN_FLUSHED_PREFIX + userId, "1");
+        }
+        return fromDb;
+    }
+
+    private Long getCachedLastSeen(Long userId) {
+        String timestamp = redisTemplate.opsForValue().get(LAST_SEEN_PREFIX + userId);
+        if (timestamp == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(timestamp);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Long fetchLastSeenFromUserService(Long userId) {
+        try {
+            ResponseEntity<Long> response = userServiceClient.getLastSeen(userId);
+            if (response == null || !response.getStatusCode().is2xxSuccessful()) {
                 return null;
             }
+            return response.getBody();
+        } catch (Exception e) {
+            log.warn("Failed to load last-seen from user-service for {}: {}", userId, e.getMessage());
+            return null;
         }
-        return null;
+    }
+
+    private void persistLastSeenBestEffort(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(LAST_SEEN_FLUSHED_PREFIX + userId))) {
+            return;
+        }
+        Long epochMillis = getCachedLastSeen(userId);
+        if (epochMillis == null) {
+            return;
+        }
+        try {
+            userServiceClient.updateLastSeen(userId, epochMillis);
+            redisTemplate.opsForValue().set(LAST_SEEN_FLUSHED_PREFIX + userId, "1");
+        } catch (Exception e) {
+            log.warn("Failed to persist last-seen for {}: {}", userId, e.getMessage());
+        }
     }
 
     // cache user info (set of users with TTL 30 mins)
