@@ -25,7 +25,7 @@ import java.util.Optional;
 public class ContactService {
     private final FriendRequestRepository friendRequestRepository;
     private final UserContactRepository userContactRepository;
-    private final UserService userService;
+    private final UserProfileService userProfileService;
 
     /**
      * Create the one-time contact-prompt opportunity for a private pair (first message).
@@ -72,7 +72,7 @@ public class ContactService {
         return userContactRepository.findByUserIdOrderByIdDesc(userId).stream()
                 .map(UserContact::getContactUserId)
                 .distinct()
-                .map(userService::getUserDTOById)
+                .map(userProfileService::getUserDTOById)
                 .sorted(Comparator.comparing(this::displayName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
@@ -85,7 +85,7 @@ public class ContactService {
                         .state(request.getState())
                         .createdAt(request.getCreatedAt())
                         .nextEligibleAt(request.getNextEligibleAt())
-                        .fromUser(userService.getUserDTOById(request.getFromUserId()))
+                        .fromUser(userProfileService.getUserDTOById(request.getFromUserId()))
                         .build())
                 .toList();
     }

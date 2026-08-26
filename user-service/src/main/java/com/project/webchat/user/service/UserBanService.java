@@ -20,7 +20,7 @@ import java.util.List;
 public class UserBanService {
 
     private final UserBanRepository userBanRepository;
-    private final UserService userService;
+    private final UserProfileService userProfileService;
     private final ChatServiceClient chatServiceClient;
 
     public void banUser(Long userId, Long targetUserId) {
@@ -59,7 +59,7 @@ public class UserBanService {
         return userBanRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(UserBan::getBannedUserId)
                 .distinct()
-                .map(userService::getUserDTOById)
+                .map(userProfileService::getUserDTOById)
                 .sorted(Comparator.comparing(this::displayName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
@@ -95,7 +95,7 @@ public class UserBanService {
         if (userId.equals(targetUserId)) {
             throw new IllegalArgumentException("You cannot ban yourself.");
         }
-        userService.getUserDTOById(targetUserId);
+        userProfileService.getUserDTOById(targetUserId);
     }
 
     private String displayName(UserDTO user) {
