@@ -1,4 +1,4 @@
-package com.project.webchat.chat.security;
+package com.project.webchat.user.security;
 
 import com.project.webchat.shared.security.GatewayAuthHeaders;
 import com.project.webchat.shared.security.InternalServiceAuthentication;
@@ -14,16 +14,22 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 
+/**
+ * Trusts identity only when stamped with a valid {@link GatewayAuthHeaders#GATEWAY_AUTH} token
+ * (API gateway or inter-service Feign). Optional Bearer JWT is a fallback for local tooling.
+ */
 @Component
 @Slf4j
-public class ChatJwtAuthFilter extends OncePerRequestFilter {
+public class UserGatewayAuthFilter extends OncePerRequestFilter {
 
     @Value("${jwt.secret}")
     private String secretKey;
@@ -46,10 +52,6 @@ public class ChatJwtAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    /**
-     * Trust identity stamped by API gateway (multipart uploads keep this even when Bearer re-parse fails).
-     * Token-only (no user id) authenticates inter-service calls to {@code /api/chat/internal/**}.
-     */
     private boolean authenticateFromGatewayHeaders(HttpServletRequest request) {
         String gatewayHeader = request.getHeader(GatewayAuthHeaders.GATEWAY_AUTH);
         if (!gatewayAuthToken.equals(gatewayHeader)) {
@@ -70,7 +72,13 @@ public class ChatJwtAuthFilter extends OncePerRequestFilter {
                 username = String.valueOf(userId);
             }
 
-            setAuthentication(request, userId, username.trim(), null);
+            UsernamePasswordAuthenticationToken authToken =
+                    new UsernamePasswordAuthenticationToken(
+                            userId,
+                            null,
+                            List.of(new SimpleGrantedAuthority("ROLE_USER")));
+            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authToken);
             log.debug("Authenticated user {} via gateway headers", userId);
             return true;
         } catch (NumberFormatException e) {
@@ -102,34 +110,17 @@ public class ChatJwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
 
-            String username = claims.getSubject();
-            String email = claims.get("email", String.class);
-            setAuthentication(request, userId, username, email);
+            UsernamePasswordAuthenticationToken authToken =
+                    new UsernamePasswordAuthenticationToken(
+                            userId,
+                            null,
+                            List.of(new SimpleGrantedAuthority("ROLE_USER")));
+            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authToken);
             log.debug("Authenticated user {} via Bearer token", userId);
         } catch (Exception e) {
             log.warn("JWT validation failed: {}", e.getMessage());
         }
-    }
-
-    private void setAuthentication(
-            HttpServletRequest request,
-            Long userId,
-            String username,
-            String email) {
-
-        CustomUserDetails userDetails = CustomUserDetails.builder()
-                .id(userId)
-                .username(username)
-                .email(email)
-                .build();
-
-        UsernamePasswordAuthenticationToken authToken =
-                new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities());
-        authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-        SecurityContextHolder.getContext().setAuthentication(authToken);
     }
 
     private static Long resolveUserId(Claims claims) {
@@ -141,16 +132,13 @@ public class ChatJwtAuthFilter extends OncePerRequestFilter {
                 return null;
             }
         }
-
         if (raw instanceof Number number) {
             return number.longValue();
         }
-
         try {
             return Long.parseLong(raw.toString());
         } catch (Exception ignored) {
             return null;
         }
     }
-
 }

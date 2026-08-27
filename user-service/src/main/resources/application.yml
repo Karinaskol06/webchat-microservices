@@ -37,6 +37,9 @@ jwt:
   secret: ${JWT_SECRET:defaultSecretKeyForLocalDev}
   expiration: 86400000
 
+gateway:
+  internal-auth-token: ${GATEWAY_INTERNAL_AUTH_TOKEN:local-gateway-token}
+
 app:
     contacts:
       # removed: snooze-days — declined requests are permanent (REJECTED)

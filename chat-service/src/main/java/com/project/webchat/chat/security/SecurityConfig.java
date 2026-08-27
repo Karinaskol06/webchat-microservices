@@ -30,7 +30,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/ws/**").permitAll()
-                        .requestMatchers("/api/chat/internal/**").permitAll()
+                        .requestMatchers("/api/chat/internal/**").authenticated()
                         .requestMatchers("/api/presence/**").authenticated()
                         .requestMatchers("/api/chat/**").authenticated()
                         .anyRequest().authenticated()
