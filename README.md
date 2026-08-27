@@ -4,7 +4,9 @@ A real-time chat platform built with a Spring Cloud microservices backend and a 
 
 ## Architecture
 
-The system uses **service discovery (Eureka)**, an **API gateway** as the single entry point, and **event-driven notifications** via Kafka. Real-time delivery uses **WebSocket + STOMP** in `chat-service`; the gateway proxies REST and WebSocket traffic.
+The system uses **service discovery (Eureka)**, an **API gateway** as the REST entry point, and **event-driven notifications** via Kafka. Real-time delivery uses **WebSocket + STOMP** in `chat-service`.
+
+Diagrams: [Send-message sequence](docs/architecture/sequence-send-message.md)
 
 ```text
 webchat/
@@ -18,6 +20,11 @@ webchat/
 ├── webchat_frontend/          # React SPA (dev: 5173, Docker: 80)
 ├── docker-compose.yaml        # Full stack (infra + all services)
 ├── docker-compose.dev.yml     # Infra + Eureka for local JVM development
+├── k8s/                       # Local Kubernetes manifests (see k8s/README-k8s.md)
+├── jenkins/ + Jenkinsfile     # Local CD / GHCR (see jenkins/README-jenkins.md)
+├── load-tests/                # k6 STOMP session capacity tests
+├── scripts/                   # PowerShell modeA/modeB launch helpers
+├── docs/architecture/         # Mermaid sequence diagrams
 └── pom.xml                    # Parent POM
 ```
 
@@ -26,14 +33,17 @@ webchat/
 ```text
 Browser
   ├─ REST  /api/**  → api-gateway → [auth | user | chat | notification]
-  └─ WS    /ws/**   → api-gateway → chat-service (STOMP)
+  └─ WS    /ws/**   → Vite dev proxy → api-gateway → chat-service
+                      (Docker/K8s) frontend nginx → chat-service
 
 chat-service ──Kafka──► notification-service ──Web Push──► Browser (service worker)
 
-auth-service ──Feign──► user-service
-user-service ──Feign──► chat-service (account deletion cleanup)
-chat-service ──Feign──► user-service (user info, bans)
+auth-service ──Feign + X-Gateway-Auth──► user-service
+user-service ──Feign + X-Gateway-Auth──► chat-service (account deletion cleanup)
+chat-service ──Feign + X-Gateway-Auth──► user-service (user info, bans)
 ```
+
+After JWT validation the gateway **overwrites** `X-User-Id` / `X-Username` and sets `X-Gateway-Auth`. Downstream services trust those headers only when the gateway token matches. Internal Feign endpoints require the same token.
 
 ### Service responsibilities
 
@@ -51,11 +61,22 @@ chat-service ──Feign──► user-service (user info, bans)
 
 Gateway routes:
 
-- `/api/auth/`** → auth-service (public)
+- `/api/auth/**` → auth-service (public)
 - `/api/users/**` → user-service (JWT)
 - `/api/chat/**`, `/api/presence/**` → chat-service (JWT)
 - `/api/notifications/**` → notification-service (JWT; VAPID key endpoint is public)
-- `/ws/**` → chat-service WebSocket
+- `/ws/**` → chat-service WebSocket (also reachable via frontend nginx in Docker/K8s)
+- Swagger UI (gateway must be running, rebuilt after OpenAPI changes): [http://localhost:8089/swagger-ui.html](http://localhost:8089/swagger-ui.html) (or [http://localhost:8089/webjars/swagger-ui/index.html](http://localhost:8089/webjars/swagger-ui/index.html)). OpenAPI JSON: `/v3/api-docs`
+
+### Ops, CI, and load tests
+
+| Area | Docs |
+|------|------|
+| Local Kubernetes | [`k8s/README-k8s.md`](k8s/README-k8s.md) |
+| Jenkins CD + GHCR | [`jenkins/README-jenkins.md`](jenkins/README-jenkins.md) |
+| GitHub Actions CI | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
+| k6 STOMP capacity | [`load-tests/README.md`](load-tests/README.md), [`load-tests/RESULTS.md`](load-tests/RESULTS.md) |
+| modeA / modeB scripts | [`scripts/README.md`](scripts/README.md) |
 
 ---
 
@@ -68,21 +89,21 @@ Gateway routes:
 - **Spring Security** + **JWT** (HS256, shared secret)
 - **OpenFeign** for inter-service HTTP
 - **WebSocket + STOMP** (SockJS) for real-time messaging
-- **PostgreSQL 15** — users, contacts, bans, push subscriptions
-- **MongoDB 7** — chat rooms, messages, attachments metadata
-- **Redis 7** — presence, caching, password-reset tokens
-- **Apache Kafka** (KRaft, single-node) — async notification events
+- **PostgreSQL 15** - users, contacts, bans, push subscriptions
+- **MongoDB 7** - chat rooms, messages, attachments metadata
+- **Redis 7** - presence, caching, password-reset tokens
+- **Apache Kafka** (KRaft, single-node) - async notification events
 - **Maven** multi-module build
 
 ### Frontend
 
 - **React 19**, **Vite 7**, **React Router 7**
 - **Material UI (MUI) 7**
-- **Zustand** — auth, chat, folders, theme, locale state
-- **Axios** — REST via API gateway
-- **STOMP.js + SockJS** — WebSocket client
-- **Vitest** + **Testing Library** — unit tests
-- **Playwright** — E2E tests
+- **Zustand** - auth, chat, folders, theme, locale state
+- **Axios** - REST via API gateway
+- **STOMP.js + SockJS** - WebSocket client
+- **Vitest** + **Testing Library** - unit tests
+- **Playwright** - E2E tests
 
 ---
 
@@ -124,7 +145,7 @@ Gateway routes:
 - Per-chat topics for messages, typing, read state, edits, deletes, reactions, attachments
 - User inbox stream for chat list updates and incoming messages
 - Online / AFK / last-seen presence (Redis + REST heartbeat)
-- Observer pattern in chat-service: WebSocket delivery + Kafka publication in parallel
+- After persist, chat-service fans out to WebSocket subscribers and publishes Kafka notification events
 
 ### Notifications
 
@@ -169,7 +190,7 @@ Gateway routes:
 | `chat.message.created.v1`     | chat-service | notification-service | Push on new message                       |
 | `chat.message.reaction.v1`    | chat-service | notification-service | Push on reaction                          |
 | `chat.room.member.invited.v1` | chat-service | notification-service | Push on room invite                       |
-| `*.dlq`                       | —            | —                    | Dead-letter queues for failed consumption |
+| `*.dlq`                       | -            | -                    | Dead-letter queues for failed consumption |
 
 
 **Bootstrap servers:**
@@ -251,7 +272,7 @@ Optional Kafka UI: add profile `kafka-ui` to the compose command.
    cp local-development.env.example .env
    docker compose --env-file ./.env -f docker-compose.dev.yml -p webchatdev up -d
   ```
-2. **Configure environment** — `local-development.env.example` documents all variables (DB hosts, JWT secret, mail, VAPID keys, Kafka). Export them in your shell or IDE run configuration. JVM services read `${VAR}` from `application.yml`.
+2. **Configure environment** — copy `local-development.env.example` to `.env` (or load those keys into your IDE run configuration). Each JVM service’s `application.yml` uses Spring placeholders such as `${JWT_SECRET}` / `${DB_HOST}` — those names are **real OS/process environment variables**, not a literal variable called `VAR`.
 3. **Start backend services** (order matters loosely; Eureka first is safest):
   ```bash
    mvn -pl discovery-service spring-boot:run
@@ -262,6 +283,8 @@ Optional Kafka UI: add profile `kafka-ui` to the compose command.
    mvn -pl api-gateway spring-boot:run
   ```
    Or run each module from your IDE with the same env vars.
+Or use [`scripts/README.md`](scripts/README.md) (`start-modeB.ps1`) to bring up infra + JVM services together.
+
 4. **Start frontend:**
   ```bash
    cd webchat_frontend
@@ -309,4 +332,14 @@ npm run test:e2e
 
 ## Project status
 
-Core messaging, rooms, presence, contacts, rich personal-space content, reactions, polls, and push notifications are implemented. The app is actively developed; see service tests and the `webchat_frontend/e2e` suite for covered flows.
+Core messaging, rooms, presence, contacts, rich personal-space content, reactions, polls, and push notifications are implemented as a **complete local demo**.
+
+### Known limits (intentional for this lab)
+
+- Shared HS256 JWT secret across services (local simplicity; production would use asymmetric keys / JWKS)
+- In-memory STOMP broker - chat-service does not horizontally scale WebSocket sessions without an external broker + sticky sessions
+- Attachment files on local filesystem (`APP_UPLOAD_DIR`) - not shared across replicas
+- Docker/K8s frontend nginx may proxy `/ws` directly to chat-service (bypassing the gateway JWT filter); STOMP CONNECT still requires Bearer JWT
+- Eureka is used for learning; a fixed compose/K8s topology could use static service DNS instead
+
+See service tests, `webchat_frontend` unit/E2E suites, and `load-tests/` for covered flows.

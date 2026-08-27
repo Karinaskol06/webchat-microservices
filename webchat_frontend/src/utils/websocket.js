@@ -45,7 +45,7 @@ const buildStompClient = (token) =>
     debug: import.meta.env.DEV
       ? (str) => {
           if (!str.includes('heart-beat')) {
-            console.log('STOMP: ' + str);
+            console.debug('STOMP:', str);
           }
         }
       : () => {},
@@ -54,7 +54,7 @@ const buildStompClient = (token) =>
     heartbeatOutgoing: 10000,
     connectionTimeout: 15000,
     onConnect: () => {
-      console.log('WebSocket connected');
+      console.debug('WebSocket connected');
       lastBoundToken = token;
       pendingChatSubscriptions.forEach((sub) => {
         attachChatSubscriptions(sub);
@@ -67,7 +67,7 @@ const buildStompClient = (token) =>
       notifyConnectionChange(true);
     },
     onDisconnect: () => {
-      console.log('WebSocket disconnected');
+      console.debug('WebSocket disconnected');
       notifyConnectionChange(false);
     },
     onWebSocketClose: () => {
@@ -322,7 +322,7 @@ export const subscribeToChat = (chatId, handlers) => {
 };
 
 export const disconnectWebSocket = () => {
-  console.log('Disconnecting WebSocket...');
+  console.debug('Disconnecting WebSocket...');
   connectionRefCount = 0;
 
   pendingChatSubscriptions.forEach((sub) => {

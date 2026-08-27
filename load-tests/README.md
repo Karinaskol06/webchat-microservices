@@ -27,7 +27,7 @@ Local Kubernetes / laptop only.
 From `load-tests/`:
 
 ```bat
-cd C:\Java\webchat\load-tests
+cd load-tests
 set API_BASE_URL=http://localhost
 set USER_COUNT=300
 set CHAT_POOL_SIZE=50
@@ -39,7 +39,7 @@ Writes `data/sessions.json` (gitignored). Re-seed if tokens expire.
 ## 2) Run the ramp
 
 ```bat
-cd C:\Java\webchat\load-tests
+cd load-tests
 set WS_BASE_URL=ws://localhost
 k6 run k6/ws-sessions.js
 ```
