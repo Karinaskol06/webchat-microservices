@@ -22,6 +22,9 @@ jwt:
   secret: "dGVzdHNlY3JldGtleTEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTA="
   expiration: 3600000
 
+gateway:
+  internal-auth-token: local-gateway-token
+
 logging:
   level:
     root: WARN

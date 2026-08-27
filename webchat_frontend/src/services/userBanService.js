@@ -1,29 +1,21 @@
 import api from './api';
 
 const userBanService = {
-  banUser: async (targetUserId, currentUserId) => {
-    await api.post(`/api/users/bans/${targetUserId}`, null, {
-      headers: currentUserId ? { 'X-User-Id': currentUserId } : undefined,
-    });
+  banUser: async (targetUserId) => {
+    await api.post(`/api/users/bans/${targetUserId}`);
   },
 
-  unbanUser: async (targetUserId, currentUserId) => {
-    await api.delete(`/api/users/bans/${targetUserId}`, {
-      headers: currentUserId ? { 'X-User-Id': currentUserId } : undefined,
-    });
+  unbanUser: async (targetUserId) => {
+    await api.delete(`/api/users/bans/${targetUserId}`);
   },
 
-  listBannedUsers: async (currentUserId) => {
-    const response = await api.get('/api/users/bans', {
-      headers: currentUserId ? { 'X-User-Id': currentUserId } : undefined,
-    });
+  listBannedUsers: async () => {
+    const response = await api.get('/api/users/bans');
     return Array.isArray(response.data) ? response.data : [];
   },
 
-  getBanStatus: async (targetUserId, currentUserId) => {
-    const response = await api.get(`/api/users/bans/status/${targetUserId}`, {
-      headers: currentUserId ? { 'X-User-Id': currentUserId } : undefined,
-    });
+  getBanStatus: async (targetUserId) => {
+    const response = await api.get(`/api/users/bans/status/${targetUserId}`);
     return Boolean(response.data?.banned);
   },
 };

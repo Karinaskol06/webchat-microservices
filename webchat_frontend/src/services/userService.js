@@ -12,10 +12,9 @@ const userService = {
     return response.data;
   },
 
-  searchUsers: async (query, page = 0, size = 20, currentUserId) => {
+  searchUsers: async (query, page = 0, size = 20) => {
     const response = await api.get("/api/users/search", {
       params: { query, page, size },
-      headers: currentUserId ? { "X-User-Id": currentUserId } : undefined,
     });
 
     const data = response.data;

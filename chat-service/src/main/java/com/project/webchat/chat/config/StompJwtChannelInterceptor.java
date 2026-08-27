@@ -10,6 +10,7 @@ import org.springframework.core.Ordered;
 import org.springframework.lang.NonNull;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
@@ -24,6 +25,7 @@ import java.util.List;
 /**
  * Copies REST-style JWT auth into the STOMP session: @stomp/stompjs sends Bearer on CONNECT,
  * but servlet filters never run on the broker channel, so {@link Principal} would stay null otherwise.
+ * Invalid or missing JWT rejects CONNECT (does not silently continue).
  */
 @Component
 @Slf4j
@@ -43,7 +45,7 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor, Ordered {
         String header = firstAuthorizationHeader(accessor);
         if (header.isBlank() || !header.startsWith("Bearer ")) {
             log.warn("STOMP CONNECT missing Bearer Authorization header");
-            return message;
+            throw new MessageDeliveryException(message, "STOMP CONNECT requires Bearer Authorization");
         }
 
         String token = header.substring("Bearer ".length()).trim();
@@ -57,7 +59,7 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor, Ordered {
             Long userId = resolveUserId(claims);
             if (userId == null) {
                 log.warn("STOMP CONNECT JWT missing userId claim");
-                return message;
+                throw new MessageDeliveryException(message, "STOMP CONNECT JWT missing userId claim");
             }
 
             Principal authentication = new UsernamePasswordAuthenticationToken(
@@ -67,8 +69,11 @@ public class StompJwtChannelInterceptor implements ChannelInterceptor, Ordered {
 
             accessor.setUser(authentication);
             log.debug("STOMP CONNECT authenticated user {}", userId);
+        } catch (MessageDeliveryException e) {
+            throw e;
         } catch (JwtException e) {
             log.warn("Invalid STOMP JWT: {}", e.getMessage());
+            throw new MessageDeliveryException(message, "Invalid STOMP JWT");
         }
         return message;
     }

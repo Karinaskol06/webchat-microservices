@@ -1,5 +1,6 @@
 package com.project.webchat.chat.feign;
 
+import com.project.webchat.chat.config.FeignConfig;
 import com.project.webchat.shared.dto.CredentialsDTO;
 import com.project.webchat.shared.dto.ContactRequestCreateDTO;
 import com.project.webchat.shared.dto.RegisterRequestDTO;
@@ -16,7 +17,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
-@FeignClient(name = "user-service", url = "${feign.client.user-service.url:}")
+@FeignClient(
+        name = "user-service",
+        url = "${feign.client.user-service.url:}",
+        configuration = FeignConfig.class)
 public interface UserServiceClient {
 
     @PostMapping("/api/users/register")
