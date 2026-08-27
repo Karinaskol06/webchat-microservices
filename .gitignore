@@ -52,7 +52,13 @@ webchat_frontend/test-results/
 # Uploads (avatars, chat)
 uploads/
 storage/
-docs/
+
+# Local diagram scratch (draw.io dumps etc.); committed architecture docs stay tracked
+docs/*
+!docs/architecture/
+!docs/architecture/**
+docs/architecture/*.drawio
+*.drawio
 
 # Security-sensitive files
 secrets/

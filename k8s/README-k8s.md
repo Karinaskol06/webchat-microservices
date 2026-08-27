@@ -42,7 +42,7 @@ Scaling `chat-service` needs sticky sessions and a shared broker relay which is 
 ### Step 1 - Namespace + secrets
 
 ```powershell
-cd C:\Java\webchat
+cd .
 kubectl apply -f k8s/namespace.yaml
 ```
 
@@ -94,7 +94,7 @@ Many Deployments also need `kubectl rollout restart` to pick up new secret value
 Kubernetes runs **images**. From repo root:
 
 ```powershell
-cd C:\Java\webchat
+cd .
 
 docker build -f discovery-service/Dockerfile -t webchat/discovery-service:local .
 docker build -f user-service/Dockerfile -t webchat/user-service:local .
@@ -183,7 +183,7 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/cont
 ### Step 3.2 — Apply the webchat Ingress
 
 ```powershell
-cd C:\Java\webchat
+cd .
 kubectl apply -f k8s/ingress/
 kubectl describe ingress webchat -n webchat-dev
 ```
