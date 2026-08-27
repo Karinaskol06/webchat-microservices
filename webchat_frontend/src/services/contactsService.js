@@ -1,69 +1,54 @@
 import api from "./api";
 
 const contactsService = {
-  listContacts: async (currentUserId) => {
-    const response = await api.get("/api/users/contacts", {
-      headers: currentUserId ? { "X-User-Id": currentUserId } : undefined,
-    });
+  listContacts: async () => {
+    const response = await api.get("/api/users/contacts");
     return Array.isArray(response.data) ? response.data : [];
   },
 
-  listIncomingRequests: async (currentUserId) => {
-    const response = await api.get("/api/users/contacts/requests/incoming", {
-      headers: currentUserId ? { "X-User-Id": currentUserId } : undefined,
-    });
+  listIncomingRequests: async () => {
+    const response = await api.get("/api/users/contacts/requests/incoming");
     return Array.isArray(response.data) ? response.data : [];
   },
 
-  getStatus: async (otherUserId, currentUserId) => {
-    const response = await api.get(`/api/users/contacts/status/${otherUserId}`, {
-      headers: currentUserId ? { "X-User-Id": currentUserId } : undefined,
-    });
+  getStatus: async (otherUserId) => {
+    const response = await api.get(`/api/users/contacts/status/${otherUserId}`);
     return response.data;
   },
 
   /** One-sided add from profile (no request required). */
-  addContact: async (contactUserId, currentUserId) => {
-    const response = await api.post(
-      `/api/users/contacts/${contactUserId}`,
-      {},
-      { headers: currentUserId ? { "X-User-Id": currentUserId } : undefined }
-    );
+  addContact: async (contactUserId) => {
+    const response = await api.post(`/api/users/contacts/${contactUserId}`, {});
     return response.data;
   },
 
-  acceptRequest: async (requestId, currentUserId) => {
+  acceptRequest: async (requestId) => {
     const response = await api.post(
       `/api/users/contacts/requests/${requestId}/accept`,
-      {},
-      { headers: currentUserId ? { "X-User-Id": currentUserId } : undefined }
+      {}
     );
     return response.data;
   },
 
   /** Sender adds recipient to their own contact list (one-sided) while request is pending. */
-  addSenderContact: async (requestId, currentUserId) => {
+  addSenderContact: async (requestId) => {
     const response = await api.post(
       `/api/users/contacts/requests/${requestId}/add-sender`,
-      {},
-      { headers: currentUserId ? { "X-User-Id": currentUserId } : undefined }
+      {}
     );
     return response.data;
   },
 
-  declineRequest: async (requestId, currentUserId) => {
+  declineRequest: async (requestId) => {
     const response = await api.post(
       `/api/users/contacts/requests/${requestId}/decline`,
-      {},
-      { headers: currentUserId ? { "X-User-Id": currentUserId } : undefined }
+      {}
     );
     return response.data;
   },
 
-  removeContact: async (contactUserId, currentUserId) => {
-    await api.delete(`/api/users/contacts/${contactUserId}`, {
-      headers: currentUserId ? { "X-User-Id": currentUserId } : undefined,
-    });
+  removeContact: async (contactUserId) => {
+    await api.delete(`/api/users/contacts/${contactUserId}`);
   },
 };
 

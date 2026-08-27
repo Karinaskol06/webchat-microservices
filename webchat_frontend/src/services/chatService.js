@@ -55,7 +55,7 @@ const chatService = {
     }
   },
 
-  searchUsers: async (query, { page = 0, size = 20, currentUserId } = {}) => {
+  searchUsers: async (query, { page = 0, size = 20 } = {}) => {
     try {
       const response = await api.get('/api/users/search', {
         params: {
@@ -63,7 +63,6 @@ const chatService = {
           page,
           size
         },
-        headers: currentUserId ? { 'X-User-Id': currentUserId } : undefined
       });
       return response.data;
     } catch (error) {
