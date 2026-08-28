@@ -31,6 +31,7 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/webjars/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         // Public avatar/background (gateway also treats these as public)
                         .requestMatchers(HttpMethod.GET, "/api/users/*/avatar", "/api/users/*/background")

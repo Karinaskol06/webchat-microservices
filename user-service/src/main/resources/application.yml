@@ -92,3 +92,18 @@ feign:
   client:
     chat-service:
       url: ${CHAT_SERVICE_URL:http://localhost:8083}
+
+openapi:
+  gateway-server-url: ${OPENAPI_GATEWAY_SERVER_URL:http://localhost:8089}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: false
+  paths-to-exclude:
+    - /api/users/internal/**
+    - /api/users/register
+    - /api/users/validate-credentials
+    - /api/users/validate-and-get-info
+    - /api/users/by-username/*/with-password

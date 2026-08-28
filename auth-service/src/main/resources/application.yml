@@ -118,3 +118,12 @@ logging:
     org.springframework.data.redis: WARN
     com.netflix.eureka: WARN
     root: INFO
+
+openapi:
+  gateway-server-url: ${OPENAPI_GATEWAY_SERVER_URL:http://localhost:8089}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: false
