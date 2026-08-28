@@ -89,3 +89,14 @@ logging:
     com.netflix.eureka: WARN
     com.netflix.discovery: WARN
     root: INFO
+
+openapi:
+  gateway-server-url: ${OPENAPI_GATEWAY_SERVER_URL:http://localhost:8089}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: false
+  paths-to-exclude:
+    - /api/chat/internal/**

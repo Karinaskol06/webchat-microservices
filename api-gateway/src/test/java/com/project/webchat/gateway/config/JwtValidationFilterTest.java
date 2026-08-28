@@ -65,8 +65,11 @@ class JwtValidationFilterTest {
             "/api/users/42/avatar",
             "/api/users/7/background",
             "/api/notifications/vapid-public-key",
+            "/openapi/auth/v3/api-docs",
             "/actuator/health",
-            "/eureka/apps"
+            "/eureka/apps",
+            "/v3/api-docs",
+            "/swagger-ui/index.html"
     })
     void publicEndpoints_bypassJwtValidation(String path) {
         MockServerWebExchange exchange = exchange(HttpMethod.GET, path);

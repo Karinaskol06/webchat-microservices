@@ -53,11 +53,13 @@ public class UserGatewayAuthFilter extends OncePerRequestFilter {
     }
 
     private boolean authenticateFromGatewayHeaders(HttpServletRequest request) {
+        // If secret doesn't match, this path fails (token is forged)
         String gatewayHeader = request.getHeader(GatewayAuthHeaders.GATEWAY_AUTH);
         if (!gatewayAuthToken.equals(gatewayHeader)) {
             return false;
         }
 
+        // For internal service calls
         String userIdHeader = request.getHeader(GatewayAuthHeaders.USER_ID);
         if (userIdHeader == null || userIdHeader.isBlank()) {
             SecurityContextHolder.getContext().setAuthentication(InternalServiceAuthentication.create());
@@ -65,12 +67,10 @@ public class UserGatewayAuthFilter extends OncePerRequestFilter {
             return true;
         }
 
+        // Real user auth after checks
         try {
             Long userId = Long.parseLong(userIdHeader.trim());
             String username = request.getHeader(GatewayAuthHeaders.USERNAME);
-            if (username == null || username.isBlank()) {
-                username = String.valueOf(userId);
-            }
 
             UsernamePasswordAuthenticationToken authToken =
                     new UsernamePasswordAuthenticationToken(
@@ -87,6 +87,7 @@ public class UserGatewayAuthFilter extends OncePerRequestFilter {
         }
     }
 
+    // Fallback (validating signature and claims here, instead of gateway)
     private void authenticateFromBearerToken(HttpServletRequest request) {
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {

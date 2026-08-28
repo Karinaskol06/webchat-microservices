@@ -76,6 +76,12 @@
         </dependency>
 
         <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.5.0</version>
+        </dependency>
+
+        <dependency>
             <groupId>com.project.webchat</groupId>
             <artifactId>shared-module</artifactId>
             <version>1.0.0</version>

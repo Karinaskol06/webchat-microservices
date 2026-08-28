@@ -66,6 +66,34 @@ spring:
           filters:
             - name: JwtValidationFilter
 
+        - id: openapi-auth
+          uri: lb://auth-service
+          predicates:
+            - Path=/openapi/auth/**
+          filters:
+            - RewritePath=/openapi/auth/(?<segment>.*), /${segment}
+
+        - id: openapi-users
+          uri: lb://user-service
+          predicates:
+            - Path=/openapi/users/**
+          filters:
+            - RewritePath=/openapi/users/(?<segment>.*), /${segment}
+
+        - id: openapi-chat
+          uri: lb://chat-service
+          predicates:
+            - Path=/openapi/chat/**
+          filters:
+            - RewritePath=/openapi/chat/(?<segment>.*), /${segment}
+
+        - id: openapi-notifications
+          uri: lb://notification-service
+          predicates:
+            - Path=/openapi/notifications/**
+          filters:
+            - RewritePath=/openapi/notifications/(?<segment>.*), /${segment}
+
         # SockJS (/info XHR etc.) inherits CORS from chat-service + gateway globalcors → duplicate ACAO headers; dedupe for browsers
         - id: websocket-service
           uri: lb://chat-service
@@ -123,3 +151,26 @@ logging:
     com.netflix.eureka: WARN
     com.netflix.discovery: WARN
     root: INFO
+
+springdoc:
+  enable-native-support: true
+  show-actuator: false
+  paths-to-match: /__gateway-openapi-none/**
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    config-url: /v3/api-docs/swagger-config
+    disable-swagger-default-url: true
+    urls:
+      - name: auth-service
+        url: /openapi/auth/v3/api-docs
+      - name: user-service
+        url: /openapi/users/v3/api-docs
+      - name: chat-service
+        url: /openapi/chat/v3/api-docs
+      - name: notification-service
+        url: /openapi/notifications/v3/api-docs
+    operationsSorter: method

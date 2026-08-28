@@ -83,9 +83,12 @@ public class JwtValidationFilter extends AbstractGatewayFilterFactory<JwtValidat
             return true;
         }
         return path.startsWith("/api/auth/")
+                || path.startsWith("/openapi/")
                 || path.startsWith("/api/notifications/vapid-public-key")
                 || path.startsWith("/actuator/")
-                || path.startsWith("/eureka/");
+                || path.startsWith("/eureka/")
+                || path.startsWith("/v3/api-docs")
+                || path.startsWith("/swagger-ui");
     }
 
     private Mono<Void> unauthorized(ServerWebExchange exchange, String message) {

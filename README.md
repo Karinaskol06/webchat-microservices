@@ -66,7 +66,7 @@ Gateway routes:
 - `/api/chat/**`, `/api/presence/**` → chat-service (JWT)
 - `/api/notifications/**` → notification-service (JWT; VAPID key endpoint is public)
 - `/ws/**` → chat-service WebSocket (also reachable via frontend nginx in Docker/K8s)
-- Swagger UI (gateway must be running, rebuilt after OpenAPI changes): [http://localhost:8089/swagger-ui.html](http://localhost:8089/swagger-ui.html) (or [http://localhost:8089/webjars/swagger-ui/index.html](http://localhost:8089/webjars/swagger-ui/index.html)). OpenAPI JSON: `/v3/api-docs`
+- Swagger UI (gateway + all services): [http://localhost:8089/swagger-ui.html](http://localhost:8089/swagger-ui.html) — use the dropdown to pick **auth / user / chat / notification**; **Authorize** with a JWT from `POST /api/auth/login`, then Try it out hits `http://localhost:8089`.
 
 ### Ops, CI, and load tests
 
@@ -108,6 +108,10 @@ Gateway routes:
 ---
 
 ## Features
+
+### API documentation
+
+- API documentation — aggregated Swagger UI on the gateway ([`/swagger-ui.html`](http://localhost:8089/swagger-ui.html)) for auth, user, chat, and notification public APIs.
 
 ### Authentication & account
 
