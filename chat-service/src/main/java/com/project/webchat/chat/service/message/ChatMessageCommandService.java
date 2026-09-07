@@ -500,6 +500,7 @@ public class ChatMessageCommandService {
 
         return attachments.stream()
                 .filter(a -> existingMessageIds.contains(a.getMessageId()))
+                .filter(a -> fileStorageService.findReadablePath(a).isPresent())
                 .sorted(Comparator.comparing(
                         Attachment::getCreatedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))

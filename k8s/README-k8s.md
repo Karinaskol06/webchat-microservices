@@ -25,7 +25,7 @@ Namespace: `webchat-dev`
 | discovery-service | `webchat/discovery-service:local` | 8761 | Eureka |
 | user-service | `webchat/user-service:local` | 8081 | users / profiles |
 | auth-service | `webchat/auth-service:local` | 8082 | login / JWT / password reset |
-| chat-service | `webchat/chat-service:local` | 8083 | chats + WebSocket `/ws` |
+| chat-service | `webchat/chat-service:local` + PVC `chat-uploads` | 8083 | chats + WebSocket `/ws` (attachment files persisted) |
 | notification-service | `webchat/notification-service:local` | 8084 | Web Push |
 | api-gateway | `webchat/api-gateway:local` | 8089 | `/api/**` routing |
 | frontend | `webchat/frontend:local` | 80 | nginx UI; proxies `/api` → gateway, `/ws` → chat |
@@ -110,7 +110,7 @@ Docker Desktop Kubernetes uses the local Docker daemon (`imagePullPolicy: IfNotP
 ### Step 3 - Deploy in dependency order
 
 ```powershell
-# Infrastructure (postgres/mongo include PersistentVolumeClaims — data survives pod restarts)
+# Infrastructure (postgres/mongo/chat-uploads include PersistentVolumeClaims — data survives pod restarts)
 kubectl apply -f k8s/redis/
 kubectl apply -f k8s/postgres/
 kubectl apply -f k8s/mongo/
@@ -120,9 +120,9 @@ kubectl wait --for=condition=ready pod -l app=postgres -n webchat-dev --timeout=
 kubectl wait --for=condition=ready pod -l app=mongo -n webchat-dev --timeout=180s
 ```
 
-`kubectl apply -f k8s/postgres/` creates both the PVC and Deployment. Same for mongo. Docker Desktop provisions the volumes automatically (default StorageClass).
+`kubectl apply -f k8s/postgres/` creates both the PVC and Deployment. Same for mongo. `kubectl apply -f k8s/chat-service/` creates the `chat-uploads` PVC with the Deployment. Docker Desktop provisions the volumes automatically (default StorageClass).
 
-**Note:** switching from `emptyDir` to a PVC recreates the DB pods on **new** disks — old ephemeral data is not migrated. After that, crashes/restarts keep data.
+**Note:** switching from `emptyDir` to a PVC recreates pods on **new** disks — old ephemeral data is not migrated. After that, crashes/restarts keep data.
 
 ```powershell
 # Verify claims are Bound

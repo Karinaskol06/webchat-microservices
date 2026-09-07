@@ -41,6 +41,11 @@ spec:
                 secretKeyRef:
                   name: webchat-secrets
                   key: JWT_SECRET
+            - name: GATEWAY_INTERNAL_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: webchat-secrets
+                  key: GATEWAY_INTERNAL_AUTH_TOKEN
             - name: MAIL_ENABLED
               value: "true"
             - name: MAIL_HOST

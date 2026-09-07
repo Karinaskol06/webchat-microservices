@@ -371,7 +371,8 @@ const chatService = {
   getAttachmentBlob: async (attachmentId, { download = false } = {}) => {
     const response = await api.get(`/api/chat/attachments/${attachmentId}`, {
       responseType: 'blob',
-      params: download ? { download: true } : undefined
+      params: download ? { download: true } : undefined,
+      silentError: true,
     });
     return response.data;
   },
@@ -522,7 +523,7 @@ const chatService = {
 
   enterChat: async (chatId) => {
     try {
-      await api.post(`/api/presence/enter-chat/${chatId}`);
+      await api.post(`/api/presence/enter-chat/${chatId}`, null, { silentError: true });
     } catch (error) {
       throw error.response?.data || error.message;
     }
@@ -530,7 +531,7 @@ const chatService = {
 
   heartbeatChat: async (chatId) => {
     try {
-      await api.post(`/api/presence/heartbeat/${chatId}`);
+      await api.post(`/api/presence/heartbeat/${chatId}`, null, { silentError: true });
     } catch (error) {
       throw error.response?.data || error.message;
     }
@@ -538,7 +539,7 @@ const chatService = {
 
   markAfk: async (chatId) => {
     try {
-      await api.post(`/api/presence/afk/${chatId}`);
+      await api.post(`/api/presence/afk/${chatId}`, null, { silentError: true });
     } catch (error) {
       throw error.response?.data || error.message;
     }

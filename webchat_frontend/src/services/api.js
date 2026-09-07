@@ -92,7 +92,9 @@ api.interceptors.response.use(
     const status = error.response?.status ?? null;
     const url = error.config?.url ?? "unknown";
 
-    const silentError = Boolean(error.config?.silentError);
+    const silentError =
+      Boolean(error.config?.silentError) ||
+      (status === 404 && isChatAttachmentApiUrl(url));
     if (!silentError) {
       console.error("❌ Response error:", {
         url,

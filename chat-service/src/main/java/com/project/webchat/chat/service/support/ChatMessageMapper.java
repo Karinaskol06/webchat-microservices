@@ -14,6 +14,7 @@ import com.project.webchat.chat.entity.MessageReaction;
 import com.project.webchat.chat.repository.AttachmentRepository;
 import com.project.webchat.chat.repository.ChatMessageRepository;
 import com.project.webchat.chat.repository.ChatRoomRepository;
+import com.project.webchat.chat.service.FileStorageService;
 import com.project.webchat.chat.service.user.ChatUserInfoService;
 import com.project.webchat.shared.dto.UserInfoDTO;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class ChatMessageMapper {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatUserInfoService chatUserInfoService;
     private final ChatMessagePreviewHelper previewHelper;
+    private final FileStorageService fileStorageService;
 
     public ChatMessageDTO toMessageDTO(ChatMessage message, UserInfoDTO senderInfo) {
         return toMessageDTO(message, senderInfo, null);
@@ -47,12 +49,14 @@ public class ChatMessageMapper {
         if (message.getAttachmentIds() != null && !message.getAttachmentIds().isEmpty()) {
             attachmentRepository.findAllById(message.getAttachmentIds())
                     .stream()
+                    .filter(this::hasReadableFile)
                     .map(AttachmentDTO::fromEntity)
                     .forEach(att -> attachmentMap.put(att.getId(), att));
         }
 
         attachmentRepository.findByMessageId(message.getId())
                 .stream()
+                .filter(this::hasReadableFile)
                 .map(AttachmentDTO::fromEntity)
                 .forEach(att -> attachmentMap.put(att.getId(), att));
 
@@ -135,6 +139,11 @@ public class ChatMessageMapper {
         }
 
         return ForwardOrigin.fromUser(originAuthorId, username);
+    }
+
+    /** Drop Mongo rows whose files were lost (e.g. ephemeral emptyDir wipe) so the UI never 404s. */
+    private boolean hasReadableFile(Attachment attachment) {
+        return fileStorageService.findReadablePath(attachment).isPresent();
     }
 
     private ReplyPreviewDTO buildReplyPreview(ChatMessage message) {

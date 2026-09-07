@@ -27,6 +27,7 @@ const AuthenticatedImage = ({ attachmentId, alt, onLoad, ...props }) => {
             try {
                 const response = await api.get(`/api/chat/attachments/${attachmentId}`, {
                     responseType: 'blob',
+                    silentError: true,
                 });
 
                 if (cancelled) return;
@@ -35,8 +36,7 @@ const AuthenticatedImage = ({ attachmentId, alt, onLoad, ...props }) => {
                 blobUrlRef.current = url;
                 setImageUrl(url);
                 setError(false);
-            } catch (err) {
-                console.error('Failed to load image:', err);
+            } catch {
                 if (!cancelled) {
                     setError(true);
                 }

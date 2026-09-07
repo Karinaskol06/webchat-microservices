@@ -10,7 +10,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -58,9 +57,8 @@ public class PresenceController {
     public ResponseEntity<Void> markAfk(
             @PathVariable String chatId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
-        boolean isMember = chatService.isUserChatMember(chatId, userDetails.getId());
-        if (!isMember) {
-            return ResponseEntity.status(403).build();
+        if (!chatService.isUserChatMember(chatId, userDetails.getId())) {
+            return ResponseEntity.ok().build();
         }
         redisService.markUserAfk(userDetails.getId(), chatId);
         webSocketService.notifyUserLeftChat(chatId, userDetails.getId());
